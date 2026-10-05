@@ -1,0 +1,71 @@
+# Synology Container Manager / Docker Compose for «Пора».
+# App listens on loopback only — put DSM Reverse Proxy in front (HTTPS).
+#
+# Default: app only. Tasks live in the browser (localStorage) with optional
+# WebDAV / folder sync from Settings — Postgres is NOT required.
+#
+# Optional Postgres: uncomment the db service and set DATABASE_URL in .env
+# (needed only if you later enable auth / server migrations).
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NITRO_PRESET: node-server
+        VITE_AUTH_ENABLED: "false"
+    image: pora-app:latest
+    container_name: pora-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "${PORT:-8080}"
+      NITRO_HOST: "0.0.0.0"
+      NITRO_PORT: "${PORT:-8080}"
+      # Public URL behind reverse proxy (auth cookies / redirects if auth enabled).
+      APP_URL: "${APP_URL:-}"
+      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-${APP_URL:-}}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-}"
+      DATABASE_URL: "${DATABASE_URL:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+    ports:
+      # Only localhost — DSM Reverse Proxy / nginx on the NAS reaches this.
+      - "127.0.0.1:${PORT:-8080}:8080"
+    # Optional: attach to postgres network when db service is enabled
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+    # networks:
+    #   - pora-net
+
+  # --- Optional Postgres (uncomment if you enable auth or server-side DB) ---
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: pora-db
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: "${POSTGRES_USER:-pora}"
+  #     POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+  #     POSTGRES_DB: "${POSTGRES_DB:-pora}"
+  #   volumes:
+  #     - pora-pgdata:/var/lib/postgresql/data
+  #   # Do NOT publish 5432 to the LAN / internet.
+  #   expose:
+  #     - "5432"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pora} -d ${POSTGRES_DB:-pora}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - pora-net
+
+# volumes:
+#   pora-pgdata:
+
+# networks:
+#   pora-net:
+#     driver: bridge
