@@ -11,8 +11,8 @@ ENV NITRO_PRESET=${NITRO_PRESET}
 # Skip migrate during image build — DATABASE_URL is runtime-only on the NAS.
 ENV DATABASE_URL=
 
-COPY package.json package-lock.json ./
-# Refresh lock if out of sync with package.json, then deterministic install.
+COPY package.json package-lock.json* ./
+# Ensure lock matches package.json, then deterministic install.
 RUN npm install --package-lock-only && npm ci
 
 COPY . .
@@ -34,7 +34,7 @@ ENV NITRO_HOST=0.0.0.0
 ENV NITRO_PORT=8080
 
 # Production deps for migrate.mjs (pg). Nitro server bundle lives in .output.
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json* ./
 RUN npm install --package-lock-only && npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/.output ./.output
