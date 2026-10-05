@@ -12,8 +12,8 @@ ENV NITRO_PRESET=${NITRO_PRESET}
 ENV DATABASE_URL=
 
 COPY package.json package-lock.json* ./
-# Ensure lock matches package.json, then deterministic install.
-RUN npm install --package-lock-only && npm ci
+# Lock may be missing/out-of-sync; npm install resolves. Prefer npm ci once lock is committed.
+RUN npm install
 
 COPY . .
 # Ensure Nitro preset is env-overridable (keeps default vercel when unset).
@@ -35,7 +35,7 @@ ENV NITRO_PORT=8080
 
 # Production deps for migrate.mjs (pg). Nitro server bundle lives in .output.
 COPY package.json package-lock.json* ./
-RUN npm install --package-lock-only && npm ci --omit=dev && npm cache clean --force
+RUN npm install --omit=dev && npm cache clean --force
 
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/scripts ./scripts
