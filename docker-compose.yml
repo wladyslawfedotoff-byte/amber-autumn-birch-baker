@@ -6,6 +6,10 @@
 #
 # Optional Postgres: uncomment the db service and set DATABASE_URL in .env
 # (needed only if you later enable auth / server migrations).
+#
+# Optional GHCR pull (no build on NAS): use docker-compose.ghcr.yml instead,
+# or comment out `build:` below and uncomment `image:`.
+#   image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
 
 services:
   app:
@@ -16,6 +20,8 @@ services:
         NITRO_PRESET: node-server
         VITE_AUTH_ENABLED: "false"
     image: pora-app:latest
+    # Pull from private GHCR instead of building (requires docker login ghcr.io):
+    # image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
     container_name: pora-app
     restart: unless-stopped
     env_file:

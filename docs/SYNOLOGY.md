@@ -38,6 +38,44 @@ cp .env.example .env
 
 ## 2. Запуск контейнера
 
+### Вариант A (рекомендуется): pull готового образа из GHCR
+
+CI на `main` собирает и публикует **private** образ:
+`ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest`
+(также тег `:sha-<short>`).
+
+При **private** репозитории пакет GHCR обычно остаётся приватным. **Не делайте пакет публичным.**
+
+1. Создайте Personal Access Token (classic) или fine-grained PAT:
+   - минимум: **`read:packages`** (для `docker pull` на NAS);
+   - для ручного push с машины (не нужен для CI): добавьте **`write:packages`**;
+   - если SSO / org — authorize token для нужной org.
+2. На NAS войдите в registry (токен не сохраняйте в git / скриптах в репо):
+
+```bash
+echo TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+```
+
+Замените `TOKEN` на PAT, `USERNAME` — на GitHub-логин (например `wladyslawfedotoff-byte`).
+
+3. Запуск без сборки на NAS:
+
+```bash
+cd /volume1/docker/pora
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+Альтернатива: в `docker-compose.yml` закомментируйте `build:` и раскомментируйте `image: ghcr.io/...`.
+
+4. Если пакет вдруг публичный (неожиданно):
+   - GitHub → репозиторий → **Packages** (или профиль → Packages) → `amber-autumn-birch-baker`;
+   - **Package settings** → Change visibility → **Private**.
+
+Примечание: первый push из Actions создаёт пакет; видимость связана с приватностью репо. Проверьте после первого успешного workflow, что пакет **Private**.
+
+### Вариант B: сборка на NAS
+
 В Container Manager → **Project** → Create from `docker-compose.yml`, либо в SSH:
 
 ```bash
@@ -67,13 +105,24 @@ curl -sI http://127.0.0.1:8080/ | head
 
 ## 4. Обновление с GitHub
 
+**Через GHCR (без сборки на NAS):**
+
+```bash
+cd /volume1/docker/pora
+git pull   # обновить compose / .env.example при нужде
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+**Сборка на NAS:**
+
 ```bash
 cd /volume1/docker/pora
 git pull
 docker compose up -d --build
 ```
 
-Старый образ пересоберётся; именованные volumes (если включите Postgres) сохранятся.
+Старый образ пересоберётся / перетянется; именованные volumes (если включите Postgres) сохранятся.
 
 ## 5. PWA / иконка на домашнем экране
 
@@ -85,12 +134,15 @@ docker compose up -d --build
 | --- | --- |
 | Клон | `git clone … pora && cd pora` |
 | Env | `cp .env.example .env` → `APP_URL=https://…` |
-| Старт | `docker compose up -d --build` |
+| Login GHCR | `echo TOKEN \| docker login ghcr.io -u USERNAME --password-stdin` |
+| Старт (GHCR) | `docker compose -f docker-compose.ghcr.yml up -d` |
+| Старт (build) | `docker compose up -d --build` |
 | Прокси | HTTPS `pora.…` → `http://localhost:8080` |
-| Обновление | `git pull && docker compose up -d --build` |
+| Обновление GHCR | `docker compose -f docker-compose.ghcr.yml pull && … up -d` |
 
 ## Troubleshooting
 
 - **Пустая страница:** проверьте, что proxy идёт на `127.0.0.1:8080`, а не на другой порт; смотрите логи Container Manager у `pora-app`.
-- **Сборка падает на NAS:** нужно достаточно RAM/CPU; при нехватке соберите образ на ПК (`docker build`) и загрузите на NAS, либо увеличьте swap.
+- **`docker pull` 401/403 с ghcr.io:** просрочен `docker login`; PAT без `read:packages`; пакет private, а токен другого аккаунта.
+- **Сборка падает на NAS:** нужно достаточно RAM/CPU; предпочтите вариант A (GHCR), либо соберите образ на ПК и загрузите на NAS, либо увеличьте swap.
 - **Auth / cookies:** если включите вход, `APP_URL` / `BETTER_AUTH_URL` должны совпадать с публичным HTTPS; задайте `BETTER_AUTH_SECRET`.

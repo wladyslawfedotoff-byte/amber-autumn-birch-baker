@@ -1,0 +1,33 @@
+# Pull pre-built private image from GHCR (no build on NAS).
+# Prefer this over `docker compose up --build` when CI publishes to ghcr.io.
+#
+# Prerequisites:
+#   1. PAT with read:packages (repo private → package stays private)
+#   2. echo TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+#   3. cp .env.example .env  (set APP_URL, etc.)
+#
+# Start:
+#   docker compose -f docker-compose.ghcr.yml pull
+#   docker compose -f docker-compose.ghcr.yml up -d
+#
+# Image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
+
+services:
+  app:
+    image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
+    container_name: pora-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "${PORT:-8080}"
+      NITRO_HOST: "0.0.0.0"
+      NITRO_PORT: "${PORT:-8080}"
+      APP_URL: "${APP_URL:-}"
+      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-${APP_URL:-}}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-}"
+      DATABASE_URL: "${DATABASE_URL:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+    ports:
+      - "127.0.0.1:${PORT:-8080}:8080"
