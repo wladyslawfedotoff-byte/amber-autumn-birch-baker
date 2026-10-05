@@ -110,7 +110,14 @@ function main(argv) {
     console.error("usage: node scripts/with-app-env.mjs <command> [args…]");
     process.exit(2);
   }
-  const env = mergeAppEnv(readAppEnv(projectRoot()), process.env);
+  const root = projectRoot();
+  const env = mergeAppEnv(readAppEnv(root), process.env);
+  // Match npm scripts: local bins like `vite` live in node_modules/.bin, which
+  // is on PATH when npm runs a script but not when Docker invokes this wrapper.
+  const binDir = join(root, "node_modules", ".bin");
+  const pathKey = process.platform === "win32" ? "Path" : "PATH";
+  const sep = process.platform === "win32" ? ";" : ":";
+  env[pathKey] = `${binDir}${sep}${env[pathKey] || ""}`;
   const child = spawn(command, args, { stdio: "inherit", env });
   // The dev server is long-running and is stopped by signalling this wrapper.
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {

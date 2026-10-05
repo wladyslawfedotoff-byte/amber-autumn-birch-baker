@@ -10,6 +10,8 @@ ENV VITE_AUTH_ENABLED=${VITE_AUTH_ENABLED}
 ENV NITRO_PRESET=${NITRO_PRESET}
 # Skip migrate during image build — DATABASE_URL is runtime-only on the NAS.
 ENV DATABASE_URL=
+# So `vite` resolves when with-app-env spawns it (same as npm scripts).
+ENV PATH=/app/node_modules/.bin:$PATH
 
 COPY package.json package-lock.json* ./
 # Lock may be missing/out-of-sync; npm install resolves. Prefer npm ci once lock is committed.
