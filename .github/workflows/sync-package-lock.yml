@@ -17,10 +17,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
 
       - name: Regenerate package-lock.json
-        run: npm install --package-lock-only
+        run: |
+          rm -f package-lock.json
+          npm install --package-lock-only
 
       - name: Commit and push if changed
         run: |
