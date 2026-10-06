@@ -1,4 +1,4 @@
-import { getAuthConfig, getSessionSecret } from "./auth.ts";
+import { getAuthConfig, getSessionSecret, isActive, type Account } from "./auth.ts";
 import { isSecureRequest, parseCookies, serializeCookie, type ServerEvent } from "./http.ts";
 import {
   SESSION_COOKIE,
@@ -8,30 +8,60 @@ import {
   verifySessionToken,
   type Session,
 } from "./session.ts";
-import { getSessionEpoch } from "./session-epoch.ts";
+import { effectiveFingerprint, hasInAppPassword, sessionEpochFor } from "./user-store.ts";
+
+/** Remembers the last login for the login form (not a secret; HttpOnly, read by the server). */
+export const LAST_LOGIN_COOKIE = "pora_login";
 
 /** `__Host-pora_session` over HTTPS, `pora_session` over plain HTTP (local dev). */
 export function sessionCookieName(event: ServerEvent): string {
   return isSecureRequest(event) ? SESSION_COOKIE_SECURE : SESSION_COOKIE;
 }
 
+function keysFor(login: string): { fingerprint: string; epoch: string } | null {
+  const config = getAuthConfig();
+  if (!isActive(config)) return null;
+  const account = config.accounts.get(login);
+  if (!account) return null;
+  if (!account.verify && !hasInAppPassword(login)) return null;
+  return { fingerprint: effectiveFingerprint(account), epoch: sessionEpochFor(login) };
+}
+
 export function readSession(event: ServerEvent): Session | null {
   const config = getAuthConfig();
-  if (config.mode !== "password" && config.mode !== "hash") return null;
+  if (!isActive(config)) return null;
   const token = parseCookies(event.req.headers.get("cookie"))[sessionCookieName(event)];
-  return verifySessionToken(token, getSessionSecret(), config.fingerprint, getSessionEpoch());
+  return verifySessionToken(token, getSessionSecret(), keysFor);
 }
 
 /** Fresh cookie after a login (`authAt` = now) or a renewal (keeps the original `authAt`). */
-export function sessionCookie(event: ServerEvent, renewing?: Session): string {
-  const config = getAuthConfig();
+export function sessionCookie(event: ServerEvent, account: Pick<Account, "login">, renewing?: Session): string {
+  const keys = keysFor(account.login);
+  if (!keys) throw new Error(`no session keys for ${account.login}`);
   const now = Date.now();
-  const token = createSessionToken(getSessionSecret(), config.fingerprint, getSessionEpoch(), now, renewing?.authAt ?? now);
-  const expiresAt = Number(token.split(".")[2]);
+  const token = createSessionToken({
+    secret: getSessionSecret(),
+    login: account.login,
+    fingerprint: keys.fingerprint,
+    epoch: keys.epoch,
+    now,
+    authAt: renewing?.authAt ?? now,
+  });
+  const expiresAt = Number(token.split(".")[3]);
   return serializeCookie(sessionCookieName(event), token, {
     maxAge: Math.max(1, Math.floor((expiresAt - now) / 1000)),
     secure: isSecureRequest(event),
   });
+}
+
+/** `pora_login=<login>` for a year, so the login form is prefilled next time. */
+export function lastLoginCookie(event: ServerEvent, login: string): string {
+  return serializeCookie(LAST_LOGIN_COOKIE, login, { maxAge: 365 * 24 * 60 * 60, secure: isSecureRequest(event) });
+}
+
+export function lastLogin(event: ServerEvent): string {
+  const value = parseCookies(event.req.headers.get("cookie"))[LAST_LOGIN_COOKIE] ?? "";
+  return /^[a-z0-9_-]{1,32}$/.test(value) ? value : "";
 }
 
 /**

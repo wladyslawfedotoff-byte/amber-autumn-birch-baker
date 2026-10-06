@@ -17,6 +17,11 @@
  *   removed on startup and after a failed write.
  * - An external change of pora.json (scripts/restore-backup.mjs) is noticed by
  *   its size/mtime/inode and the file is re-read.
+ * - Several profiles (APP_USERS): the file holds the shared "world" plus a
+ *   state per login (src/lib/sync/world.ts); getFor/putFor serve one user's
+ *   view under the ACL with that user's revision. With one profile get/put
+ *   work exactly as before (the whole document, one revision).
+ * - Backups also copy users.json (in-app passwords) as backups/users-….json.
  */
 import { constants, promises as fs } from "node:fs";
 import { randomBytes } from "node:crypto";
@@ -30,9 +35,11 @@ import {
   sameData,
   type SyncData,
 } from "../../src/lib/sync/merge.ts";
+import { applyPut, ensureUsers, normalizeUserStates, viewFor, type AclConfig, type UserState, type ViewDoc } from "../../src/lib/sync/world.ts";
 import { log } from "./log.ts";
 
-export type StoredDoc = { revision: number; updatedAt: number; data: SyncData };
+export type StoredDoc = { revision: number; updatedAt: number; data: SyncData; users?: Record<string, UserState> };
+export type ViewPutResult = { status: "ok"; doc: ViewDoc; changed: boolean; denied: number } | { status: "conflict"; doc: ViewDoc };
 export type PutResult = { status: "ok"; doc: StoredDoc; changed: boolean } | { status: "conflict"; doc: StoredDoc };
 
 export function dataDir(): string {
@@ -175,7 +182,10 @@ export class SyncStore {
     if (!normalized.ok || typeof parsed.revision !== "number") {
       throw new SyntaxError(`malformed document: ${normalized.ok ? "missing revision" : normalized.error}`);
     }
-    return { revision: parsed.revision, updatedAt: Number(parsed.updatedAt) || 0, data: normalized.data };
+    const doc: StoredDoc = { revision: parsed.revision, updatedAt: Number(parsed.updatedAt) || 0, data: normalized.data };
+    const users = normalizeUserStates(parsed.users);
+    if (Object.keys(users).length) doc.users = users;
+    return doc;
   }
 
   private async load(): Promise<StoredDoc> {
@@ -253,9 +263,36 @@ export class SyncStore {
         updatedAt: Math.max(now, current.updatedAt + 1),
         data: merged,
       };
+      // Profile states (if profiles were used before) are kept untouched.
+      if (current.users) next.users = current.users;
       await this.write(next, current.revision > 0);
       this.doc = next;
       return { status: "ok", doc: next, changed: true };
+    });
+  }
+
+  /** One user's view (several profiles). */
+  async getFor(login: string, acl: AclConfig): Promise<ViewDoc> {
+    return this.exclusive(async () => {
+      const current = await this.load();
+      return viewFor({ ...current, users: current.users ?? {} }, login, acl, this.now());
+    });
+  }
+
+  /** PUT of one user's view: If-Match against that user's revision, merge under the ACL. */
+  async putFor(login: string, acl: AclConfig, baseRevision: number, incoming: SyncData): Promise<ViewPutResult> {
+    return this.exclusive(async () => {
+      const current = await this.load();
+      const now = this.now();
+      const world = ensureUsers({ ...current, users: current.users ?? {} }, acl);
+      const view = viewFor(world, login, acl, now);
+      if (baseRevision !== view.revision) return { status: "conflict", doc: view };
+      const result = applyPut(world, login, incoming, acl, now);
+      if (!result.changed) return { status: "ok", doc: view, changed: false, denied: result.denied };
+      const next: StoredDoc = { ...result.doc };
+      await this.write(next, current.revision > 0);
+      this.doc = next;
+      return { status: "ok", doc: viewFor(result.doc, login, acl, now), changed: true, denied: result.denied };
     });
   }
 
@@ -281,7 +318,7 @@ export class SyncStore {
     try {
       const handle = await fs.open(tmp, "w", 0o600);
       try {
-        await handle.writeFile(JSON.stringify(doc));
+        await handle.writeFile(JSON.stringify(doc.users ? { v: 2, ...doc } : doc));
         await handle.sync();
       } finally {
         await handle.close();
@@ -307,15 +344,27 @@ export class SyncStore {
     if (now - this.lastBackupAt < this.backupIntervalMs) return;
     await fs.mkdir(this.backupDir, { recursive: true });
     const rev = this.doc?.revision ?? 0;
-    await fs.copyFile(this.file, join(this.backupDir, backupFileName(now, rev)));
+    const name = backupFileName(now, rev);
+    await fs.copyFile(this.file, join(this.backupDir, name));
+    // In-app passwords travel with the data (same time stamp in the name).
+    await fs
+      .copyFile(join(this.dir, "users.json"), join(this.backupDir, `users-${name.slice("pora-".length)}`))
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
     this.lastBackupAt = now;
     await this.pruneBackups();
   }
 
-  /** Apply the tiered retention to the backups folder. */
+  /** Apply the tiered retention to the backups folder (users-….json follow their pora-….json). */
   async pruneBackups(): Promise<string[]> {
     const names = await fs.readdir(this.backupDir);
     const doomed = backupsToDelete(names, this.backupHourly, this.backupDaily);
+    const gone = new Set(doomed);
+    const present = new Set(names.filter((name) => !gone.has(name)));
+    for (const name of names) {
+      if (name.startsWith("users-") && name.endsWith(".json") && !present.has(`pora-${name.slice("users-".length)}`)) doomed.push(name);
+    }
     for (const name of doomed) await fs.unlink(join(this.backupDir, name)).catch(() => undefined);
     return doomed;
   }

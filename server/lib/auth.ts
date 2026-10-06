@@ -1,9 +1,20 @@
 /**
- * Single-password login configuration (read once from the environment).
+ * Login configuration (read once from the environment).
  *
- * - APP_PASSWORD (plain) or APP_PASSWORD_HASH (scrypt, see scripts/hash-password.mjs).
- * - Neither set → FAIL CLOSED: nothing but /api/health and static files is served.
+ * Several profiles (see .env.example):
+ *   APP_USERS=vlad,zhena
+ *   USER_VLAD_PASSWORD_HASH=scrypt:…   (or USER_VLAD_PASSWORD=…)
+ *   USER_VLAD_NAME=Владислав           (optional display name)
+ *   APP_OWNER=vlad                      (who owns data created before profiles; default: first user)
+ * The owner may keep using APP_PASSWORD / APP_PASSWORD_HASH as his password.
+ *
+ * One profile (old setups, unchanged): only APP_PASSWORD or APP_PASSWORD_HASH;
+ * the login is APP_DEFAULT_USER (default "admin") and may be left empty.
+ *
+ * - No usable password → FAIL CLOSED: nothing but /api/health and static files is served.
  * - AUTH_DISABLED=true is honoured only when NODE_ENV !== "production" (local dev).
+ * - A password changed in the app lives in ${DATA_DIR}/users.json and wins over
+ *   .env (server/lib/user-store.ts).
  * - SESSION_SECRET (≥ 32 chars) or an auto-generated secret persisted to
  *   ${DATA_DIR}/.session-secret (mode 0600).
  */
@@ -14,10 +25,42 @@ import { parsePasswordHash, verifyPasswordHash } from "../../scripts/password-ha
 import { dataDir } from "./sync-store.ts";
 import { log } from "./log.ts";
 
+export type Account = {
+  login: string;
+  name: string;
+  /** Credential from .env; null when the user has none (only an in-app password can work). */
+  verify: ((password: string) => boolean) | null;
+  fingerprint: string;
+  source: "password" | "hash" | "none";
+  weak?: boolean;
+};
+
+type Users = {
+  multiUser: boolean;
+  /** Logins in .env order. */
+  logins: string[];
+  accounts: Map<string, Account>;
+  /** Owner of data created before profiles existed. */
+  owner: string;
+  /** Users without a usable .env password (logged at startup). */
+  problems: { login: string; reason: string }[];
+};
+
+export type ActiveAuth = Users & {
+  mode: "password" | "hash" | "users";
+  /** Single-profile compatibility: the default account's check and fingerprint. */
+  verify: (password: string) => boolean;
+  fingerprint: string;
+  weak?: boolean;
+};
+
 export type AuthConfig =
-  | { mode: "password" | "hash"; verify: (password: string) => boolean; fingerprint: string; weak?: boolean }
-  | { mode: "disabled"; fingerprint: string }
+  | ActiveAuth
+  | (Users & { mode: "disabled"; fingerprint: string })
   | { mode: "unconfigured" | "invalid"; reason: string; fingerprint: string };
+
+export const LOGIN_PATTERN = /^[a-z0-9_-]{1,32}$/;
+export const DEFAULT_LOGIN = "admin";
 
 const PLACEHOLDERS = [
   "change-me",
@@ -54,48 +97,144 @@ function isPlaceholder(password: string): boolean {
   return PLACEHOLDERS.some((item) => lower === item || lower.startsWith(`${item}_`) || lower.startsWith("change_me"));
 }
 
-export function buildAuthConfig(env: Record<string, string | undefined>): AuthConfig {
-  const plain = env.APP_PASSWORD ?? "";
-  const hash = (env.APP_PASSWORD_HASH ?? "").trim();
-  const disabled = (env.AUTH_DISABLED ?? "").trim().toLowerCase() === "true";
+export function isPlaceholderPassword(password: string): boolean {
+  return isPlaceholder(password);
+}
+
+export function isActive(config: AuthConfig): config is ActiveAuth {
+  return config.mode === "password" || config.mode === "hash" || config.mode === "users";
+}
+
+/** USER_<KEY>_… for a login: upper case, "-" → "_". */
+export function envKey(login: string): string {
+  return login.toUpperCase().replace(/-/g, "_");
+}
+
+type Credential = { verify: (password: string) => boolean; fingerprint: string; source: "password" | "hash"; weak?: boolean };
+
+function parseCredential(label: string, plainRaw: string | undefined, hashRaw: string | undefined): Credential | { error: string } | null {
+  const plain = plainRaw ?? "";
+  const hash = (hashRaw ?? "").trim();
   if (hash) {
     if (!parsePasswordHash(hash)) {
-      return {
-        mode: "invalid",
-        reason: "APP_PASSWORD_HASH has an unknown format (expected scrypt:N:r:p:salt:hash from scripts/hash-password.mjs)",
-        fingerprint: "",
-      };
+      return { error: `${label}_HASH has an unknown format (expected scrypt:N:r:p:salt:hash from scripts/hash-password.mjs)` };
     }
     return {
-      mode: "hash",
+      source: "hash",
       verify: (password) => verifyPasswordHash(password, hash),
       fingerprint: sha256(`hash:${hash}`).toString("base64url"),
     };
   }
   if (plain) {
-    if ([...plain].length < MIN_PASSWORD_LENGTH) {
-      return { mode: "invalid", reason: `APP_PASSWORD is shorter than ${MIN_PASSWORD_LENGTH} characters`, fingerprint: "" };
-    }
-    if (isPlaceholder(plain)) {
-      return { mode: "invalid", reason: "APP_PASSWORD is still the example placeholder — set your own password", fingerprint: "" };
-    }
+    if ([...plain].length < MIN_PASSWORD_LENGTH) return { error: `${label} is shorter than ${MIN_PASSWORD_LENGTH} characters` };
+    if (isPlaceholder(plain)) return { error: `${label} is still the example placeholder — set your own password` };
     const expected = sha256(plain);
     return {
-      mode: "password",
+      source: "password",
       weak: [...plain].length < RECOMMENDED_PASSWORD_LENGTH,
       verify: (password) => timingSafeEqual(sha256(password), expected),
       fingerprint: sha256(`plain:${plain}`).toString("base64url"),
     };
   }
+  return null;
+}
+
+function defaultLogin(env: Record<string, string | undefined>): string {
+  const value = (env.APP_DEFAULT_USER ?? "").trim().toLowerCase();
+  return LOGIN_PATTERN.test(value) ? value : DEFAULT_LOGIN;
+}
+
+function buildMultiUser(env: Record<string, string | undefined>, list: string): AuthConfig {
+  const logins = list
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const invalid = logins.filter((login) => !LOGIN_PATTERN.test(login));
+  if (invalid.length) {
+    return {
+      mode: "invalid",
+      reason: `APP_USERS: login(s) ${invalid.map((l) => JSON.stringify(l)).join(", ")} must use only a-z, 0-9, "_" and "-" (lower case, up to 32)`,
+      fingerprint: "",
+    };
+  }
+  if (new Set(logins).size !== logins.length) return { mode: "invalid", reason: "APP_USERS lists a login twice", fingerprint: "" };
+  const keys = new Map<string, string>();
+  for (const login of logins) {
+    const key = envKey(login);
+    const clash = keys.get(key);
+    if (clash) return { mode: "invalid", reason: `APP_USERS: "${clash}" and "${login}" both map to USER_${key}_…`, fingerprint: "" };
+    keys.set(key, login);
+  }
+  const wanted = (env.APP_OWNER ?? "").trim().toLowerCase();
+  const owner = wanted && logins.includes(wanted) ? wanted : logins[0]!;
+  const problems: { login: string; reason: string }[] = [];
+  if (wanted && wanted !== owner) problems.push({ login: wanted, reason: `APP_OWNER=${wanted} is not in APP_USERS; using ${owner}` });
+  const accounts = new Map<string, Account>();
+  for (const login of logins) {
+    const key = envKey(login);
+    let cred = parseCredential(`USER_${key}_PASSWORD`, env[`USER_${key}_PASSWORD`], env[`USER_${key}_PASSWORD_HASH`]);
+    if (cred === null && login === owner) cred = parseCredential("APP_PASSWORD", env.APP_PASSWORD, env.APP_PASSWORD_HASH);
+    const name = (env[`USER_${key}_NAME`] ?? "").trim().slice(0, 60) || login;
+    if (cred === null || "error" in cred) {
+      problems.push({ login, reason: cred ? cred.error : `USER_${key}_PASSWORD or USER_${key}_PASSWORD_HASH is not set` });
+      accounts.set(login, { login, name, verify: null, fingerprint: `none:${login}`, source: "none" });
+    } else {
+      accounts.set(login, { login, name, verify: cred.verify, fingerprint: cred.fingerprint, source: cred.source, weak: cred.weak });
+    }
+  }
+  const usable = [...accounts.values()].filter((account) => account.verify);
+  if (!usable.length) {
+    return {
+      mode: "invalid",
+      reason: `no user in APP_USERS has a valid password: ${problems.map((p) => `${p.login}: ${p.reason}`).join("; ")}`,
+      fingerprint: "",
+    };
+  }
+  const first = accounts.get(owner)!.verify ? accounts.get(owner)! : usable[0]!;
+  return {
+    mode: "users",
+    multiUser: true,
+    logins,
+    accounts,
+    owner,
+    problems,
+    verify: first.verify!,
+    fingerprint: first.fingerprint,
+  };
+}
+
+export function buildAuthConfig(env: Record<string, string | undefined>): AuthConfig {
+  const list = (env.APP_USERS ?? "").trim();
+  if (list) return buildMultiUser(env, list);
+  const disabled = (env.AUTH_DISABLED ?? "").trim().toLowerCase() === "true";
+  const login = defaultLogin(env);
+  const cred = parseCredential("APP_PASSWORD", env.APP_PASSWORD, env.APP_PASSWORD_HASH);
+  if (cred && "error" in cred) return { mode: "invalid", reason: cred.error, fingerprint: "" };
+  const name = (env.APP_DEFAULT_USER_NAME ?? "").trim().slice(0, 60) || login;
+  if (cred) {
+    const account: Account = { login, name, verify: cred.verify, fingerprint: cred.fingerprint, source: cred.source, weak: cred.weak };
+    return {
+      mode: cred.source,
+      multiUser: false,
+      logins: [login],
+      accounts: new Map([[login, account]]),
+      owner: login,
+      problems: [],
+      verify: cred.verify,
+      fingerprint: cred.fingerprint,
+      weak: cred.weak,
+    };
+  }
   if (disabled && env.NODE_ENV !== "production") {
-    return { mode: "disabled", fingerprint: "disabled" };
+    const account: Account = { login, name, verify: null, fingerprint: "disabled", source: "none" };
+    return { mode: "disabled", fingerprint: "disabled", multiUser: false, logins: [login], accounts: new Map([[login, account]]), owner: login, problems: [] };
   }
   return {
     mode: "unconfigured",
     reason:
       disabled && env.NODE_ENV === "production"
         ? "AUTH_DISABLED=true is ignored in production; set APP_PASSWORD or APP_PASSWORD_HASH"
-        : "neither APP_PASSWORD nor APP_PASSWORD_HASH is set",
+        : "neither APP_PASSWORD / APP_PASSWORD_HASH nor APP_USERS with USER_<LOGIN>_PASSWORD is set",
     fingerprint: "",
   };
 }
@@ -104,25 +243,34 @@ let cachedConfig: AuthConfig | null = null;
 
 export function getAuthConfig(): AuthConfig {
   if (cachedConfig) return cachedConfig;
-  cachedConfig = buildAuthConfig(process.env);
-  if (cachedConfig.mode === "unconfigured" || cachedConfig.mode === "invalid") {
+  const config = buildAuthConfig(process.env);
+  cachedConfig = config;
+  if (config.mode === "unconfigured" || config.mode === "invalid") {
     log("error", "auth.not_configured", {
-      reason: cachedConfig.reason,
-      hint: "задайте APP_PASSWORD=<пароль> (или APP_PASSWORD_HASH) в файле .env рядом с compose.yaml и пересоздайте контейнер (docker compose up -d --force-recreate)",
+      reason: config.reason,
+      hint: "задайте APP_PASSWORD=<пароль> (или APP_USERS и USER_<ЛОГИН>_PASSWORD) в файле .env рядом с compose.yaml и пересоздайте контейнер (docker compose up -d --force-recreate)",
     });
-  } else if (cachedConfig.mode === "disabled") {
+  } else if (config.mode === "disabled") {
     log("warn", "auth.DISABLED", {
       note: "!!! AUTH_DISABLED=true — вход отключён, любой может открыть приложение. Только для локальной разработки !!!",
     });
-  } else {
-    log("info", "auth.ready", { mode: cachedConfig.mode });
-    if (cachedConfig.mode === "password" && cachedConfig.weak) {
-      log("warn", "auth.weak_password", {
-        note: `APP_PASSWORD короче ${RECOMMENDED_PASSWORD_LENGTH} символов — используйте фразу из нескольких слов (16+ символов) или APP_PASSWORD_HASH`,
-      });
+  } else if (isActive(config)) {
+    log("info", "auth.ready", {
+      mode: config.mode,
+      users: config.logins.join(","),
+      ...(config.multiUser ? { owner: config.owner } : {}),
+    });
+    for (const problem of config.problems) log("warn", "auth.user_problem", problem);
+    for (const account of config.accounts.values()) {
+      if (account.source === "password" && account.weak) {
+        log("warn", "auth.weak_password", {
+          user: account.login,
+          note: `пароль короче ${RECOMMENDED_PASSWORD_LENGTH} символов — используйте фразу из нескольких слов (16+ символов) или *_PASSWORD_HASH`,
+        });
+      }
     }
   }
-  return cachedConfig;
+  return config;
 }
 
 let cachedSecret: string | null = null;

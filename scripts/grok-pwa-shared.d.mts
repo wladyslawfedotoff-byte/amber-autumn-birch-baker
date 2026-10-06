@@ -16,6 +16,7 @@ export declare function renderInstallPageHtml(
 export declare function renderWebManifest(
   hostHeader: string | null | undefined,
   appName?: string | null,
+  description?: string | null,
 ): string;
 export declare function grokPwaHeadTags(appName?: string): Array<[string, string]>;
 export declare const GROK_EXTENSIONS_SCRIPT_SRC: string;
