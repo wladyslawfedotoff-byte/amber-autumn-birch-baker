@@ -31,11 +31,14 @@ export type Task = {
   endAt?: string | null;
   /** Completing the task moves the date forward instead of archiving it. */
   repeat?: Repeat | null;
+  /** Sync stamp (ms, server-corrected clock). Missing on old data = 0. */
+  updatedAt?: number;
 };
 
 export type TaskList = {
   id: string;
   name: string;
+  updatedAt?: number;
 };
 
 export type Habit = {
@@ -45,6 +48,7 @@ export type Habit = {
   why?: string;
   /** Daily HH:mm. Empty means no alarm. */
   remindAt?: string | null;
+  updatedAt?: number;
 };
 
 export type MilestoneKind = "birthday" | "anniversary" | "holiday" | "other";
@@ -57,6 +61,7 @@ export type Milestone = {
   kind: MilestoneKind;
   /** HH:mm on the occurrence day. Empty means no alarm. */
   remindAt?: string | null;
+  updatedAt?: number;
 };
 
 export type ProjectCard = {
@@ -80,6 +85,7 @@ export type Project = {
   start: string | null;
   end: string | null;
   stages: ProjectStage[];
+  updatedAt?: number;
 };
 
 export type FocusClock = {

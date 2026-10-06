@@ -248,7 +248,7 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
             <input
               value={projectDraft}
               onChange={(event) => setProjectDraft(event.target.value)}
-              placeholder="Grok bot"
+              placeholder="Новый проект"
               aria-label="Название проекта"
               className="h-11 min-w-0 flex-1 rounded-md border border-line bg-elevated px-3 text-base text-fg outline-none"
             />

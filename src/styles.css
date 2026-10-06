@@ -1,4 +1,10 @@
 @import "tailwindcss";
+/* Never scan build output: the SSR build would otherwise pick up class names
+   from the client bundle and emit a different CSS file (hash mismatch → the
+   server-rendered <link> 404s and the page flashes unstyled). */
+@source not "../.output";
+@source not "../.vercel";
+@source not "../node_modules/.nitro";
 
 :root {
   --bg: #e8e4db;
