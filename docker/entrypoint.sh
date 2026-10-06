@@ -25,7 +25,7 @@ if [ "$(id -u)" = "0" ]; then
     log "WARN  entrypoint: cannot create $DATA_DIR — проверьте volume (./data:/data) / check the volume mount"
   fi
   # Only our own files; never recurse into anything else the user mounted.
-  for path in "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/pora.json" "$DATA_DIR/.session-secret"; do
+  for path in "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/pora.json" "$DATA_DIR/.session-secret" "$DATA_DIR/.session-epoch"; do
     [ -e "$path" ] || continue
     if ! chown "$APP_UID:$APP_GID" "$path" 2>/dev/null; then
       log "WARN  entrypoint: chown $APP_UID:$APP_GID $path failed"

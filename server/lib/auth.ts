@@ -15,7 +15,7 @@ import { dataDir } from "./sync-store.ts";
 import { log } from "./log.ts";
 
 export type AuthConfig =
-  | { mode: "password" | "hash"; verify: (password: string) => boolean; fingerprint: string }
+  | { mode: "password" | "hash"; verify: (password: string) => boolean; fingerprint: string; weak?: boolean }
   | { mode: "disabled"; fingerprint: string }
   | { mode: "unconfigured" | "invalid"; reason: string; fingerprint: string };
 
@@ -36,9 +36,14 @@ const PLACEHOLDERS = [
   "ваш-надёжный-пароль",
   "ваш-надежный-пароль",
   "локальный-пароль-123",
+  "четыре-пять-случайных-слов-через-дефис",
+  "слово-слово-слово-слово",
+  "<своя фраза, 16+ символов>",
 ];
 
-export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 12;
+/** Below this a working password still logs a warning: use a passphrase of 16+ characters. */
+export const RECOMMENDED_PASSWORD_LENGTH = 16;
 
 function sha256(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
@@ -68,7 +73,7 @@ export function buildAuthConfig(env: Record<string, string | undefined>): AuthCo
     };
   }
   if (plain) {
-    if (plain.length < MIN_PASSWORD_LENGTH) {
+    if ([...plain].length < MIN_PASSWORD_LENGTH) {
       return { mode: "invalid", reason: `APP_PASSWORD is shorter than ${MIN_PASSWORD_LENGTH} characters`, fingerprint: "" };
     }
     if (isPlaceholder(plain)) {
@@ -77,6 +82,7 @@ export function buildAuthConfig(env: Record<string, string | undefined>): AuthCo
     const expected = sha256(plain);
     return {
       mode: "password",
+      weak: [...plain].length < RECOMMENDED_PASSWORD_LENGTH,
       verify: (password) => timingSafeEqual(sha256(password), expected),
       fingerprint: sha256(`plain:${plain}`).toString("base64url"),
     };
@@ -110,6 +116,11 @@ export function getAuthConfig(): AuthConfig {
     });
   } else {
     log("info", "auth.ready", { mode: cachedConfig.mode });
+    if (cachedConfig.mode === "password" && cachedConfig.weak) {
+      log("warn", "auth.weak_password", {
+        note: `APP_PASSWORD короче ${RECOMMENDED_PASSWORD_LENGTH} символов — используйте фразу из нескольких слов (16+ символов) или APP_PASSWORD_HASH`,
+      });
+    }
   }
   return cachedConfig;
 }

@@ -1,9 +1,9 @@
 import { json, redirect, type ServerEvent } from "../../lib/http.ts";
-import { clearedSessionCookie } from "../../lib/session-cookie.ts";
+import { clearedSessionCookies, withCookies } from "../../lib/session-cookie.ts";
 
 export default function logout(event: ServerEvent): Response {
-  const cookie = clearedSessionCookie(event);
+  const cookies = clearedSessionCookies(event);
   const type = event.req.headers.get("content-type") ?? "";
-  if (type.includes("form")) return redirect("/login", 303, { "set-cookie": cookie });
-  return json(200, { ok: true }, { "set-cookie": cookie });
+  if (type.includes("form")) return withCookies(redirect("/login", 303), cookies);
+  return withCookies(json(200, { ok: true }), cookies);
 }

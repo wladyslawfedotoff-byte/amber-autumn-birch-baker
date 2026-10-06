@@ -1,9 +1,9 @@
 import { getAuthConfig } from "../../lib/auth.ts";
-import { BodyTooLargeError, clientIp, json, readBodyLimited, redirect, type ServerEvent } from "../../lib/http.ts";
-import { log } from "../../lib/log.ts";
+import { BodyTooLargeError, clientIpInfo, json, readBodyLimited, redirect, type ServerEvent } from "../../lib/http.ts";
+import { log, logThrottled } from "../../lib/log.ts";
 import { safeNext } from "../../lib/pages.ts";
 import { LoginLimiter } from "../../lib/rate-limit.ts";
-import { sessionCookie } from "../../lib/session-cookie.ts";
+import { legacyCookieCleanup, sessionCookie, withCookies } from "../../lib/session-cookie.ts";
 
 const limiter = new LoginLimiter();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,7 +21,7 @@ async function readCredentials(event: ServerEvent): Promise<{ password: string; 
 
 export default async function login(event: ServerEvent): Promise<Response> {
   const config = getAuthConfig();
-  const ip = clientIp(event);
+  const { ip, source: ipSource } = clientIpInfo(event);
   let creds: { password: string; next: string; form: boolean };
   try {
     creds = await readCredentials(event);
@@ -43,21 +43,31 @@ export default async function login(event: ServerEvent): Promise<Response> {
 
   const verdict = limiter.check(ip);
   if (!verdict.allowed) {
-    log("warn", "login.rate_limited", { ip, scope: verdict.scope, retryAfterSec: verdict.retryAfterSec });
+    logThrottled(`login.rate_limited:${verdict.scope}`, "warn", "login.rate_limited", {
+      ip,
+      ipSource,
+      scope: verdict.scope,
+      retryAfterSec: verdict.retryAfterSec,
+    });
     return fail("rate", 429, { "retry-after": String(verdict.retryAfterSec) });
   }
   if (!creds.password) return fail("empty", 400);
 
   if (!config.verify(creds.password)) {
     const delay = limiter.fail(ip);
-    log("warn", "login.failed", { ip, failuresForIp: limiter.failuresFor(ip), ua: (event.req.headers.get("user-agent") ?? "").slice(0, 80) });
+    log("warn", "login.failed", {
+      ip,
+      ipSource,
+      failuresForIp: limiter.failuresFor(ip),
+      ua: (event.req.headers.get("user-agent") ?? "").slice(0, 80),
+    });
     await sleep(delay);
     return fail("wrong", 401);
   }
 
   limiter.success(ip);
-  log("info", "login.ok", { ip });
-  const cookie = sessionCookie(event);
-  if (creds.form) return redirect(creds.next, 303, { "set-cookie": cookie });
-  return json(200, { ok: true, next: creds.next }, { "set-cookie": cookie });
+  log("info", "login.ok", { ip, ipSource });
+  const cookies = [sessionCookie(event), ...legacyCookieCleanup(event)];
+  if (creds.form) return withCookies(redirect(creds.next, 303), cookies);
+  return withCookies(json(200, { ok: true, next: creds.next }), cookies);
 }

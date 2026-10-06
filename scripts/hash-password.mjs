@@ -62,10 +62,12 @@ async function main() {
   } else {
     password = await readStdin();
   }
-  if (password.length < 8) {
-    console.error("Пароль должен быть не короче 8 символов.");
+  const length = [...password].length;
+  if (length < 12) {
+    console.error("Пароль должен быть не короче 12 символов (рекомендуется фраза из 16+ символов).");
     process.exit(1);
   }
+  if (length < 16) console.error("Предупреждение: короче 16 символов. Лучше фраза из нескольких слов.");
   process.stdout.write(`${hashPassword(password)}\n`);
 }
 

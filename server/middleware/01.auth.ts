@@ -10,7 +10,7 @@
  */
 import { getAuthConfig } from "../lib/auth.ts";
 import { NO_LOG_HEADER, html, isSameOrigin, json, redirect, wantsHtml, type ServerEvent } from "../lib/http.ts";
-import { log } from "../lib/log.ts";
+import { log, logThrottled } from "../lib/log.ts";
 import { notConfiguredPage } from "../lib/pages.ts";
 import { readSession, sessionCookie, shouldRenew } from "../lib/session-cookie.ts";
 
@@ -59,7 +59,13 @@ export default function auth(event: ServerEvent): Response | undefined {
   }
 
   if (!SAFE_METHODS.has(method) && !isSameOrigin(event)) {
-    log("warn", "csrf.blocked", { method, path, origin: event.req.headers.get("origin") ?? "", site: event.req.headers.get("sec-fetch-site") ?? "" });
+    logThrottled("csrf.blocked", "warn", "csrf.blocked", {
+      method,
+      path,
+      origin: event.req.headers.get("origin") ?? "",
+      site: event.req.headers.get("sec-fetch-site") ?? "",
+      expected: (process.env.APP_URL ?? "").trim() || "(APP_URL not set: request Host)",
+    });
     if (path === "/api/login" && (event.req.headers.get("content-type") ?? "").includes("form")) {
       return redirect("/login?e=origin", 303);
     }
@@ -78,7 +84,7 @@ export default function auth(event: ServerEvent): Response | undefined {
     return json(401, { error: "unauthorized", message: "Нужно войти." });
   }
   if (shouldRenew(session) && method !== "HEAD") {
-    event.res.headers.append("set-cookie", sessionCookie(event));
+    event.res.headers.append("set-cookie", sessionCookie(event, session));
   }
   return undefined;
 }
