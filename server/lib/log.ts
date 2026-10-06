@@ -32,3 +32,36 @@ export function log(level: Level, event: string, fields: Record<string, unknown>
     console.log(line);
   }
 }
+
+type ThrottleState = { windowStart: number; suppressed: number };
+const throttles = new Map<string, ThrottleState>();
+export const LOG_THROTTLE_MS = 60_000;
+
+/**
+ * Like `log`, but at most one line per `key` per minute. Occurrences inside the
+ * window are counted and reported as `suppressed=N` on the next line, so a
+ * flood (brute force, a misbehaving page) cannot fill the container log.
+ * Returns true when a line was written.
+ */
+export function logThrottled(
+  key: string,
+  level: Level,
+  event: string,
+  fields: Record<string, unknown> = {},
+  now = Date.now(),
+): boolean {
+  const state = throttles.get(key);
+  if (state && now - state.windowStart < LOG_THROTTLE_MS) {
+    state.suppressed++;
+    return false;
+  }
+  const suppressed = state?.suppressed ?? 0;
+  throttles.set(key, { windowStart: now, suppressed: 0 });
+  log(level, event, suppressed ? { ...fields, suppressed, suppressedWindowSec: LOG_THROTTLE_MS / 1000 } : fields);
+  return true;
+}
+
+/** Test hook. */
+export function resetLogThrottle(): void {
+  throttles.clear();
+}

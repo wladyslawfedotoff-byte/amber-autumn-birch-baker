@@ -8,7 +8,14 @@ import { readGrokExtensionsEnabled } from "../../scripts/grok-pwa-shared.mjs";
  * extensions script is enabled (not in Docker: VITE_GROK_EXTENSIONS=0),
  * https://grok.com is allowed so the platform banner keeps working.
  */
-export function securityHeaders(): Record<string, string> {
+/**
+ * HSTS for one year, only on responses to HTTPS requests. Deliberately without
+ * includeSubDomains/preload: DSM and other services share the synology.me
+ * parent domain and must not be forced onto HTTPS by this app.
+ */
+export const HSTS_VALUE = "max-age=31536000";
+
+export function securityHeaders(secure = false): Record<string, string> {
   const grok = readGrokExtensionsEnabled() ? " https://grok.com" : "";
   const csp = [
     "default-src 'self'",
@@ -25,7 +32,7 @@ export function securityHeaders(): Record<string, string> {
     "form-action 'self'",
     "frame-ancestors 'none'",
   ].join("; ");
-  return {
+  const headers: Record<string, string> = {
     "content-security-policy": csp,
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",
@@ -33,22 +40,24 @@ export function securityHeaders(): Record<string, string> {
     "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     "cross-origin-opener-policy": "same-origin",
   };
+  if (secure) headers["strict-transport-security"] = HSTS_VALUE;
+  return headers;
 }
 
-export function applySecurityHeaders(headers: Headers): void {
-  for (const [name, value] of Object.entries(securityHeaders())) {
+export function applySecurityHeaders(headers: Headers, secure = false): void {
+  for (const [name, value] of Object.entries(securityHeaders(secure))) {
     if (!headers.has(name)) headers.set(name, value);
   }
 }
 
 /** Return `response` with security headers (copies it when headers are immutable). */
-export function withSecurityHeaders(response: Response): Response {
+export function withSecurityHeaders(response: Response, secure = false): Response {
   try {
-    applySecurityHeaders(response.headers);
+    applySecurityHeaders(response.headers, secure);
     return response;
   } catch {
     const headers = new Headers(response.headers);
-    applySecurityHeaders(headers);
+    applySecurityHeaders(headers, secure);
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   }
 }

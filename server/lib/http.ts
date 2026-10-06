@@ -1,4 +1,5 @@
 /** Small framework-agnostic helpers for Nitro (h3 v2) handlers. */
+import { isIP } from "node:net";
 
 export interface ServerEvent {
   url: URL;
@@ -49,13 +50,18 @@ function firstHeader(value: string | null): string {
   return (value ?? "").split(",")[0]!.trim();
 }
 
+export type ClientIpSource = "x-real-ip" | "x-forwarded-for" | "socket" | "unknown";
+
 /**
- * Client IP for rate limiting. The container port is bound to the NAS loopback
- * and only DSM's reverse proxy can reach it, so X-Forwarded-For is trusted —
- * but only its LAST entry (the one DSM appended); earlier entries are
- * client-controlled and could be spoofed to dodge the limit.
+ * Client IP for rate limiting and logs. The container port is bound to the NAS
+ * loopback and only DSM's reverse proxy can reach it, so proxy headers are
+ * trusted: X-Real-IP first (DSM's nginx sets it to the peer address, so it is
+ * the real client), then the LAST X-Forwarded-For entry (the one the proxy
+ * appended; earlier entries are client-controlled), then the socket address.
  */
-export function clientIp(event: ServerEvent): string {
+export function clientIpInfo(event: ServerEvent): { ip: string; source: ClientIpSource } {
+  const realIp = (event.req.headers.get("x-real-ip") ?? "").trim();
+  if (realIp && isIP(realIp)) return { ip: realIp, source: "x-real-ip" };
   const forwarded = event.req.headers.get("x-forwarded-for");
   if (forwarded) {
     const parts = forwarded
@@ -63,15 +69,18 @@ export function clientIp(event: ServerEvent): string {
       .map((part) => part.trim())
       .filter(Boolean);
     const last = parts[parts.length - 1];
-    if (last) return last;
+    if (last) return { ip: last, source: "x-forwarded-for" };
   }
-  const realIp = event.req.headers.get("x-real-ip");
-  if (realIp) return realIp.trim();
   try {
-    return event.req.ip || "unknown";
+    if (event.req.ip) return { ip: event.req.ip, source: "socket" };
   } catch {
-    return "unknown";
+    // ignore
   }
+  return { ip: "unknown", source: "unknown" };
+}
+
+export function clientIp(event: ServerEvent): string {
+  return clientIpInfo(event).ip;
 }
 
 export function requestProto(event: ServerEvent): string {
@@ -115,10 +124,13 @@ export function isSecureRequest(event: ServerEvent): boolean {
 }
 
 /**
- * CSRF guard for state-changing requests: the browser's Origin must be this
- * site (APP_URL origin, or the forwarded host). Requests without Origin are
- * accepted only if Sec-Fetch-Site does not say cross-site (non-browser
- * clients such as curl send neither header and have no ambient cookies).
+ * CSRF guard for state-changing requests. With APP_URL set (production) the
+ * browser's Origin must equal its origin exactly — scheme, host AND port, so
+ * another service on the same NAS (e.g. DSM on :5001) is not "same site".
+ * Without APP_URL (local development) the Origin must match the request's
+ * Host header including the port. Requests without Origin are accepted only
+ * if Sec-Fetch-Site does not say cross-site (non-browser clients such as curl
+ * send neither header and have no ambient cookies).
  */
 export function isSameOrigin(event: ServerEvent): boolean {
   const origin = event.req.headers.get("origin");
@@ -134,12 +146,9 @@ export function isSameOrigin(event: ServerEvent): boolean {
     return false;
   }
   const configured = appUrl();
-  if (configured && configured.origin === parsed.origin) return true;
-  const host = requestHost(event);
-  if (parsed.host.toLowerCase() === host) return true;
-  // DSM may forward Host without the external port (:8443).
-  const hostname = host.replace(/:\d+$/, "");
-  return parsed.hostname.toLowerCase() === hostname;
+  if (configured) return configured.origin === parsed.origin;
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  return parsed.host.toLowerCase() === requestHost(event);
 }
 
 export type Cookies = Record<string, string>;

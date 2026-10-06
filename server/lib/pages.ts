@@ -52,13 +52,56 @@ export const LOGIN_ERRORS: Record<string, string> = {
   expired: "Сессия закончилась. Войдите снова.",
 };
 
-/** Only allow same-site relative paths as the post-login destination. */
+const MAX_NEXT_LENGTH = 500;
+// Control characters (incl. TAB/CR/LF that browsers strip from URLs), any
+// whitespace and backslashes (browsers treat "\\" like "/").
+// eslint-disable-next-line no-control-regex -- rejecting control characters is the point
+const UNSAFE_NEXT = /[\u0000-\u001f\u007f-\u009f\s\\]/u;
+
+function decodeRepeatedly(value: string): string | null {
+  let current = value;
+  for (let i = 0; i < 3; i++) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(current);
+    } catch {
+      return null;
+    }
+    if (decoded === current) return current;
+    current = decoded;
+  }
+  return current;
+}
+
+function isSafeForm(value: string, decoded = false): boolean {
+  // An encoded plain space (%20, e.g. in a query) is harmless once decoded;
+  // raw spaces are not accepted.
+  const checked = decoded ? value.replace(/ /g, "") : value;
+  return value.startsWith("/") && !value.startsWith("//") && !UNSAFE_NEXT.test(checked);
+}
+
+/**
+ * Post-login destination: only a same-site path. Rejects (→ "/") anything with
+ * control characters, whitespace or backslashes — raw or percent-encoded — a
+ * protocol-relative `//host`, absolute URLs, and anything that does not resolve
+ * to this origin. `/api/*` and `/login*` are never a destination.
+ */
 export function safeNext(value: string | null | undefined): string {
   const next = String(value ?? "");
-  if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\") || next.startsWith("/api/") || next.startsWith("/login")) {
+  if (!next || next.length > MAX_NEXT_LENGTH || !isSafeForm(next)) return "/";
+  const decoded = decodeRepeatedly(next);
+  if (decoded === null || !isSafeForm(decoded, true)) return "/";
+  let resolved: URL;
+  try {
+    resolved = new URL(next, "http://x");
+  } catch {
     return "/";
   }
-  return next.slice(0, 500);
+  if (resolved.origin !== "http://x") return "/";
+  if (resolved.pathname.startsWith("/api/") || resolved.pathname === "/login" || resolved.pathname.startsWith("/login/")) {
+    return "/";
+  }
+  return next;
 }
 
 export function loginPage(options: { error?: string | null; next?: string | null }): string {
@@ -87,7 +130,7 @@ export function notConfiguredPage(reason: string): string {
   <p>Приложение закрыто: на сервере не задан пароль для входа.</p>
   <ol>
     <li>В папке проекта на NAS (рядом с <code>compose.yaml</code>) откройте файл <code>.env</code> — шаблон в <code>.env.example</code>.</li>
-    <li>Впишите строку <code>APP_PASSWORD='ваш-надёжный-пароль'</code> (не короче 8 символов).</li>
+    <li>Впишите строку <code>APP_PASSWORD='ваш-надёжный-пароль'</code> (не короче 12 символов; лучше фраза из нескольких слов, 16+ символов).</li>
     <li>Сохраните файл и пересоздайте контейнер (Container Manager → «Проект» → «Собрать» или <code>docker compose up -d --force-recreate</code>).</li>
   </ol>
   <p style="margin-top:12px;font-size:13px">Вместо открытого пароля можно указать <code>APP_PASSWORD_HASH</code> — его печатает <code>node scripts/hash-password.mjs</code>.</p>
