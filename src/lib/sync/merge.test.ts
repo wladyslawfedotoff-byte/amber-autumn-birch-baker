@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  adoptOtherTab,
   dropStaleItems,
   emptyData,
   mergeData,
@@ -363,4 +364,31 @@ test("fuzz: random concurrent edits on three devices always converge to one docu
     for (const d of devices) assert.ok(sameData(d, server), `round ${round}: device differs from server`);
     assert.ok(sameData(mergeData(server, server), server));
   }
+});
+
+test("regression: another tab's older save does not wipe a subtask just added here (and deletions stay deleted)", () => {
+  // Both tabs start from the same saved state.
+  const start = doc({ tasks: [{ id: "trip", title: "Поездка", tags: [], subtasks: [], updatedAt: 1000 }, { id: "old", title: "Старое", updatedAt: 1000 }] });
+  const stamp = (d: SyncData, now: number, change: (ts: SyncEntity[]) => SyncEntity[]): SyncData => {
+    const res = stampCollection(d.tasks, change(d.tasks.map((t) => ({ ...t }))), d.tombstones.tasks, now, "tasks");
+    return { ...d, tasks: res.items, tombstones: { ...d.tombstones, tasks: res.tombs } };
+  };
+  // Tab A adds a subtask and deletes a task…
+  const tabA = stamp(start, 2000, (ts) =>
+    ts.filter((t) => t.id !== "old").map((t) => (t.id === "trip" ? { ...t, subtasks: [{ id: "s1", title: "Купить билеты", done: false }] } : t)),
+  );
+  // …while tab B, still holding the old copy, saves it (focus-timer tick, sync, any change).
+  const tabB = start;
+  // The old behaviour (rehydrate = take B's save as is) lost the subtask in tab A:
+  assert.equal((tabB.tasks[0]!.subtasks as SyncEntity[]).length, 0);
+  // Now tab A merges B's save into its own state…
+  const a = adoptOtherTab(tabA, tabB);
+  assert.deepEqual((a.tasks.find((t) => t.id === "trip")!.subtasks as SyncEntity[]).map((s) => s.title), ["Купить билеты"]);
+  assert.equal(a.tasks.some((t) => t.id === "old"), false, "a deletion is not resurrected by the stale copy");
+  // …and tab B, receiving A's save, merges it too: both tabs converge.
+  const b = adoptOtherTab(tabB, a);
+  assert.ok(sameData(a, b));
+  // A real edit in B (newer stamp) still wins in A.
+  const bEdit = stamp(b, 3000, (ts) => ts.map((t) => ({ ...t, title: "Поездка в Казань" })));
+  assert.equal(adoptOtherTab(a, bEdit).tasks.find((t) => t.id === "trip")!.title, "Поездка в Казань");
 });

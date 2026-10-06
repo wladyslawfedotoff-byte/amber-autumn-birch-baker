@@ -12,7 +12,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AddTaskForm, TaskRow } from "@/components/planner/task-row";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { daysBetween, formatLong, formatMonth, shiftIso, todayIso } from "@/lib/dates";
+import { cleanDates, daysBetween, formatLong, formatMonth, occursOn, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { byNewest } from "@/lib/queries";
 import { stageRange } from "@/lib/stage-range";
@@ -73,6 +73,7 @@ export function CalendarView({
   const addTask = usePlanner((s) => s.addTask);
   const updateTask = usePlanner((s) => s.updateTask);
   const placeStage = usePlanner((s) => s.placeStage);
+  const setRepeatDates = usePlanner((s) => s.setRepeatDates);
   const today = todayIso();
   const [cursor, setCursor] = useState(() => new Date());
   const [day, setDay] = useState(today);
@@ -115,7 +116,8 @@ export function CalendarView({
     );
   }, [projects]);
 
-  const dayTasks = tasks.filter((task) => task.due === day).sort(byNewest);
+  // «Выбранные даты»: the task shows on every pending chosen date, not only on the next one.
+  const dayTasks = tasks.filter((task) => (task.done ? task.due === day : occursOn(task, day))).sort(byNewest);
   const letters = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
   function track(event: ReactPointerEvent<HTMLElement>, initial: Drag) {
@@ -154,7 +156,13 @@ export function CalendarView({
       setDrag(null);
       if (!current?.active || !current.over) return;
       if (current.kind === "task") {
-        updateTask(current.id, { due: current.over });
+        const moved = tasks.find((task) => task.id === current.id);
+        if (moved?.repeat === "dates") {
+          // Move just this occurrence: swap the date in the chosen set.
+          setRepeatDates(current.id, [...cleanDates(moved.repeatDates).filter((date) => date !== day), current.over]);
+        } else {
+          updateTask(current.id, { due: current.over });
+        }
         setDay(current.over);
         return;
       }
@@ -225,7 +233,7 @@ export function CalendarView({
                 {week.map((date) => {
                   const iso = todayIso(date);
                   const inMonth = isSameMonth(date, cursor);
-                  const count = tasks.filter((task) => !task.done && task.due === iso).length;
+                  const count = tasks.filter((task) => !task.done && occursOn(task, iso)).length;
                   const selected = iso === day;
                   const isToday = iso === today;
                   const over = drag?.active && drag.over === iso;

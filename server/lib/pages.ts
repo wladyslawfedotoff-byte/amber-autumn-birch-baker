@@ -1,4 +1,5 @@
 /** Self-contained server-rendered pages (no JS needed — works in the iOS Home Screen app). */
+import { APP_NAME, APP_TAGLINE, APP_TITLE } from "../../src/lib/site.ts";
 import { escapeHtml } from "./http.ts";
 
 const STYLE = `
@@ -14,6 +15,8 @@ label{display:block;margin:24px 0 6px;font-size:14px;color:var(--muted)}
 input{width:100%;height:48px;border:0;border-radius:14px;background:var(--elevated);color:var(--fg);padding:0 14px;font:inherit;font-size:17px;outline:none;box-shadow:0 0 0 1px color-mix(in oklab,var(--fg) 10%,transparent)}
 input:focus{box-shadow:0 0 0 2px color-mix(in oklab,var(--accent) 75%,transparent)}
 button{margin-top:16px;width:100%;height:48px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-fg);font:inherit;font-size:16px;font-weight:500;cursor:pointer}
+.hint{margin:6px 0 0;font-size:13px;color:var(--subtle)}
+.tagline{font-family:"Newsreader",Georgia,serif;font-size:19px;color:var(--muted);margin:0 0 6px}
 .error{margin-top:14px;color:var(--danger);font-size:14px}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--elevated);padding:2px 6px;border-radius:6px}
 ol{padding-left:20px;color:var(--muted);font-size:14px}
@@ -28,7 +31,7 @@ function shell(title: string, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Пора">
+<meta name="apple-mobile-web-app-title" content="${escapeHtml(APP_NAME)}">
 <meta name="theme-color" content="#e8e4db">
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
@@ -45,7 +48,8 @@ function shell(title: string, body: string): string {
 }
 
 export const LOGIN_ERRORS: Record<string, string> = {
-  wrong: "Неверный пароль.",
+  wrong: "Неверный логин или пароль.",
+  nologin: "Введите логин — короткое имя латиницей, например vlad.",
   rate: "Слишком много попыток. Подождите несколько минут и попробуйте снова.",
   origin: "Запрос пришёл не с этого сайта. Обновите страницу и попробуйте ещё раз.",
   empty: "Введите пароль.",
@@ -104,36 +108,44 @@ export function safeNext(value: string | null | undefined): string {
   return next;
 }
 
-export function loginPage(options: { error?: string | null; next?: string | null }): string {
+export function loginPage(options: { error?: string | null; next?: string | null; login?: string | null; multiUser?: boolean }): string {
   const message = options.error ? LOGIN_ERRORS[options.error] ?? LOGIN_ERRORS.wrong : "";
   const next = safeNext(options.next);
+  const login = /^[a-z0-9_-]{1,32}$/.test(options.login ?? "") ? options.login! : "";
+  const loginField = options.multiUser
+    ? `<label for="login">Логин</label>
+  <input id="login" name="login" type="text" value="${escapeHtml(login)}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required ${login ? "" : "autofocus"} enterkeyhint="next" placeholder="например, vlad">
+  <p class="hint">Латиницей, как в файле .env на сервере. Запомним на этом устройстве.</p>`
+    : `<input type="text" name="username" value="${escapeHtml(login || "pora")}" autocomplete="username" hidden aria-hidden="true" tabindex="-1">`;
   return shell(
-    "Вход — Пора",
+    `Вход — ${APP_TITLE}`,
     `<form class="card" method="post" action="/api/login" autocomplete="on">
-  <h1>Пора</h1>
-  <p>Задачи, календарь и привычки.</p>
+  <h1>${escapeHtml(APP_NAME)}</h1>
+  ${APP_TAGLINE ? `<p class="tagline">${escapeHtml(APP_TAGLINE)}</p>` : ""}
+  <p>Задачи, календарь и привычки${options.multiUser ? " — у каждого свои, общие видны обоим" : ""}.</p>
   <input type="hidden" name="next" value="${escapeHtml(next)}">
-  <input type="text" name="username" value="pora" autocomplete="username" hidden aria-hidden="true" tabindex="-1">
+  ${loginField}
   <label for="password">Пароль</label>
-  <input id="password" name="password" type="password" autocomplete="current-password" required autofocus enterkeyhint="go">
+  <input id="password" name="password" type="password" autocomplete="current-password" required ${options.multiUser && !login ? "" : "autofocus"} enterkeyhint="go">
   ${message ? `<p class="error" role="alert">${escapeHtml(message)}</p>` : ""}
   <button type="submit">Войти</button>
+  <p class="hint">Забыли пароль? Его можно сбросить на сервере — см. docs/SYNOLOGY.md, «Сброс пароля».</p>
 </form>`,
   );
 }
 
 export function notConfiguredPage(reason: string): string {
   return shell(
-    "Пора — нужен пароль",
+    `${APP_NAME} — нужен пароль`,
     `<div class="card">
-  <h1>Пора</h1>
+  <h1>${escapeHtml(APP_NAME)}</h1>
   <p>Приложение закрыто: на сервере не задан пароль для входа.</p>
   <ol>
     <li>В папке проекта на NAS (рядом с <code>compose.yaml</code>) откройте файл <code>.env</code> — шаблон в <code>.env.example</code>.</li>
     <li>Впишите строку <code>APP_PASSWORD='ваш-надёжный-пароль'</code> (не короче 12 символов; лучше фраза из нескольких слов, 16+ символов).</li>
     <li>Сохраните файл и пересоздайте контейнер (Container Manager → «Проект» → «Собрать» или <code>docker compose up -d --force-recreate</code>).</li>
   </ol>
-  <p style="margin-top:12px;font-size:13px">Вместо открытого пароля можно указать <code>APP_PASSWORD_HASH</code> — его печатает <code>node scripts/hash-password.mjs</code>.</p>
+  <p style="margin-top:12px;font-size:13px">Вместо открытого пароля можно указать <code>APP_PASSWORD_HASH</code> — его печатает <code>node scripts/hash-password.mjs</code>. Несколько профилей: <code>APP_USERS=vlad,zhena</code> и <code>USER_VLAD_PASSWORD=…</code> — см. <code>.env.example</code>.</p>
   <p style="margin-top:12px;font-size:12px;color:var(--subtle)">Причина: ${escapeHtml(reason)}</p>
 </div>`,
   );
@@ -141,7 +153,7 @@ export function notConfiguredPage(reason: string): string {
 
 export function errorPage(): string {
   return shell(
-    "Пора — ошибка",
-    `<div class="card"><h1>Пора</h1><p>На сервере что-то сломалось. Обновите страницу через минуту. Подробности — в журнале контейнера.</p></div>`,
+    `${APP_NAME} — ошибка`,
+    `<div class="card"><h1>${escapeHtml(APP_NAME)}</h1><p>На сервере что-то сломалось. Обновите страницу через минуту. Подробности — в журнале контейнера.</p></div>`,
   );
 }

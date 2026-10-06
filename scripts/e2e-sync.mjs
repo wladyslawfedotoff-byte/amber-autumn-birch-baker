@@ -44,7 +44,7 @@ async function login(page, label) {
   await page.fill("#password", "wrong-password");
   await page.click("button[type=submit]");
   await page.waitForURL(/\/login\?e=wrong/);
-  if (!(await page.getByText("Неверный пароль.").isVisible())) fail(`${label}: no wrong-password message`);
+  if (!(await page.getByText("Неверный логин или пароль.").isVisible())) fail(`${label}: no wrong-password message`);
   await page.fill("#password", PASSWORD);
   await page.click("button[type=submit]");
   await page.waitForURL(`${BASE}/`);

@@ -1,5 +1,23 @@
-import { shiftIso } from "@/lib/dates";
+import { occursOn, shiftIso, taskDates } from "@/lib/dates";
 import type { Task, TaskList, View } from "@/lib/planner-types";
+
+/** Who owns it: items from before profiles belong to the server's APP_OWNER. */
+export function ownerOf(item: { owner?: string }, dataOwner: string): string {
+  return item.owner || dataOwner;
+}
+
+/** Shared with me / by me: another owner, members, an assignee, or a shared list. */
+export function isSharedTask(task: Task, lists: TaskList[], me: string, dataOwner: string): boolean {
+  if (!me) return false;
+  if (ownerOf(task, dataOwner) !== me) return true;
+  if ((task.members ?? []).length > 0 || task.assignee) return true;
+  const list = task.listId ? lists.find((l) => l.id === task.listId) : null;
+  return Boolean(list && (ownerOf(list, dataOwner) !== me || (list.members ?? []).length > 0));
+}
+
+function inRange(task: Task, from: string, to: string): boolean {
+  return taskDates(task).some((date) => date >= from && date <= to);
+}
 
 export function countToday(tasks: Task[], today: string): number {
   return tasks.filter((t) => !t.done && t.due != null && t.due <= today).length;
@@ -7,12 +25,12 @@ export function countToday(tasks: Task[], today: string): number {
 
 export function countTomorrow(tasks: Task[], today: string): number {
   const tomorrow = shiftIso(today, 1);
-  return tasks.filter((t) => !t.done && t.due === tomorrow).length;
+  return tasks.filter((t) => !t.done && occursOn(t, tomorrow)).length;
 }
 
 export function countWeek(tasks: Task[], today: string): number {
   const end = shiftIso(today, 6);
-  return tasks.filter((t) => !t.done && t.due != null && t.due >= today && t.due <= end).length;
+  return tasks.filter((t) => !t.done && inRange(t, today, end)).length;
 }
 
 export function countOpen(tasks: Task[]): number {
@@ -27,7 +45,9 @@ export function countList(tasks: Task[], id: string): number {
   return tasks.filter((t) => !t.done && t.listId === id).length;
 }
 
-export function scopeTasks(tasks: Task[], view: View, today: string): Task[] {
+export type ShareScope = { lists: TaskList[]; me: string; dataOwner: string };
+
+export function scopeTasks(tasks: Task[], view: View, today: string, share?: ShareScope): Task[] {
   const end = shiftIso(today, 6);
   return tasks.filter((t) => {
     if (view === "today") {
@@ -35,21 +55,22 @@ export function scopeTasks(tasks: Task[], view: View, today: string): Task[] {
       return t.due != null && t.due <= today;
     }
     if (view === "tomorrow") {
-      return !t.done && t.due === shiftIso(today, 1);
+      return !t.done && occursOn(t, shiftIso(today, 1));
     }
     if (view === "week") {
-      return !t.done && t.due != null && t.due >= today && t.due <= end;
+      return !t.done && inRange(t, today, end);
     }
+    if (view === "shared") return !t.done && Boolean(share && isSharedTask(t, share.lists, share.me, share.dataOwner));
     if (view === "inbox") return !t.done && t.listId == null;
     if (view === "done") return t.done;
     if (view.startsWith("list:")) return !t.done && t.listId === view.slice(5);
     if (view.startsWith("tag:")) return !t.done && t.tags.includes(view.slice(4));
-    if (view.startsWith("day:")) return !t.done && t.due === view.slice(4);
+    if (view.startsWith("day:")) return !t.done && occursOn(t, view.slice(4));
     return false;
   });
 }
 
-export function doneInScope(tasks: Task[], view: View, today: string): Task[] {
+export function doneInScope(tasks: Task[], view: View, today: string, share?: ShareScope): Task[] {
   if (view === "done" || view === "week" || view === "calendar" || view === "focus" || view === "habits") {
     return [];
   }
@@ -59,6 +80,7 @@ export function doneInScope(tasks: Task[], view: View, today: string): Task[] {
       if (view === "today") return t.due != null && t.due <= today;
       if (view === "tomorrow") return t.due === shiftIso(today, 1);
       if (view === "inbox") return t.listId == null;
+      if (view === "shared") return Boolean(share && isSharedTask(t, share.lists, share.me, share.dataOwner));
       if (view.startsWith("list:")) return t.listId === view.slice(5);
       if (view.startsWith("tag:")) return t.tags.includes(view.slice(4));
       if (view.startsWith("day:")) return t.due === view.slice(4);

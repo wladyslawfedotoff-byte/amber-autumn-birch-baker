@@ -16,7 +16,10 @@
  * - clears tombstones of the restored entries;
  * - by default keeps entries that are newer than the backup (created after it);
  *   with --replace they are deleted everywhere (tombstoned) as well;
- * - bumps the revision; the running server notices the new file by itself.
+ * - bumps the revision (with several profiles: every profile's revision); the
+ *   running server notices the new file by itself;
+ * - in-app passwords are not part of it: backups/users-….json next to the copy
+ *   can be put back as data/users.json by hand if needed.
  *
  * Needs Node ≥ 22.18 (imports src/lib/sync/merge.ts directly).
  */
@@ -27,6 +30,7 @@ import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const { COLLECTIONS, emptyData, normalizeData, restoreDocument } = await import(join(here, "../src/lib/sync/merge.ts"));
+const { afterRestore, normalizeUserStates } = await import(join(here, "../src/lib/sync/world.ts"));
 
 const BACKUP_NAME = /^pora-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-r(\d+)(?:-[a-z-]+)?\.json$/;
 
@@ -69,7 +73,8 @@ async function readDocument(file) {
   const raw = parsed && typeof parsed === "object" && parsed.data && typeof parsed.data === "object" ? parsed.data : parsed;
   const normalized = normalizeData(raw);
   if (!normalized.ok) throw new Error(`${file}: не похоже на копию «Пора» (${normalized.error})`);
-  return { revision: typeof parsed.revision === "number" ? parsed.revision : null, data: normalized.data };
+  const users = parsed && typeof parsed === "object" ? normalizeUserStates(parsed.users) : {};
+  return { revision: typeof parsed.revision === "number" ? parsed.revision : null, data: normalized.data, users };
 }
 
 async function list(dir) {
@@ -129,7 +134,7 @@ async function restore(dir, source, { replace, dryRun }) {
   const backup = await readDocument(source);
   for (let attempt = 0; attempt < 3; attempt++) {
     const before = await statOrNull(file);
-    const current = before ? await readDocument(file) : { revision: 0, data: emptyData() };
+    const current = before ? await readDocument(file) : { revision: 0, data: emptyData(), users: {} };
     const currentRevision = current.revision ?? 0;
     const now = Date.now();
     const data = restoreDocument(current.data, backup.data, { now, replace });
@@ -151,7 +156,11 @@ async function restore(dir, source, { replace, dryRun }) {
       await fs.chown(safety, owner.uid, owner.gid).catch(() => undefined);
       console.log(`Текущие данные сохранены: backups/${basename(safety)}`);
     }
-    const doc = { revision: currentRevision + 1, updatedAt: now, data };
+    // Several profiles: every profile's view moves on; restored entries are no longer tombstoned there.
+    const hasUsers = Object.keys(current.users).length > 0;
+    const doc = hasUsers
+      ? { v: 2, revision: currentRevision + 1, updatedAt: now, data, users: afterRestore(current.users, data) }
+      : { revision: currentRevision + 1, updatedAt: now, data };
     const tmp = `${file}.tmp-restore-${randomBytes(4).toString("hex")}`;
     try {
       const handle = await fs.open(tmp, "wx", 0o600);

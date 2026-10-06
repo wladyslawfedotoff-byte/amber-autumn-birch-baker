@@ -10,7 +10,7 @@ import {
   toMinutes,
   type Placed,
 } from "@/lib/day-board";
-import { formatLong, shiftIso, todayIso } from "@/lib/dates";
+import { formatLong, shiftIso, todayIso, occursOn } from "@/lib/dates";
 import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
 import type { Task } from "@/lib/planner-types";
@@ -61,7 +61,7 @@ export function ScheduleView({
   const spans = useMemo(
     () =>
       tasks
-        .filter((task) => task.due === day)
+        .filter((task) => occursOn(task, day))
         .map(taskSpan)
         .filter((span): span is NonNullable<typeof span> => span != null),
     [tasks, day],
@@ -87,9 +87,9 @@ export function ScheduleView({
   const bounds = useMemo(() => boardBounds(spans, workFrom, workTo), [spans, workFrom, workTo]);
   const hours = Math.max(1, Math.round((bounds.to - bounds.from) / 60));
   const clashes = placed.filter((span) => span.clash && !span.done);
-  const untimed = tasks.filter((task) => task.due === day && !task.done && !taskSpan(task));
+  const untimed = tasks.filter((task) => occursOn(task, day) && !task.done && !taskSpan(task));
   const cards = tasks
-    .filter((task) => task.due === day && !task.done)
+    .filter((task) => occursOn(task, day) && !task.done)
     .sort((a, b) => (taskSpan(a)?.start ?? 24 * 60) - (taskSpan(b)?.start ?? 24 * 60));
   const running = projects.filter((project) => {
     if (!project.start || !project.end) return false;

@@ -13,13 +13,19 @@
  *   imported wholesale;
  * - PUTs with If-Match: <base revision>; on 409 it merges the server copy and
  *   retries;
- * - on 401 sends the user to /login — local data stays in localStorage.
+ * - on 401 sends the user to /login — local data stays in localStorage;
+ * - several profiles: the device remembers whose data it holds (`meta.login`).
+ *   If somebody else signs in on it, the local copy is replaced by that
+ *   person's server copy (never uploaded into their account): GET compares
+ *   the `user` of the answer, PUT sends X-Pora-User and the server answers
+ *   412 user_mismatch. «Выйти» clears the local copy after uploading it.
  */
 import { usePlanner } from "@/lib/planner-store";
 import type { Habit, Milestone, Project, Task, TaskList } from "@/lib/planner-types";
 import { setClockOffset, syncNow } from "@/lib/sync/clock";
 import {
   COLLECTIONS,
+  adoptOtherTab,
   dropStaleItems,
   mergeData,
   normalizeData,
@@ -46,6 +52,8 @@ type Meta = {
   clockOffset: number;
   /** Server time of the last sync after which this device had nothing left to push. */
   syncedThrough: number | null;
+  /** Whose data this device holds (several profiles only). */
+  login: string | null;
 };
 
 export type SyncPhase = "idle" | "syncing" | "offline" | "error" | "unauthorized" | "unavailable";
@@ -59,7 +67,17 @@ export type ServerSyncStatus = {
   legacyNote: string | null;
 };
 
-type RemoteDoc = { revision: number; updatedAt: number; serverNow: number; cutoff: number; data: unknown };
+type RemoteDoc = {
+  revision: number;
+  updatedAt: number;
+  serverNow: number;
+  cutoff: number;
+  data: unknown;
+  user?: string;
+  profiles?: boolean;
+  /** Profile that owns data created before profiles were enabled. */
+  owner?: string;
+};
 
 const DEFAULT_META: Meta = {
   base: null,
@@ -69,6 +87,7 @@ const DEFAULT_META: Meta = {
   lastError: null,
   clockOffset: 0,
   syncedThrough: null,
+  login: null,
 };
 
 function storage(): Storage | null {
@@ -150,6 +169,8 @@ export function dismissLegacyNote(): void {
 let applying = 0;
 let editSeq = 0;
 let pristine = false;
+/** Set after a 412 user_mismatch: the next server copy replaces the local one. */
+let forceReplace = false;
 
 export function localData(): SyncData {
   const s = usePlanner.getState();
@@ -209,9 +230,23 @@ function integrate(remote: RemoteDoc, timing?: { t0: number; t1: number }): bool
   if (!normalized.ok) throw new SyncError("error", `Сервер прислал неверные данные: ${normalized.error}`);
   const remoteData = normalized.data;
   const cutoff = Number(remote.cutoff) || 0;
-  const meta = readMeta();
+  let meta = readMeta();
+  const remoteUser = remote.profiles && typeof remote.user === "string" ? remote.user : null;
+  let switched = false;
+  // Somebody else signed in on this device: their data only. A device that
+  // synced before profiles were enabled (no meta.login yet) holds the data
+  // owner's copy, so another profile must not merge it into their own.
+  const legacyCopyOfOwner = !meta.login && meta.revision !== null && typeof remote.owner === "string";
+  if (remoteUser && (meta.login ? meta.login !== remoteUser : legacyCopyOfOwner && remote.owner !== remoteUser)) {
+    switched = true;
+    meta = writeMeta({ ...DEFAULT_META, clockOffset: meta.clockOffset });
+  }
+  if (forceReplace) {
+    switched = true;
+    forceReplace = false;
+  }
   let merged: SyncData;
-  if (pristine && editSeq === 0 && remote.revision > 0) {
+  if (switched || (pristine && editSeq === 0 && remote.revision > 0)) {
     // First start on a fresh device: there is nothing local except the demo
     // seed, so take the server copy instead of mixing demo tasks into it.
     merged = remoteData;
@@ -229,7 +264,14 @@ function integrate(remote: RemoteDoc, timing?: { t0: number; t1: number }): bool
   if (!sameData(merged, localData())) applyData(merged);
   const needsPush = !sameData(pruneTombstones(merged, cutoff), pruneTombstones(remoteData, cutoff));
   const synced = !needsPush && Number.isFinite(remote.serverNow) ? { syncedThrough: remote.serverNow } : {};
-  writeMeta({ base: remote.revision, revision: remote.revision, dirty: needsPush, clockOffset: offset, ...synced });
+  writeMeta({
+    base: remote.revision,
+    revision: remote.revision,
+    dirty: needsPush,
+    clockOffset: offset,
+    login: remoteUser,
+    ...synced,
+  });
   return needsPush;
 }
 
@@ -257,6 +299,9 @@ async function readJson(response: Response): Promise<Record<string, unknown> | n
 
 function failure(response: Response, body: Record<string, unknown> | null): SyncError {
   if (response.status === 401) return new SyncError("unauthorized", "Нужно войти заново.", 401);
+  if (response.status === 412 && body?.error === "user_mismatch") {
+    return new SyncError("error", "На этом устройстве вошёл другой профиль.", 412);
+  }
   if (response.status === 503 && body?.error === "auth_not_configured") {
     return new SyncError("error", "На сервере не задан пароль (APP_PASSWORD).", 503);
   }
@@ -280,6 +325,7 @@ async function call(method: "GET" | "PUT", base?: number, body?: string, keepali
       headers: {
         Accept: "application/json",
         ...(method === "PUT" ? { "Content-Type": "application/json", "If-Match": `"${base ?? 0}"` } : {}),
+        ...(method === "PUT" && readMeta().login ? { "X-Pora-User": readMeta().login! } : {}),
       },
       body,
     });
@@ -319,7 +365,19 @@ async function runOnce(): Promise<void> {
       }
       const seq = editSeq;
       const t0 = Date.now();
-      const { status: code, doc } = await call("PUT", meta.base ?? 0, JSON.stringify(localData()));
+      let put: Awaited<ReturnType<typeof call>>;
+      try {
+        put = await call("PUT", meta.base ?? 0, JSON.stringify(localData()));
+      } catch (error) {
+        if (error instanceof SyncError && error.status === 412) {
+          // Another profile signed in on this device: never upload the old local copy into it.
+          writeMeta({ ...DEFAULT_META, clockOffset: readMeta().clockOffset });
+          forceReplace = true;
+          continue;
+        }
+        throw error;
+      }
+      const { status: code, doc } = put;
       const needsPush = integrate(doc, { t0, t1: Date.now() });
       if (code === 409) {
         settled = !needsPush;
@@ -466,12 +524,26 @@ export function importBackupData(raw: unknown): number | null {
 
 // ---- logout ------------------------------------------------------------------
 
+/**
+ * With several profiles the local copy is removed on «Выйти» (after uploading
+ * unsent changes), so the next person signing in on this device sees nothing
+ * of it. With one profile it stays (offline use as before).
+ */
+function forgetLocalCopy(): void {
+  if (!readMeta().login) return;
+  const store = storage();
+  store?.removeItem(STORE_KEY);
+  store?.removeItem(META_KEY);
+  store?.removeItem("pora-profile");
+}
+
 export async function logout(): Promise<void> {
   if (readMeta().dirty) await syncServerNow().catch(() => undefined);
   try {
     await fetch("/api/logout", { method: "POST", credentials: "same-origin", headers: { Accept: "application/json" } });
   } finally {
     redirecting = true;
+    if (!readMeta().dirty) forgetLocalCopy();
     window.location.assign("/login");
   }
 }
@@ -500,7 +572,33 @@ export async function logoutEverywhere(): Promise<void> {
   }
   if (!response.ok) throw new Error(`Сервер не смог завершить сеансы (ответ ${response.status}).`);
   redirecting = true;
+  if (!readMeta().dirty) forgetLocalCopy();
   window.location.assign("/login");
+}
+
+// ---- password ----------------------------------------------------------------
+
+/**
+ * «Сменить пароль». Resolves on success (this device stays signed in with a
+ * new cookie, the user's other devices are signed out); throws with a
+ * user-facing Russian message otherwise.
+ */
+export async function changePassword(current: string, next: string, repeat: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/api/password", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ current, next, repeat }),
+    });
+  } catch {
+    throw new Error("Нет связи с сервером — пароль не изменён.");
+  }
+  if (response.ok) return;
+  const body = await readJson(response);
+  if (response.status === 401) throw new Error("Сеанс закончился — войдите заново и повторите.");
+  throw new Error(typeof body?.message === "string" ? body.message : `Не получилось (ответ ${response.status}).`);
 }
 
 // ---- wiring ------------------------------------------------------------------
@@ -550,11 +648,22 @@ export function bindServerSync(options: { pristine: boolean }): () => void {
   const onStorage = (event: StorageEvent) => {
     if (event.key === STORE_KEY) {
       // Another tab saved: adopt it without treating it as our own edit (that
-      // tab already marked the shared dirty flag and will upload it).
+      // tab already marked the shared dirty flag and will upload it). Merge,
+      // never replace: its save may predate an edit made here a moment ago
+      // (that is how freshly added subtasks used to vanish). A removed copy
+      // (sign-out in that tab) is taken as is.
+      const mine = event.newValue === null ? null : localData();
       applying++;
-      void Promise.resolve(usePlanner.persist.rehydrate()).finally(() => {
-        applying--;
-      });
+      void Promise.resolve(usePlanner.persist.rehydrate())
+        .then(() => {
+          if (!mine) return;
+          const theirs = localData();
+          const merged = adoptOtherTab(mine, theirs);
+          if (!sameData(merged, theirs)) applyData(merged);
+        })
+        .finally(() => {
+          applying--;
+        });
     } else if (event.key === META_KEY || event.key === LEGACY_NOTE_KEY) {
       emit();
     }

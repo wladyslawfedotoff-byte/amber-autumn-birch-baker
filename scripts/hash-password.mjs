@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
- * Print an APP_PASSWORD_HASH value for «Пора».
+ * Print a scrypt password hash for «Пора».
  *
- *   node scripts/hash-password.mjs            # asks for the password (hidden)
- *   echo -n 'пароль' | node scripts/hash-password.mjs
+ *   node scripts/hash-password.mjs            # asks for the password (hidden), prints the hash
+ *   node scripts/hash-password.mjs zhena      # prints a ready line: USER_ZHENA_PASSWORD_HASH=scrypt:…
+ *   echo -n 'пароль' | node scripts/hash-password.mjs [login]
  *
  * Inside the running container:
- *   docker exec -it pora-app node scripts/hash-password.mjs
+ *   docker exec -it pora-app node scripts/hash-password.mjs zhena
  *
- * Paste the printed line into APP_PASSWORD_HASH and remove APP_PASSWORD.
+ * One profile: paste the hash into APP_PASSWORD_HASH and remove APP_PASSWORD.
+ * Several profiles: paste the printed USER_…_PASSWORD_HASH line into .env.
  */
 import { hashPassword } from "./password-hash.mjs";
 
@@ -51,6 +53,15 @@ function askHidden(question) {
 }
 
 async function main() {
+  const login = (process.argv[2] ?? "").trim();
+  if (login === "--help" || login === "-h") {
+    console.error("Использование: node scripts/hash-password.mjs [логин]   (логин: a-z, 0-9, _ и -)");
+    process.exit(0);
+  }
+  if (login && !/^[a-z0-9_-]{1,32}$/.test(login)) {
+    console.error(`Логин «${login}» не подходит: только строчные латинские буквы, цифры, «_» и «-» (до 32 символов), например vlad.`);
+    process.exit(1);
+  }
   let password;
   if (process.stdin.isTTY) {
     password = await askHidden("Пароль: ");
@@ -68,7 +79,12 @@ async function main() {
     process.exit(1);
   }
   if (length < 16) console.error("Предупреждение: короче 16 символов. Лучше фраза из нескольких слов.");
-  process.stdout.write(`${hashPassword(password)}\n`);
+  const hash = hashPassword(password);
+  if (login) {
+    process.stdout.write(`USER_${login.toUpperCase().replace(/-/g, "_")}_PASSWORD_HASH=${hash}\n`);
+  } else {
+    process.stdout.write(`${hash}\n`);
+  }
 }
 
 main().catch((error) => {
