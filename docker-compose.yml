@@ -52,12 +52,12 @@ services:
     ports:
       # Только localhost — наружу выходит Reverse Proxy DSM (HTTPS :8443).
       - "127.0.0.1:8080:8080"
-    # Журнал контейнера не растёт бесконечно: максимум 3 файла по 10 МБ.
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    # Драйвер журнала НЕ задаём (никакого блока logging:). На Synology по
+    # умолчанию используется собственный драйвер Docker «db»: он сам хранит
+    # журнал, и именно его читает Container Manager → Контейнер → «Журнал».
+    # С другим драйвером (например json-file) вкладка «Журнал» пустая
+    # («Журналы отсутствуют»). Не на Synology можно добавить ротацию:
+    #   logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 30s

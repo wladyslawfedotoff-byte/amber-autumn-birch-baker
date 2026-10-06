@@ -33,6 +33,8 @@ jobs:
             cat /tmp/compose.err
             if grep -qi warn /tmp/compose.err; then echo "warnings in $f"; exit 1; fi
             grep -q 'APP_PASSWORD: СМЕНИТЕ_МЕНЯ' /tmp/compose.out
+            # Synology: a custom logging driver empties Container Manager's «Журнал».
+            if grep -q '^ *logging:' /tmp/compose.out; then echo "$f must not set logging (Synology db driver)"; exit 1; fi
           done
           rm -f .env
 

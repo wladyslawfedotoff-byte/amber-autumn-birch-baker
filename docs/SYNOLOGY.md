@@ -154,11 +154,6 @@ services:
       - ./data:/data
     ports:
       - "127.0.0.1:8080:8080"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 30s
@@ -210,7 +205,7 @@ curl -s http://127.0.0.1:8080/api/health
 - Healthcheck в образе и в compose раз в 30 с опрашивает `/api/health`; Container Manager показывает статус «healthy / unhealthy».
 - При фатальной ошибке процесс завершается (`exit 1`), а `restart: unless-stopped` поднимает контейнер заново.
 - **Журнал:** Container Manager → Контейнер → `pora-app` → **Журнал** или по SSH `sudo docker logs -f pora-app`. Одна строка на событие: `server.start`, `auth.ready`, `auth.weak_password`, `login.failed ip=… ipSource=…`, `login.rate_limited`, `csrf.blocked`, `auth.logout_all`, `sync.saved`, `sync.conflict`, `sync.write_failed`, `backup.failed`, `data.temp_removed`, `data.reloaded`, `http.5xx`, `data.not_writable`, `data.corrupt`, `process.uncaughtException`. Повторяющиеся `login.rate_limited` и `csrf.blocked` пишутся не чаще раза в минуту (следующая строка содержит `suppressed=N`).
-- **Размер журнала** ограничен в compose: `logging: json-file`, 3 файла по 10 МБ (`max-size: "10m"`, `max-file: "3"`). Проверить: `sudo docker inspect -f '{{json .HostConfig.LogConfig}}' pora-app`.
+- **Драйвер журнала не задаётся.** Docker в Container Manager по умолчанию пишет журнал через собственный драйвер Synology `db` (настройка `"log-driver": "db"` в `dockerd.json`), и вкладка «Журнал» показывает только такие журналы. Если в compose указать `logging:` с другим драйвером (например `json-file`), вкладка покажет «Журналы отсутствуют» (`docker logs` при этом работает). Поэтому блока `logging:` в compose нет. Проверить: `sudo docker inspect -f '{{.HostConfig.LogConfig.Type}}' pora-app` → `db`. Драйвер фиксируется при создании контейнера, после правки compose контейнер нужно **пересоздать**. Сообщения, которые повторяются при переборе паролей или чужих запросах, приложение само пишет не чаще раза в минуту. На других хостах (не Synology) можно добавить ротацию: `logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }`.
 - **autoheal (необязательно):** Docker сам не перезапускает контейнер в состоянии «unhealthy» (только упавший). Для этого в compose есть закомментированный сервис `willfarrell/autoheal`. Ему нужен `/var/run/docker.sock` — это полный контроль над Docker на NAS, включайте осознанно: раскомментируйте сервис и `labels: autoheal: "true"` у `app`.
 
 ## 6. Обновление
@@ -225,7 +220,7 @@ sudo docker compose up -d
 
 Данные в `./data` и секреты в `.env` сохраняются между обновлениями.
 
-Если вы меняли `compose.yaml` (например, добавили блоки `logging`, `security_opt`, `cap_drop`/`cap_add` из актуального [`docker-compose.ghcr.yml`](../docker-compose.ghcr.yml)), контейнер нужно пересоздать: Проект → «Остановить» → «Собрать»/«Запустить», или `sudo docker compose up -d --force-recreate`.
+Если вы меняли `compose.yaml` (например, взяли блоки `security_opt`, `cap_drop`/`cap_add` из актуального [`docker-compose.ghcr.yml`](../docker-compose.ghcr.yml) или удалили блок `logging:`, из-за которого вкладка «Журнал» была пустой), контейнер нужно пересоздать: Проект → «Остановить» → «Собрать»/«Запустить», или `sudo docker compose up -d --force-recreate`.
 
 ## 7. Первое подключение устройств
 
@@ -282,6 +277,7 @@ sudo docker exec pora-app node scripts/restore-backup.mjs pora-2026-10-06T07-30-
 - **unhealthy / `dataWritable:false`:** нет прав на `/volume1/docker/pora/data` → см. п. 1.3 (права или `PUID`/`PGID` в `.env`).
 - **`Failed to load …/.env` / `env file … not found`:** нет файла `/volume1/docker/pora/.env` или он назван иначе (`.env.txt`) → п. 2.
 - **Пароль «не подходит», а в журнале `The "…" variable is not set`:** в пароле есть `$` без кавычек → возьмите значение в одинарные кавычки или используйте `APP_PASSWORD_HASH` (п. 2), затем пересоздайте контейнер.
+- **Container Manager → «Журнал»: «Журналы отсутствуют»:** в `compose.yaml` остался блок `logging:` (например, `driver: json-file`) → удалите его и пересоздайте контейнер (`sudo docker compose up -d --force-recreate`). Новый контейнер получит драйвер Synology `db`. Записи, сделанные при старом драйвере, во вкладке не появятся; их видно через `sudo docker logs pora-app`, пока контейнер не пересоздан.
 - **Слишком много попыток (429):** подождите 15 минут или перезапустите контейнер.
 - **Восстановить данные из копии:** п. 8.1 (`restore-backup.mjs`); очищать данные сайта на устройствах не нужно.
 - **Устройство потеряно / пароль мог утечь:** смените пароль в `.env`, пересоздайте контейнер; или без смены пароля — «Выйти на всех устройствах» (п. 7).
