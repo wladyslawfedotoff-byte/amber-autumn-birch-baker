@@ -1,148 +1,287 @@
 # Развёртывание «Пора» на Synology (Container Manager)
 
-GitHub — источник правды. На NAS крутится контейнер с Node-сервером; снаружи только HTTPS через Reverse Proxy DSM на поддомене 4-го уровня (QuickConnect / DDNS).
+GitHub — источник правды. На NAS работает один контейнер с Node-сервером; снаружи — только HTTPS через Reverse Proxy DSM:
 
-## Что нужно знать про данные
-
-- Задачи, списки, привычки и проекты хранятся **в браузере** (`localStorage`), плюс опционально синхронизация через WebDAV или папку (настройки в приложении).
-- **Postgres не обязателен** для текущего приложения. Оставьте `DATABASE_URL` пустым.
-- Auth и серверная БД выключены (`.grok/app-env.json`: `VITE_AUTH_ENABLED=false`). Postgres понадобится, только если позже включите вход и миграции — тогда раскомментируйте сервис `db` в `docker-compose.yml`.
-
-## 1. Подготовка на NAS
-
-1. Установите **Container Manager** (и при необходимости **Git Server** / пакет Git) в Package Center.
-2. Создайте папку, например `/volume1/docker/pora` (или `Shared Folder` → `docker/pora`).
-3. Клонируйте репозиторий (нужен доступ к **private** repo: SSH-ключ или Personal Access Token):
-
-```bash
-cd /volume1/docker
-git clone git@github.com:wladyslawfedotoff-byte/amber-autumn-birch-baker.git pora
-cd pora
+```
+https://pora.fedotovvladislav.synology.me:8443  →  http://127.0.0.1:8080 (контейнер pora-app)
 ```
 
-Через HTTPS с токеном:
+## Что где хранится
 
-```bash
-git clone https://<TOKEN>@github.com/wladyslawfedotoff-byte/amber-autumn-birch-baker.git pora
-cd pora
+- **Данные на сервере.** Задачи, списки, привычки, вехи, проекты и рабочие часы хранятся в `/data/pora.json` внутри контейнера (= `./data/pora.json` в папке проекта на NAS). Каждое устройство держит локальную копию (офлайн работает) и синхронизируется с сервером через `GET/PUT /api/sync` (ревизии, ETag/If-Match, слияние по записям — телефон и компьютер не затирают друг друга).
+- **Резервные копии** сервера: `./data/backups/pora-*.json` — не чаще раза в 30 минут; хранится самая свежая копия каждого из последних 24 часов и каждого из последних 30 дней (`BACKUP_INTERVAL_MINUTES`, `BACKUP_HOURLY`, `BACKUP_DAILY`). Список и восстановление — [п. 8](#8-резервные-копии-и-восстановление). Ручная копия — в приложении: Настройки → «Резервная копия».
+- **Секрет сессий:** `./data/.session-secret` (создаётся автоматически, права 0600), если не задан `SESSION_SECRET`; `./data/.session-epoch` — счётчик для «Выйти на всех устройствах» (0600).
+- Старая синхронизация через WebDAV / «Файл» **отключена**: сохранённый пароль WebDAV стирается из браузера при первом запуске новой версии, в настройках показывается короткая заметка.
+- Postgres **не нужен**. Старый вход через Grok (`better-auth`, `VITE_AUTH_ENABLED=false`) не используется.
+
+## Образ публичный, но без секретов
+
+`ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest` — **публичный** пакет: `docker login` и токен для pull не нужны. В образе нет паролей и ключей. Все секреты лежат **только** в файле `.env` на NAS рядом с `compose.yaml`; compose подключает его через `env_file`. Никогда не добавляйте секреты в `Dockerfile`, в `docker-compose*.yml` / `compose.yaml` или в ARG сборки.
+
+CI (`.github/workflows/docker-ghcr.yml`) собирает и публикует образ при каждом push в `main` (теги `:latest` и `:sha-<short>`); для pull request только собирает и прогоняет smoke-тест контейнера.
+
+## 1. Папка проекта
+
+Итоговая структура на NAS:
+
+```
+/volume1/docker/pora/
+├── compose.yaml   ← описание контейнера (без секретов)
+├── .env           ← секреты: APP_PASSWORD или APP_PASSWORD_HASH, по желанию SESSION_SECRET, XAI_API_KEY
+└── data/          ← данные приложения: pora.json, backups/, .session-secret, .session-epoch
 ```
 
-4. Скопируйте пример окружения и отредактируйте:
+Всё нужное для восстановления NAS «с нуля» — эта одна папка (`compose.yaml`, `.env`, `data/`): её и включайте в Hyper Backup (п. 8).
 
-```bash
-cp .env.example .env
-# nano .env   — укажите APP_URL = https://pora.<ваш-домен>.synology.me
+1. Package Center → установите **Container Manager** и **Text Editor** («Текстовый редактор», нужен для создания `.env`).
+2. File Station → общая папка `docker` → создайте `pora`, внутри — **`data`**:
+   `/volume1/docker/pora/data`
+   (или по SSH: `mkdir -p /volume1/docker/pora/data`).
+3. Права на `data`: контейнер сам выставляет владельца при старте (он стартует как root, готовит `/data` и затем работает от непривилегированного пользователя `node`, uid 1000). У root в контейнере только права `CHOWN`, `DAC_OVERRIDE`, `SETUID`, `SETGID` (`cap_drop: ALL` + `no-new-privileges` в compose) — этого хватает и с `PUID`/`PGID`. Если в журнале контейнера видно `папка данных … недоступна для записи`, сделайте одно из двух:
+   - File Station → `docker/pora/data` → Свойства → Разрешения → дайте «Чтение и запись» (например, группе Everyone, с применением к вложенным);
+   - или добавьте в `.env` строки `PUID=…` и `PGID=…` владельца папки (узнать: SSH → `id <ваш-пользователь-DSM>`, обычно `1026` и `100`).
+
+Клонировать репозиторий на NAS **не обязательно** — для варианта A хватает `compose.yaml` и `.env`. Если клонируете, не вставляйте токен в URL (`https://<TOKEN>@github.com/…` остаётся в `.git/config` и истории shell). Используйте SSH-ключ (`git clone git@github.com:wladyslawfedotoff-byte/amber-autumn-birch-baker.git pora`) или credential helper.
+
+## 2. Файл `.env` с секретами
+
+Шаблон с подробными комментариями — [`.env.example`](../.env.example). Минимальный `.env`:
+
+```dotenv
+APP_PASSWORD='четыре-пять-случайных-слов-через-дефис'
 ```
 
-Секреты (`BETTER_AUTH_SECRET`, пароли БД, `XAI_API_KEY`) не коммитьте в git.
+(это пример формата — придумайте свою фразу).
 
-## 2. Запуск контейнера
+или, лучше, хэш вместо открытого пароля:
 
-### Вариант A (рекомендуется): pull готового образа из GHCR
-
-CI на `main` собирает и публикует **private** образ:
-`ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest`
-(также тег `:sha-<short>`).
-
-При **private** репозитории пакет GHCR обычно остаётся приватным. **Не делайте пакет публичным.**
-
-1. Создайте Personal Access Token (classic) или fine-grained PAT:
-   - минимум: **`read:packages`** (для `docker pull` на NAS);
-   - для ручного push с машины (не нужен для CI): добавьте **`write:packages`**;
-   - если SSO / org — authorize token для нужной org.
-2. На NAS войдите в registry (токен не сохраняйте в git / скриптах в репо):
-
-```bash
-echo TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+```dotenv
+APP_PASSWORD_HASH=scrypt:32768:8:1:<соль>:<хэш>
 ```
 
-Замените `TOKEN` на PAT, `USERNAME` — на GitHub-логин (например `wladyslawfedotoff-byte`).
+### Как создать `.env` на Synology
 
-3. Запуск без сборки на NAS:
+1. Откройте **Text Editor** (главное меню DSM) → «Файл» → «Создать».
+2. Вставьте содержимое `.env.example` (или только нужные строки) и впишите свои значения.
+3. «Файл» → «Сохранить как» → папка `docker/pora`, имя файла ровно **`.env`** (с точкой в начале, без `.txt`). Кодировка UTF-8.
+4. Проверьте по SSH: `ls -la /volume1/docker/pora` — должны быть `compose.yaml`, `.env`, `data`.
+
+Можно и подготовить файл на компьютере и загрузить через File Station — главное, чтобы имя было `.env`, а не `env.txt` / `.env.txt`.
+
+**Файл обязателен:** если `.env` нет, проект не запустится (Compose: `Failed to load …/.env` или `env file …/.env not found`). Необязательный `env_file` (`required: false`) в Compose из Container Manager (v2.20) не поддерживается, поэтому используется обычный `env_file: - .env`.
+
+### Права на `.env`
+
+Читать файл должен только администратор:
+
+- File Station → `docker/pora/.env` → Свойства → **Разрешения**: оставьте доступ только своей учётной записи администратора (или группе `administrators`), удалите `Everyone`, `users` и прочих пользователей. Если права наследуются от папки `docker`, отключите наследование для этого файла.
+- По SSH дополнительно: `sudo chmod 600 /volume1/docker/pora/.env`. Container Manager работает от root и прочитает файл в любом случае.
+- Не открывайте общий доступ (ссылки File Station) к папке `docker/pora`.
+
+`.env` **никогда не попадает в GitHub**: он в `.gitignore` и `.dockerignore`, в репозитории лежит только шаблон `.env.example` без настоящих значений.
+
+### Пароль и хэш
+
+Нужна одна из переменных — **`APP_PASSWORD`** или **`APP_PASSWORD_HASH`** (scrypt, имеет приоритет). Рекомендуется **фраза из 4–5 случайных слов, 16+ символов**. Минимум — 12 символов: более короткий пароль не принимается (fail closed), при 12–15 символах вход работает, но в журнале при старте есть предупреждение `auth.weak_password`. **Внимание при обновлении:** раньше минимум был 8 — если ваш пароль короче 12 символов, после обновления будет страница «Вход не настроен»; замените пароль в `.env` (или задайте хэш) и пересоздайте контейнер. Пока ни одна не задана (или осталась заглушка `СМЕНИТЕ_МЕНЯ`), приложение ничего не показывает, кроме страницы «Вход не настроен» (fail closed), а `/api/health` работает.
+
+Хэш рекомендуется: тогда открытого пароля нет ни в `.env`, ни в настройках контейнера (переменные окружения видны в Container Manager → Контейнер → Подробности и в `docker inspect` любому администратору DSM). Получить хэш (скрипт `scripts/hash-password.mjs` спросит пароль дважды, ввод скрыт):
 
 ```bash
-cd /volume1/docker/pora
-docker compose -f docker-compose.ghcr.yml pull
-docker compose -f docker-compose.ghcr.yml up -d
+# на NAS по SSH, без клона репозитория
+sudo docker run --rm -it --entrypoint node ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest scripts/hash-password.mjs
+# или в уже запущенном контейнере
+sudo docker exec -it pora-app node scripts/hash-password.mjs
+# или на компьютере с Node 22 в клоне репозитория
+node scripts/hash-password.mjs
 ```
 
-Альтернатива: в `docker-compose.yml` закомментируйте `build:` и раскомментируйте `image: ghcr.io/...`.
+Хэш выглядит как `scrypt:32768:8:1:<соль>:<хэш>` и содержит только `A–Z a–z 0–9 : _ -` — его можно вставлять в `.env` как есть, без кавычек.
 
-4. Если пакет вдруг публичный (неожиданно):
-   - GitHub → репозиторий → **Packages** (или профиль → Packages) → `amber-autumn-birch-baker`;
-   - **Package settings** → Change visibility → **Private**.
+### Символ `$` и кавычки в `.env`
 
-Примечание: первый push из Actions создаёт пакет; видимость связана с приватностью репо. Проверьте после первого успешного workflow, что пакет **Private**.
+Проверено на Docker Compose v2.20.1 (Container Manager DSM 7.2) и v5.6:
+
+| Строка в `.env` | Значение в контейнере |
+| --- | --- |
+| `APP_PASSWORD=ab$cd` | `ab` — `$cd` считается подстановкой переменной (в журнале предупреждение) |
+| `APP_PASSWORD="ab$cd"` | `ab` — в двойных кавычках подстановка тоже работает |
+| `APP_PASSWORD='ab$cd'` | `ab$cd` — одинарные кавычки: всё буквально |
+| `APP_PASSWORD=ab$$cd` | `ab$cd` — `$$` означает один `$` |
+| `APP_PASSWORD=ab\$cd` | `ab\` — обратная косая черта **не** экранирует `$` |
+| `APP_PASSWORD=ab #cd` | `ab` — « #» без кавычек начинает комментарий |
+
+То есть в `env_file` (как и в самом compose-файле) `$` **без кавычек нужно удваивать** или брать значение в одинарные кавычки. Одинарную кавычку внутри `'…'` в Compose v2.20 записать нельзя. Пробелы внутри значения сохраняются. Проще всего — фраза из слов через дефис или пробел, без `$ ' " \ #`, или `APP_PASSWORD_HASH`.
+
+**Сессии.** Cookie `__Host-pora_session` (по HTTPS; HttpOnly, Secure, SameSite=Lax). Сессия истекает через 30 дней без использования (продлевается раз в сутки при работе) и в любом случае через **90 дней** после ввода пароля — тогда нужно войти заново. **Выйти на всех устройствах:** Настройки → «Подключение» → «Выйти на всех устройствах» (с подтверждением) — завершает все сеансы, включая текущий; данные не удаляются. Смена пароля или `SESSION_SECRET` тоже разлогинивает все устройства. После обновления на эту версию каждое устройство один раз попросит пароль (новый формат cookie).
+
+**Защита от подбора.** 5 неверных попыток за 15 минут с одного IP → 429 на 15 минут. Кроме того, после **50 неверных попыток со всех адресов** за 15 минут вход **новых** устройств закрывается на 15 минут (против перебора с многих IP); уже вошедшие устройства продолжают работать и синхронизироваться, их cookie это не затрагивает. Сбросить досрочно — перезапустить контейнер. Неудачные попытки пишутся в журнал: `login.failed ip=… ipSource=…`. Проверьте один раз после настройки прокси: введите неверный пароль с телефона по мобильной сети — в журнале должен быть внешний IP телефона и `ipSource=x-real-ip` (или `x-forwarded-for`). Если там `127.0.0.1`/`172.x` и `ipSource=socket`, прокси не передаёт адрес клиента, и лимит по IP фактически общий (см. п. 4).
+
+## 3. Проект в Container Manager (вариант A, рекомендуется — готовый образ)
+
+Сначала создайте `data/` и `.env` (п. 1–2). Затем Container Manager → **Проект** → **Создать**:
+
+- Название: `pora`
+- Путь: `/volume1/docker/pora`
+- Источник: «Создать docker-compose.yml» и вставить содержимое [`docker-compose.ghcr.yml`](../docker-compose.ghcr.yml) (Container Manager сохранит его как `compose.yaml`). Основная часть:
+
+```yaml
+services:
+  app:
+    image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
+    container_name: pora-app
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      NITRO_HOST: "0.0.0.0"
+      NITRO_PORT: "8080"
+      APP_URL: "https://pora.fedotovvladislav.synology.me:8443"
+      DATA_DIR: /data
+      VITE_GROK_EXTENSIONS: "0"
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8080:8080"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+```
+
+→ «Далее» → «Готово». В `compose.yaml` секретов нет; **не** добавляйте `APP_PASSWORD` и другие секреты в `environment:` — значения из `environment` перекрывают `.env`, даже пустые.
+
+`APP_URL` — публичный адрес **с портом** `:8443`: по нему сервер проверяет Origin у входа и изменений (защита от CSRF). Если заходите и по другому адресу, имя хоста всё равно должно совпадать с тем, что передаёт Reverse Proxy.
+
+После изменения `.env` контейнер нужно **пересоздать**: простой «Перезапуск» оставляет старые значения. В Container Manager: Проект `pora` → «Собрать» (Build), либо по SSH:
+
+```bash
+cd /volume1/docker/pora && sudo docker compose up -d --force-recreate
+```
 
 ### Вариант B: сборка на NAS
 
-В Container Manager → **Project** → Create from `docker-compose.yml`, либо в SSH:
+```bash
+cd /volume1/docker/pora   # клон репозитория
+cp .env.example .env      # задайте APP_PASSWORD или APP_PASSWORD_HASH
+chmod 600 .env
+sudo docker compose up -d --build
+```
+
+Сборка требует RAM/CPU; вариант A проще.
+
+## 4. Reverse Proxy + HTTPS (порт 8443)
+
+1. Панель управления → Портал входа → Дополнительно → **Обратный прокси** → Создать:
+   - **Источник:** HTTPS, имя хоста `pora.fedotovvladislav.synology.me`, порт **`8443`**. Галочку HSTS можно не ставить: приложение само отправляет `Strict-Transport-Security: max-age=31536000` на HTTPS-запросы (без `includeSubDomains` и `preload`, чтобы не затронуть другие сервисы на этом домене);
+   - **Назначение:** HTTP, `localhost`, порт **`8080`**.
+2. Заголовки клиента: DSM передаёт `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`. Приложение берёт IP клиента из `X-Real-IP` (если это корректный IP), иначе из последнего элемента `X-Forwarded-For`; по `X-Forwarded-Proto: https` выставляются `Secure`/`__Host-` у cookie и HSTS. Если проверка из п. 2 показывает `ipSource=socket`, добавьте в правиле прокси → «Пользовательский заголовок» → «Создать» → `X-Real-IP` = `$remote_addr`. Порт контейнера слушает только `127.0.0.1`, поэтому эти заголовки может прислать только прокси DSM.
+3. **Сертификат:** Панель управления → Безопасность → Сертификат → «Добавить» → «Добавить новый сертификат» → «Получить сертификат от Let's Encrypt»: домен `pora.fedotovvladislav.synology.me` (для DDNS `*.synology.me` можно выпустить wildcard `*.fedotovvladislav.synology.me` — DSM сделает это без открытого порта 80). Затем «Настройки» (Settings) в том же разделе → для службы обратного прокси `pora.fedotovvladislav.synology.me:8443` выберите этот сертификат. Продление автоматическое; если выпускали не wildcard, для продления должен быть доступен порт 80.
+4. На роутере пробросьте внешний `8443` → NAS `8443`. Порт `8080` наружу **не** открывайте (compose слушает только `127.0.0.1`).
+
+Проверка с NAS по SSH:
+
+```bash
+curl -s http://127.0.0.1:8080/api/health
+# {"ok":true,"uptime":12,"dataWritable":true}
+```
+
+## 5. Здоровье, журнал, самовосстановление
+
+- `GET /api/health` (без входа): `200 {"ok":true,…}` или `503`, если папка данных недоступна для записи или последняя запись не удалась. Проверка ничего не пишет на диск и кэшируется на 60 с.
+- Healthcheck в образе и в compose раз в 30 с опрашивает `/api/health`; Container Manager показывает статус «healthy / unhealthy».
+- При фатальной ошибке процесс завершается (`exit 1`), а `restart: unless-stopped` поднимает контейнер заново.
+- **Журнал:** Container Manager → Контейнер → `pora-app` → **Журнал** или по SSH `sudo docker logs -f pora-app`. Одна строка на событие: `server.start`, `auth.ready`, `auth.weak_password`, `login.failed ip=… ipSource=…`, `login.rate_limited`, `csrf.blocked`, `auth.logout_all`, `sync.saved`, `sync.conflict`, `sync.write_failed`, `backup.failed`, `data.temp_removed`, `data.reloaded`, `http.5xx`, `data.not_writable`, `data.corrupt`, `process.uncaughtException`. Повторяющиеся `login.rate_limited` и `csrf.blocked` пишутся не чаще раза в минуту (следующая строка содержит `suppressed=N`).
+- **Размер журнала** ограничен в compose: `logging: json-file`, 3 файла по 10 МБ (`max-size: "10m"`, `max-file: "3"`). Проверить: `sudo docker inspect -f '{{json .HostConfig.LogConfig}}' pora-app`.
+- **autoheal (необязательно):** Docker сам не перезапускает контейнер в состоянии «unhealthy» (только упавший). Для этого в compose есть закомментированный сервис `willfarrell/autoheal`. Ему нужен `/var/run/docker.sock` — это полный контроль над Docker на NAS, включайте осознанно: раскомментируйте сервис и `labels: autoheal: "true"` у `app`.
+
+## 6. Обновление
+
+Container Manager → Образ → `ghcr.io/…/amber-autumn-birch-baker` → **Обновить**, затем Проект `pora` → Остановить → Запустить. Или по SSH:
 
 ```bash
 cd /volume1/docker/pora
-docker compose up -d --build
+sudo docker compose pull
+sudo docker compose up -d
 ```
 
-Приложение слушает только **`127.0.0.1:8080`** на NAS (см. `ports` в compose). Снаружи порт не открывайте.
+Данные в `./data` и секреты в `.env` сохраняются между обновлениями.
 
-Проверка с самого NAS:
+Если вы меняли `compose.yaml` (например, добавили блоки `logging`, `security_opt`, `cap_drop`/`cap_add` из актуального [`docker-compose.ghcr.yml`](../docker-compose.ghcr.yml)), контейнер нужно пересоздать: Проект → «Остановить» → «Собрать»/«Запустить», или `sudo docker compose up -d --force-recreate`.
+
+## 7. Первое подключение устройств
+
+1. Откройте `https://pora.fedotovvladislav.synology.me:8443`, введите пароль.
+2. Локальные данные этого браузера **сливаются** с серверными (ничего не теряется: записи объединяются по id). Новое пустое устройство просто получает данные с сервера.
+3. Повторите на телефоне. Для iOS PWA: после входа добавьте на экран «Домой» заново (старый ярлык с другим адресом удалите).
+4. Статус: Настройки → «Подключение» (онлайн/офлайн/ошибка, время последней синхронизации, версия на сервере, неотправленные изменения, «Синхронизировать сейчас», «Выйти», «Выйти на всех устройствах»). В шапке появляется значок, если нет связи или нужен вход.
+5. Слияние идёт по полям: если на телефоне отметить привычку за один день, а на ноутбуке офлайн за другой, или изменить у одной задачи срок на одном устройстве и заметку на другом, сохранятся оба изменения; при правке одного и того же поля побеждает более позднее. Устройство, не подключавшееся больше 30 дней, при возвращении не «воскрешает» записи, удалённые за это время на других устройствах.
+
+## 8. Резервные копии и восстановление
+
+Три уровня, от простого к надёжному:
+
+### 8.1. Встроенные копии приложения (`data/backups`)
+
+Делаются автоматически (см. «Что где хранится»). Список — по SSH:
 
 ```bash
-curl -sI http://127.0.0.1:8080/ | head
+sudo docker exec pora-app node scripts/restore-backup.mjs --list
 ```
 
-## 3. Reverse Proxy + HTTPS (Let's Encrypt)
-
-1. **Control Panel → Login Portal → Advanced → Reverse Proxy** (или External Access → Reverse Proxy — зависит от версии DSM).
-2. Создайте правило:
-   - **Source:** HTTPS, hostname `pora.<ваш-домен>.synology.me`, порт `443`
-   - **Destination:** HTTP, `localhost` (или `127.0.0.1`), порт `8080`
-3. Включите **HSTS** и при необходимости websocket (обычно не требуется).
-4. Сертификат: **Control Panel → Security → Certificate** → Let's Encrypt для этого hostname (или общий сертификат на `*.synology.me` / ваш DDNS).
-5. DDNS / QuickConnect: убедитесь, что 4-й уровень резолвится на ваш NAS и порт 443 проброшен с роутера на NAS.
-
-Итог: публично только **`https://pora.…`**, бэкенд — `http://127.0.0.1:8080` на самом NAS.
-
-## 4. Обновление с GitHub
-
-**Через GHCR (без сборки на NAS):**
+Восстановить (контейнер может работать, лучше когда никто не редактирует задачи):
 
 ```bash
-cd /volume1/docker/pora
-git pull   # обновить compose / .env.example при нужде
-docker compose -f docker-compose.ghcr.yml pull
-docker compose -f docker-compose.ghcr.yml up -d
+# посмотреть, что изменится, ничего не меняя
+sudo docker exec pora-app node scripts/restore-backup.mjs pora-2026-10-06T07-30-00-000Z-r42.json --dry-run
+# восстановить
+sudo docker exec pora-app node scripts/restore-backup.mjs pora-2026-10-06T07-30-00-000Z-r42.json
+# восстановить и удалить всё, что появилось после этой копии
+sudo docker exec pora-app node scripts/restore-backup.mjs pora-2026-10-06T07-30-00-000Z-r42.json --replace
 ```
 
-**Сборка на NAS:**
+Скрипт сначала сохраняет текущее состояние в `backups/pora-…-pre-restore.json` (откат — восстановить этот файл), затем возвращает записи из копии с новой отметкой времени и повышает ревизию. Устройства получат восстановленные данные при следующей синхронизации (до ~15 с или «Синхронизировать сейчас»); **очищать данные сайта на устройствах не нужно** — восстановленные записи побеждают их локальные копии. Без `--replace` записи, созданные после копии, остаются; с `--replace` они удаляются на сервере и на всех устройствах. Можно указать и файл, выгруженный из приложения (Настройки → «Резервная копия»), предварительно положив его в `data/`: `… restore-backup.mjs /data/pora-backup.json`.
 
-```bash
-cd /volume1/docker/pora
-git pull
-docker compose up -d --build
-```
+### 8.2. Hyper Backup (копия вне NAS-диска)
 
-Старый образ пересоберётся / перетянется; именованные volumes (если включите Postgres) сохранятся.
+Встроенные копии лежат на том же диске — от поломки диска или NAS они не спасут. Package Center → **Hyper Backup** → «Создать» → «Задача резервного копирования данных» → место назначения (USB-диск, другой NAS, Synology C2 или облако) → в списке папок отметьте **`docker/pora`** целиком: это `data/` (задачи, копии, ключ сессий) и `.env` (пароль или хэш). Дальше:
 
-## 5. PWA / иконка на домашнем экране
+- расписание — ежедневно (ночью);
+- ротация — «Включить ротацию резервных копий» → Smart Recycle (например, 30 версий);
+- **включите шифрование на стороне клиента** — в копии лежит `.env` с паролем/хэшем; ключ шифрования сохраните отдельно;
+- после первой копии проверьте восстановление: Hyper Backup → «Восстановить» → «Данные» → выбрать версию → восстановить `docker/pora` в другую папку и убедиться, что там есть `data/pora.json` и `.env`.
 
-После смены URL (например, с preview на `https://pora.…`) установленное PWA может остаться со старым origin. Удалите ярлык и установите снова с нового HTTPS-адреса (в приложении есть подсказка установки / `?install=1`).
+Полное восстановление: остановите проект `pora` в Container Manager, восстановите папку `docker/pora` из Hyper Backup на место, запустите проект. Устройства догрузят свои изменения, сделанные после копии (если нужно откатить и их — восстановите нужный файл через п. 8.1 с `--replace`).
 
-## 6. Краткая шпаргалка
+### 8.3. Снимки Btrfs (по желанию)
 
-| Шаг | Команда / действие |
-| --- | --- |
-| Клон | `git clone … pora && cd pora` |
-| Env | `cp .env.example .env` → `APP_URL=https://…` |
-| Login GHCR | `echo TOKEN \| docker login ghcr.io -u USERNAME --password-stdin` |
-| Старт (GHCR) | `docker compose -f docker-compose.ghcr.yml up -d` |
-| Старт (build) | `docker compose up -d --build` |
-| Прокси | HTTPS `pora.…` → `http://localhost:8080` |
-| Обновление GHCR | `docker compose -f docker-compose.ghcr.yml pull && … up -d` |
+Если том — Btrfs: Package Center → **Snapshot Replication** → «Снимки» → общая папка `docker` → «Снимок» → «Настройки» → расписание (например, каждый час) и «Сохранение» (например, 24 ежечасных и 30 ежедневных). Снимки делаются мгновенно и почти не занимают места, но лежат на тех же дисках — это защита от ошибок и шифровальщиков, а не замена Hyper Backup. Восстановить один файл: включите «Сделать снимок видимым» и скопируйте `pora.json` из `#snapshot` в `data/backups/`, затем `restore-backup.mjs <имя>` (п. 8.1); откатить всю папку — Snapshot Replication → «Снимки» → `docker` → выбрать снимок → «Восстановить к этому снимку» (при остановленном проекте).
 
 ## Troubleshooting
 
-- **Пустая страница:** проверьте, что proxy идёт на `127.0.0.1:8080`, а не на другой порт; смотрите логи Container Manager у `pora-app`.
-- **`docker pull` 401/403 с ghcr.io:** просрочен `docker login`; PAT без `read:packages`; пакет private, а токен другого аккаунта.
-- **Сборка падает на NAS:** нужно достаточно RAM/CPU; предпочтите вариант A (GHCR), либо соберите образ на ПК и загрузите на NAS, либо увеличьте swap.
-- **Auth / cookies:** если включите вход, `APP_URL` / `BETTER_AUTH_URL` должны совпадать с публичным HTTPS; задайте `BETTER_AUTH_SECRET`.
+- **«Вход не настроен» (503):** в `.env` не задан `APP_PASSWORD`/`APP_PASSWORD_HASH`, пароль короче 12 символов или остался `СМЕНИТЕ_МЕНЯ`. Причина — в журнале (`auth.not_configured reason=…`).
+- **Вход сразу возвращает на /login с сообщением «Запрос пришёл не с этого сайта»:** адрес в браузере не совпадает с `APP_URL` (проверьте порт `:8443`) и с хостом, который передаёт прокси.
+- **unhealthy / `dataWritable:false`:** нет прав на `/volume1/docker/pora/data` → см. п. 1.3 (права или `PUID`/`PGID` в `.env`).
+- **`Failed to load …/.env` / `env file … not found`:** нет файла `/volume1/docker/pora/.env` или он назван иначе (`.env.txt`) → п. 2.
+- **Пароль «не подходит», а в журнале `The "…" variable is not set`:** в пароле есть `$` без кавычек → возьмите значение в одинарные кавычки или используйте `APP_PASSWORD_HASH` (п. 2), затем пересоздайте контейнер.
+- **Слишком много попыток (429):** подождите 15 минут или перезапустите контейнер.
+- **Восстановить данные из копии:** п. 8.1 (`restore-backup.mjs`); очищать данные сайта на устройствах не нужно.
+- **Устройство потеряно / пароль мог утечь:** смените пароль в `.env`, пересоздайте контейнер; или без смены пароля — «Выйти на всех устройствах» (п. 7).

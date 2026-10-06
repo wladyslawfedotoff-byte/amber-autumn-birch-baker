@@ -3,6 +3,9 @@ name: Build and push Docker image to GHCR
 on:
   push:
     branches: [main]
+  # PRs: build only (no push) + container smoke test (entrypoint, healthcheck, login).
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -19,10 +22,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Secrets come only from .env (env_file); the template must parse cleanly
+      # (no stray "$" interpolation warnings) and reach the container env.
+      - name: Validate compose files with env_file
+        run: |
+          set -eu
+          cp .env.example .env
+          for f in docker-compose.ghcr.yml docker-compose.yml; do
+            docker compose -f "$f" config > /tmp/compose.out 2> /tmp/compose.err
+            cat /tmp/compose.err
+            if grep -qi warn /tmp/compose.err; then echo "warnings in $f"; exit 1; fi
+            grep -q 'APP_PASSWORD: СМЕНИТЕ_МЕНЯ' /tmp/compose.out
+          done
+          rm -f .env
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -43,6 +61,7 @@ jobs:
             type=sha,prefix=sha-,format=short
 
       - name: Build and push
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -52,3 +71,52 @@ jobs:
           build-args: |
             NITRO_PRESET=node-server
             VITE_AUTH_ENABLED=false
+
+      - name: Build (PR, no push)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: pora-ci:test
+          build-args: |
+            NITRO_PRESET=node-server
+            VITE_AUTH_ENABLED=false
+
+      - name: Smoke test container (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -eu
+          mkdir -p ci-data
+          # Same hardening as the compose files.
+          docker run -d --name pora-ci -p 127.0.0.1:8080:8080 \
+            --security-opt no-new-privileges:true --cap-drop ALL \
+            --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add SETUID --cap-add SETGID \
+            -e APP_PASSWORD=ci-smoke-password-123 \
+            -e APP_URL=http://127.0.0.1:8080 \
+            -v "$PWD/ci-data:/data" pora-ci:test
+          for i in $(seq 1 60); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' pora-ci)
+            [ "$status" = "healthy" ] && break
+            sleep 2
+          done
+          docker logs pora-ci
+          test "$(docker inspect -f '{{.State.Health.Status}}' pora-ci)" = "healthy"
+          uid=$(docker exec pora-ci awk '/^Uid:/{print $2}' /proc/1/status)
+          echo "server uid=$uid"
+          test "$uid" != "0"
+          curl -fsS http://127.0.0.1:8080/api/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/)" = "302"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/sync)" = "401"
+          curl -fsS -c jar -H 'content-type: application/json' -H 'origin: http://127.0.0.1:8080' \
+            -d '{"password":"ci-smoke-password-123"}' http://127.0.0.1:8080/api/login
+          curl -fsS -b jar http://127.0.0.1:8080/api/sync > /dev/null
+          # another port on the same host is a different origin
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -H 'origin: http://127.0.0.1:5001' \
+            -d '{"password":"ci-smoke-password-123"}' http://127.0.0.1:8080/api/login)" = "403"
+          # «выйти везде» invalidates the cookie
+          curl -fsS -b jar -X POST -H 'origin: http://127.0.0.1:8080' http://127.0.0.1:8080/api/logout-all > /dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' -b jar http://127.0.0.1:8080/api/sync)" = "401"
+          docker exec pora-ci node scripts/restore-backup.mjs --list
+          ls -la ci-data

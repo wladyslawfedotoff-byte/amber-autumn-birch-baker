@@ -1,33 +1,83 @@
-# Pull pre-built private image from GHCR (no build on NAS).
-# Prefer this over `docker compose up --build` when CI publishes to ghcr.io.
+# «Пора» — готовый образ из GHCR (сборка на NAS не нужна).
 #
-# Prerequisites:
-#   1. PAT with read:packages (repo private → package stays private)
-#   2. echo TOKEN | docker login ghcr.io -u USERNAME --password-stdin
-#   3. cp .env.example .env  (set APP_URL, etc.)
+# Папка проекта на Synology:
+#   /volume1/docker/pora/
+#   ├── compose.yaml   ← этот файл (Container Manager → Проект)
+#   ├── .env           ← секреты: APP_PASSWORD или APP_PASSWORD_HASH и т.д.
+#   └── data/          ← данные: pora.json, backups/, .session-secret, .session-epoch
 #
-# Start:
-#   docker compose -f docker-compose.ghcr.yml pull
+# Файл .env ОБЯЗАТЕЛЕН: без него проект не запустится (ошибка
+# «Failed to load …/.env» / «env file …/.env not found»).
+# Шаблон с пояснениями — .env.example.
+# .env никогда не кладётся в git и в образ. Подробно: docs/SYNOLOGY.md.
+#
+# Образ публичный и не содержит секретов. Обновление по SSH:
+#   cd /volume1/docker/pora && sudo docker compose pull && sudo docker compose up -d
+# Из клона репозитория:
 #   docker compose -f docker-compose.ghcr.yml up -d
-#
-# Image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
 
 services:
   app:
     image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
     container_name: pora-app
     restart: unless-stopped
+    init: true
+    # Жёсткие ограничения: процесс не может повысить себе права, а у root на
+    # старте только то, что нужно entrypoint (подготовить ./data и сразу
+    # перейти на непривилегированного пользователя PUID:PGID).
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN         # chown ./data на пользователя приложения
+      - DAC_OVERRIDE  # доступ к ./data при любых правах папки Synology
+      - SETUID        # переход на PUID
+      - SETGID        # переход на PGID
+    # Секреты и необязательные настройки — только из .env рядом с этим файлом.
+    # Не добавляйте APP_PASSWORD / APP_PASSWORD_HASH / SESSION_SECRET /
+    # XAI_API_KEY в environment ниже: environment перекрывает env_file,
+    # даже пустым значением.
     env_file:
       - .env
     environment:
       HOST: "0.0.0.0"
-      PORT: "${PORT:-8080}"
+      PORT: "8080"
       NITRO_HOST: "0.0.0.0"
-      NITRO_PORT: "${PORT:-8080}"
-      APP_URL: "${APP_URL:-}"
-      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-${APP_URL:-}}"
-      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-}"
-      DATABASE_URL: "${DATABASE_URL:-}"
-      XAI_API_KEY: "${XAI_API_KEY:-}"
+      NITRO_PORT: "8080"
+      # Публичный адрес за Reverse Proxy DSM, С портом (проверка Origin/CSRF).
+      APP_URL: "https://pora.fedotovvladislav.synology.me:8443"
+      DATA_DIR: /data
+      VITE_GROK_EXTENSIONS: "0"
+    volumes:
+      - ./data:/data
     ports:
-      - "127.0.0.1:${PORT:-8080}:8080"
+      # Только localhost — наружу выходит Reverse Proxy DSM (HTTPS :8443).
+      - "127.0.0.1:8080:8080"
+    # Журнал контейнера не растёт бесконечно: максимум 3 файла по 10 МБ.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    # labels:
+    #   autoheal: "true"
+
+  # --- Необязательно: автоперезапуск контейнера в состоянии «unhealthy»
+  # (см. docs/SYNOLOGY.md). Нужен /var/run/docker.sock = полный контроль над
+  # Docker на NAS; раскомментируйте вместе с labels выше, только если согласны.
+  # autoheal:
+  #   image: willfarrell/autoheal:latest
+  #   container_name: pora-autoheal
+  #   restart: unless-stopped
+  #   environment:
+  #     AUTOHEAL_CONTAINER_LABEL: autoheal
+  #     AUTOHEAL_INTERVAL: "60"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock

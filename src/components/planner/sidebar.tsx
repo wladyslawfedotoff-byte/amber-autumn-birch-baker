@@ -24,6 +24,7 @@ import { todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { View } from "@/lib/planner-types";
 import { countInbox, countList, countOpen, countToday, countTomorrow, countWeek } from "@/lib/queries";
+import { useCapabilities } from "@/lib/use-capabilities";
 
 const SMART: { id: View; label: string; icon: typeof Inbox }[] = [
   { id: "inbox", label: "Входящие", icon: Inbox },
@@ -61,6 +62,9 @@ export function Sidebar({
   const [draft, setDraft] = useState("");
   const [adding, setAdding] = useState(false);
   const habitLeft = habits.filter((h) => !h.checks.includes(today)).length;
+  // «Помощник» needs XAI_API_KEY on the server; hide it otherwise.
+  const { assistant } = useCapabilities();
+  const tools = assistant ? TOOLS : TOOLS.filter((item) => item.id !== "assist");
 
   function count(id: View): number | null {
     if (id === "today") return countToday(tasks, today);
@@ -116,7 +120,7 @@ export function Sidebar({
 
         <p className="mt-3 px-2 pb-1 text-xs font-medium text-subtle">Инструменты</p>
         <ul className="grid grid-cols-2 gap-1">
-          {TOOLS.map((item) => (
+          {tools.map((item) => (
             <NavRow
               key={item.id}
               item={item}

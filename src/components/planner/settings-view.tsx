@@ -1,51 +1,182 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ACCENTS } from "@/lib/accents";
+import { addFromBackup, saveBackup } from "@/lib/backup";
 import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
-import { getCloudStatus, readCloud, subscribeCloud, syncCloud, writeCloud, type CloudStatus } from "@/lib/cloud-sync";
-import {
-  allowSyncFolder,
-  chooseSyncFolder,
-  forgetSyncFolder,
-  getSyncStatus,
-  openFromFile,
-  refreshSyncStatus,
-  saveToFiles,
-  subscribeSync,
-  type SyncStatus,
-} from "@/lib/sync-folder";
+import { dismissLegacyNote, logout, logoutEverywhere, syncServerNow } from "@/lib/server-sync";
+import { phaseLabel, useServerSyncStatus } from "@/lib/use-server-sync";
+
+function formatSyncTime(stamp: number | null): string {
+  if (!stamp) return "ещё не было";
+  const date = new Date(stamp);
+  const time = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(date);
+  const sameDay = new Date().toDateString() === date.toDateString();
+  if (sameDay) return `сегодня в ${time}`;
+  const day = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" }).format(date);
+  return `${day} в ${time}`;
+}
+
+function ConnectionSection() {
+  const status = useServerSyncStatus();
+  const [busy, setBusy] = useState(false);
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [allBusy, setAllBusy] = useState(false);
+  const [allError, setAllError] = useState("");
+  const label = phaseLabel(status);
+  return (
+    <section>
+      <h2 className="font-display text-lg tracking-tight">Подключение</h2>
+      <p className="mt-1 text-sm text-muted">Задачи хранятся на вашем сервере и на этом устройстве.</p>
+      <div className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm">
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className={cn(
+              "size-2.5 rounded-full",
+              label.tone === "ok" ? "bg-ok" : label.tone === "danger" ? "bg-danger" : "bg-subtle",
+            )}
+          />
+          <span className="font-medium">{label.text}</span>
+        </div>
+        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-muted">
+          <dt>Последняя синхронизация</dt>
+          <dd className="text-right text-fg tabular-nums">{formatSyncTime(status.lastSyncAt)}</dd>
+          <dt>Версия на сервере</dt>
+          <dd className="text-right text-fg tabular-nums">{status.revision ?? "—"}</dd>
+          <dt>Неотправленные изменения</dt>
+          <dd className={cn("text-right", status.dirty ? "text-warn" : "text-fg")}>{status.dirty ? "есть" : "нет"}</dd>
+        </dl>
+        {status.lastError ? <p className="mt-3 text-xs text-danger">{status.lastError}</p> : null}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void syncServerNow().finally(() => setBusy(false));
+          }}
+          className="h-11 rounded-xl bg-accent px-4 text-sm text-accent-fg disabled:opacity-60"
+        >
+          {busy ? "Синхронизация…" : "Синхронизировать сейчас"}
+        </button>
+        <button type="button" onClick={() => void logout()} className="h-11 rounded-xl px-4 text-sm text-muted">
+          Выйти
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAllError("");
+            setConfirmAll(true);
+          }}
+          aria-expanded={confirmAll}
+          className="h-11 rounded-xl px-4 text-sm text-danger"
+        >
+          Выйти на всех устройствах
+        </button>
+      </div>
+      {confirmAll ? (
+        <div role="alertdialog" aria-labelledby="logout-all-title" className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm">
+          <p id="logout-all-title" className="font-medium">
+            Выйти на всех устройствах?
+          </p>
+          <p className="mt-1 text-muted">
+            Все сеансы будут завершены, включая этот: на каждом телефоне и компьютере нужно будет снова ввести пароль.
+            Пригодится, если устройство потеряно или пароль мог узнать кто-то ещё — тогда смените и пароль в .env.
+            Данные не удаляются.
+          </p>
+          {allError ? <p className="mt-2 text-xs text-danger">{allError}</p> : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={allBusy}
+              onClick={() => {
+                setAllBusy(true);
+                logoutEverywhere()
+                  .catch((error: unknown) => setAllError(error instanceof Error ? error.message : "Не получилось."))
+                  .finally(() => setAllBusy(false));
+              }}
+              className="h-11 rounded-xl bg-danger px-4 text-sm text-on-danger disabled:opacity-60"
+            >
+              {allBusy ? "Завершаем сеансы…" : "Да, выйти везде"}
+            </button>
+            <button type="button" disabled={allBusy} onClick={() => setConfirmAll(false)} className="h-11 rounded-xl px-4 text-sm text-muted">
+              Отмена
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {status.legacyNote ? (
+        <p className="mt-3 text-xs text-muted">
+          {status.legacyNote}{" "}
+          <button type="button" onClick={dismissLegacyNote} className="text-fg underline underline-offset-2">
+            Понятно
+          </button>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function BackupSection() {
+  const [note, setNote] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  return (
+    <section className="mt-8">
+      <h2 className="font-display text-lg tracking-tight">Резервная копия</h2>
+      <p className="mt-1 text-sm text-muted">
+        Файл со всеми задачами, списками, привычками и проектами. Из копии добавляется только то, чего сейчас нет, — текущие задачи не
+        перезаписываются.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            void saveBackup().then((result) => setNote(result === "saved" ? "Копия сохранена." : "Сохранение отменено."));
+          }}
+          className="h-11 rounded-xl bg-accent px-4 text-sm text-accent-fg"
+        >
+          Сохранить копию
+        </button>
+        <button type="button" onClick={() => fileRef.current?.click()} className="h-11 rounded-xl px-4 text-sm text-fg">
+          Добавить из копии
+        </button>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".json,application/json,text/plain"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          void addFromBackup(file).then(
+            (added) => {
+              if (added === null) setNote("Это не файл копии «Пора».");
+              else if (added === 0) setNote("Всё из копии уже есть.");
+              else setNote(`Добавлено записей: ${added}.`);
+            },
+            () => setNote("Файл не подошёл."),
+          );
+        }}
+      />
+      {note ? <p className="mt-2 text-xs text-muted">{note}</p> : null}
+    </section>
+  );
+}
 
 export function SettingsView() {
   const theme = usePlanner((s) => s.theme);
   const accent = usePlanner((s) => s.accent);
   const setTheme = usePlanner((s) => s.setTheme);
   const setAccent = usePlanner((s) => s.setAccent);
-  const [cloud, setCloud] = useState<CloudStatus>(getCloudStatus);
-  const [cloudUrl, setCloudUrl] = useState("");
-  const [cloudUser, setCloudUser] = useState("");
-  const [cloudPassword, setCloudPassword] = useState("");
-  const [sync, setSync] = useState<SyncStatus>(getSyncStatus);
-  const [fileNote, setFileNote] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const saved = readCloud();
-    if (saved) {
-      setCloudUrl(saved.url);
-      setCloudUser(saved.user);
-    }
-    setCloud(getCloudStatus());
-    return subscribeCloud(() => setCloud(getCloudStatus()));
-  }, []);
-
-  useEffect(() => {
-    void refreshSyncStatus();
-    return subscribeSync(() => setSync(getSyncStatus()));
-  }, []);
 
   return (
-    <div className="mx-auto max-w-md">
-      <section>
+    <div className="mx-auto max-w-md pb-8">
+      <ConnectionSection />
+
+      <section className="mt-8">
         <h2 className="font-display text-lg tracking-tight">Оформление</h2>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
@@ -102,150 +233,7 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="mt-8">
-        <h2 className="font-display text-lg tracking-tight">Ваше облако</h2>
-        <p className="mt-1 text-sm text-muted">
-          Папка WebDAV на вашей Synology или другом своём сервере. Чужие аккаунты не используются. Пароль остаётся только на этом телефоне.
-        </p>
-        <form
-          className="mt-3 space-y-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const previous = readCloud();
-            const password = cloudPassword || previous?.password || "";
-            if (!cloudUrl.trim() || !cloudUser.trim() || !password) {
-              setCloud({ ...cloud, note: "Нужны адрес, имя и пароль." });
-              return;
-            }
-            writeCloud({ url: cloudUrl.trim(), user: cloudUser.trim(), password });
-            setCloudPassword("");
-            void syncCloud(true).catch((error: unknown) => {
-              setCloud(getCloudStatus());
-              if (error instanceof Error) setCloud({ ...getCloudStatus(), note: error.message });
-            });
-          }}
-        >
-          <input
-            value={cloudUrl}
-            onChange={(event) => setCloudUrl(event.target.value)}
-            placeholder="https://дом:5006/pora"
-            aria-label="Адрес облака"
-            autoComplete="off"
-            className="card-lift h-11 w-full rounded-xl bg-elevated px-3 text-base outline-none placeholder:text-subtle"
-          />
-          <input
-            value={cloudUser}
-            onChange={(event) => setCloudUser(event.target.value)}
-            placeholder="Имя"
-            aria-label="Имя в облаке"
-            autoComplete="username"
-            className="card-lift h-11 w-full rounded-xl bg-elevated px-3 text-base outline-none placeholder:text-subtle"
-          />
-          <input
-            value={cloudPassword}
-            onChange={(event) => setCloudPassword(event.target.value)}
-            type="password"
-            placeholder={cloud.connected ? "Пароль сохранён" : "Пароль"}
-            aria-label="Пароль облака"
-            autoComplete="current-password"
-            className="card-lift h-11 w-full rounded-xl bg-elevated px-3 text-base outline-none placeholder:text-subtle"
-          />
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" className="h-11 rounded-xl bg-accent px-4 text-sm text-accent-fg">
-              {cloud.connected ? "Сохранить" : "Подключить"}
-            </button>
-            {cloud.connected ? (
-              <button
-                type="button"
-                onClick={() => {
-                  writeCloud(null);
-                  setCloudPassword("");
-                }}
-                className="h-11 rounded-xl px-4 text-sm text-muted"
-              >
-                Отключить
-              </button>
-            ) : null}
-          </div>
-        </form>
-        {cloud.note ? <p className="mt-2 text-xs text-muted">{cloud.note}</p> : null}
-      </section>
-
-      <section className="mt-8">
-        <h2 className="font-display text-lg tracking-tight">Файл</h2>
-        {sync.supported ? (
-          <>
-            <p className="mt-1 text-sm text-muted">
-              {sync.folder
-                ? `Папка «${sync.folder}». Изменения пишутся в pora.json.`
-                : "Выберите папку, которую уже синхронизирует облако: Synology Drive, iCloud или Dropbox."}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {sync.folder && !sync.granted ? (
-                <button type="button" onClick={() => void allowSyncFolder()} className="h-11 rounded-xl bg-accent px-4 text-sm text-accent-fg">
-                  Разрешить папку
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void chooseSyncFolder().catch(() => undefined)}
-                  className="h-11 rounded-xl bg-accent px-4 text-sm text-accent-fg"
-                >
-                  {sync.folder ? "Другая папка" : "Выбрать папку"}
-                </button>
-              )}
-              {sync.folder ? (
-                <button type="button" onClick={() => void forgetSyncFolder()} className="h-11 rounded-xl px-4 text-sm text-muted">
-                  Отключить
-                </button>
-              ) : null}
-            </div>
-            <p className="mt-2 text-xs text-subtle">Если править сразу на двух устройствах, останется более позднее сохранение.</p>
-          </>
-        ) : (
-          <>
-            <p className="mt-1 text-sm text-muted">
-              На iPhone нажмите «Сохранить в Файлы» и выберите папку в iCloud или «На iPhone». Тот же файл потом открывается обратно.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  void saveToFiles().then((result) => {
-                    setFileNote(result === "saved" ? "Сохранено." : "Сохранение отменено.");
-                  });
-                }}
-                className="h-11 rounded-xl bg-accent px-4 text-sm text-accent-fg"
-              >
-                Сохранить в Файлы
-              </button>
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="h-11 rounded-xl px-4 text-sm text-fg"
-              >
-                Открыть из Файлов
-              </button>
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".json,application/json,text/plain"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (!file) return;
-                void openFromFile(file).then(
-                  (ok) => setFileNote(ok ? "Файл открыт." : "В файле нет задач."),
-                  () => setFileNote("Файл не подошёл."),
-                );
-              }}
-            />
-            {fileNote ? <p className="mt-2 text-xs text-muted">{fileNote}</p> : null}
-          </>
-        )}
-      </section>
+      <BackupSection />
     </div>
   );
 }

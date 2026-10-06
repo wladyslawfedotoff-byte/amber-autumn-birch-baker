@@ -1,15 +1,12 @@
-# Synology Container Manager / Docker Compose for «Пора».
-# App listens on loopback only — put DSM Reverse Proxy in front (HTTPS).
+# «Пора» — сборка образа на NAS из клона репозитория.
+# Проще и легче для NAS: docker-compose.ghcr.yml (готовый образ из GHCR).
 #
-# Default: app only. Tasks live in the browser (localStorage) with optional
-# WebDAV / folder sync from Settings — Postgres is NOT required.
+#   cp .env.example .env    # задайте APP_PASSWORD или APP_PASSWORD_HASH
+#   docker compose up -d --build
 #
-# Optional Postgres: uncomment the db service and set DATABASE_URL in .env
-# (needed only if you later enable auth / server migrations).
-#
-# Optional GHCR pull (no build on NAS): use docker-compose.ghcr.yml instead,
-# or comment out `build:` below and uncomment `image:`.
-#   image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
+# Файл .env ОБЯЗАТЕЛЕН (иначе «Failed to load …/.env») и никогда не
+# попадает в git и в образ (.gitignore, .dockerignore). Данные — в ./data.
+# Подробно: docs/SYNOLOGY.md.
 
 services:
   app:
@@ -20,58 +17,67 @@ services:
         NITRO_PRESET: node-server
         VITE_AUTH_ENABLED: "false"
     image: pora-app:latest
-    # Pull from private GHCR instead of building (requires docker login ghcr.io):
-    # image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
     container_name: pora-app
     restart: unless-stopped
+    init: true
+    # Жёсткие ограничения: процесс не может повысить себе права, а у root на
+    # старте только то, что нужно entrypoint (подготовить ./data и сразу
+    # перейти на непривилегированного пользователя PUID:PGID).
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN         # chown ./data на пользователя приложения
+      - DAC_OVERRIDE  # доступ к ./data при любых правах папки Synology
+      - SETUID        # переход на PUID
+      - SETGID        # переход на PGID
+    # Секреты и необязательные настройки — только из .env рядом с этим файлом.
+    # Не добавляйте APP_PASSWORD / APP_PASSWORD_HASH / SESSION_SECRET /
+    # XAI_API_KEY в environment ниже: environment перекрывает env_file,
+    # даже пустым значением.
     env_file:
       - .env
     environment:
       HOST: "0.0.0.0"
-      PORT: "${PORT:-8080}"
+      PORT: "8080"
       NITRO_HOST: "0.0.0.0"
-      NITRO_PORT: "${PORT:-8080}"
-      # Public URL behind reverse proxy (auth cookies / redirects if auth enabled).
-      APP_URL: "${APP_URL:-}"
-      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-${APP_URL:-}}"
-      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-}"
-      DATABASE_URL: "${DATABASE_URL:-}"
-      XAI_API_KEY: "${XAI_API_KEY:-}"
+      NITRO_PORT: "8080"
+      # Публичный адрес за Reverse Proxy DSM, С портом (проверка Origin/CSRF).
+      APP_URL: "https://pora.fedotovvladislav.synology.me:8443"
+      DATA_DIR: /data
+      VITE_GROK_EXTENSIONS: "0"
+    volumes:
+      - ./data:/data
     ports:
-      # Only localhost — DSM Reverse Proxy / nginx on the NAS reaches this.
-      - "127.0.0.1:${PORT:-8080}:8080"
-    # Optional: attach to postgres network when db service is enabled
-    # depends_on:
-    #   db:
-    #     condition: service_healthy
-    # networks:
-    #   - pora-net
+      # Только localhost — наружу выходит Reverse Proxy DSM (HTTPS :8443).
+      - "127.0.0.1:8080:8080"
+    # Журнал контейнера не растёт бесконечно: максимум 3 файла по 10 МБ.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    # labels:
+    #   autoheal: "true"
 
-  # --- Optional Postgres (uncomment if you enable auth or server-side DB) ---
-  # db:
-  #   image: postgres:16-alpine
-  #   container_name: pora-db
+  # --- Необязательно: автоперезапуск контейнера в состоянии «unhealthy».
+  # `restart: unless-stopped` уже поднимает упавший контейнер (сервер
+  # завершается при фатальной ошибке); autoheal нужен для «зависшего» процесса.
+  # ВНИМАНИЕ: autoheal требует /var/run/docker.sock (= полный контроль над
+  # Docker на NAS). Включайте осознанно, вместе с labels выше.
+  # autoheal:
+  #   image: willfarrell/autoheal:latest
+  #   container_name: pora-autoheal
   #   restart: unless-stopped
   #   environment:
-  #     POSTGRES_USER: "${POSTGRES_USER:-pora}"
-  #     POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
-  #     POSTGRES_DB: "${POSTGRES_DB:-pora}"
+  #     AUTOHEAL_CONTAINER_LABEL: autoheal
+  #     AUTOHEAL_INTERVAL: "60"
   #   volumes:
-  #     - pora-pgdata:/var/lib/postgresql/data
-  #   # Do NOT publish 5432 to the LAN / internet.
-  #   expose:
-  #     - "5432"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pora} -d ${POSTGRES_DB:-pora}"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   networks:
-  #     - pora-net
-
-# volumes:
-#   pora-pgdata:
-
-# networks:
-#   pora-net:
-#     driver: bridge
+  #     - /var/run/docker.sock:/var/run/docker.sock
