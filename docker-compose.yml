@@ -20,6 +20,18 @@ services:
     container_name: pora-app
     restart: unless-stopped
     init: true
+    # Жёсткие ограничения: процесс не может повысить себе права, а у root на
+    # старте только то, что нужно entrypoint (подготовить ./data и сразу
+    # перейти на непривилегированного пользователя PUID:PGID).
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN         # chown ./data на пользователя приложения
+      - DAC_OVERRIDE  # доступ к ./data при любых правах папки Synology
+      - SETUID        # переход на PUID
+      - SETGID        # переход на PGID
     # Секреты и необязательные настройки — только из .env рядом с этим файлом.
     # Не добавляйте APP_PASSWORD / APP_PASSWORD_HASH / SESSION_SECRET /
     # XAI_API_KEY в environment ниже: environment перекрывает env_file,
@@ -40,6 +52,12 @@ services:
     ports:
       # Только localhost — наружу выходит Reverse Proxy DSM (HTTPS :8443).
       - "127.0.0.1:8080:8080"
+    # Журнал контейнера не растёт бесконечно: максимум 3 файла по 10 МБ.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 30s

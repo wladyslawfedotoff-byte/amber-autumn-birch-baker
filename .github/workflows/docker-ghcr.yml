@@ -89,7 +89,10 @@ jobs:
         run: |
           set -eu
           mkdir -p ci-data
+          # Same hardening as the compose files.
           docker run -d --name pora-ci -p 127.0.0.1:8080:8080 \
+            --security-opt no-new-privileges:true --cap-drop ALL \
+            --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add SETUID --cap-add SETGID \
             -e APP_PASSWORD=ci-smoke-password-123 \
             -e APP_URL=http://127.0.0.1:8080 \
             -v "$PWD/ci-data:/data" pora-ci:test
@@ -109,4 +112,11 @@ jobs:
           curl -fsS -c jar -H 'content-type: application/json' -H 'origin: http://127.0.0.1:8080' \
             -d '{"password":"ci-smoke-password-123"}' http://127.0.0.1:8080/api/login
           curl -fsS -b jar http://127.0.0.1:8080/api/sync > /dev/null
+          # another port on the same host is a different origin
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -H 'origin: http://127.0.0.1:5001' \
+            -d '{"password":"ci-smoke-password-123"}' http://127.0.0.1:8080/api/login)" = "403"
+          # «выйти везде» invalidates the cookie
+          curl -fsS -b jar -X POST -H 'origin: http://127.0.0.1:8080' http://127.0.0.1:8080/api/logout-all > /dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' -b jar http://127.0.0.1:8080/api/sync)" = "401"
+          docker exec pora-ci node scripts/restore-backup.mjs --list
           ls -la ci-data
