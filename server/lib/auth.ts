@@ -2,10 +2,10 @@
  * Login configuration (read once from the environment).
  *
  * Several profiles (see .env.example):
- *   APP_USERS=vlad,zhena
- *   USER_VLAD_PASSWORD_HASH=scrypt:…   (or USER_VLAD_PASSWORD=…)
- *   USER_VLAD_NAME=Владислав           (optional display name)
- *   APP_OWNER=vlad                      (who owns data created before profiles; default: first user)
+ *   APP_USERS=user1,user2
+ *   USER_USER1_PASSWORD_HASH=scrypt:…   (or USER_USER1_PASSWORD=…)
+ *   USER_USER1_NAME=Пользователь 1           (optional display name)
+ *   APP_OWNER=user1                      (who owns data created before profiles; default: first user)
  * The owner may keep using APP_PASSWORD / APP_PASSWORD_HASH as his password.
  *
  * One profile (old setups, unchanged): only APP_PASSWORD or APP_PASSWORD_HASH;

@@ -21,10 +21,10 @@ const base: Task = {
   completedAt: 5,
   important: true,
   repeat: "week",
-  members: ["zhena"],
-  assignee: "zhena",
-  owner: "vlad",
-  completedBy: "vlad",
+  members: ["user2"],
+  assignee: "user2",
+  owner: "user1",
+  completedBy: "user1",
   updatedAt: 100,
 } as Task;
 

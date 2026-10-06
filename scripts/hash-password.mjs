@@ -3,11 +3,11 @@
  * Print a scrypt password hash for «Пора».
  *
  *   node scripts/hash-password.mjs            # asks for the password (hidden), prints the hash
- *   node scripts/hash-password.mjs zhena      # prints a ready line: USER_ZHENA_PASSWORD_HASH=scrypt:…
+ *   node scripts/hash-password.mjs user2      # prints a ready line: USER_USER2_PASSWORD_HASH=scrypt:…
  *   echo -n 'пароль' | node scripts/hash-password.mjs [login]
  *
  * Inside the running container:
- *   docker exec -it pora-app node scripts/hash-password.mjs zhena
+ *   docker exec -it pora-app node scripts/hash-password.mjs user2
  *
  * One profile: paste the hash into APP_PASSWORD_HASH and remove APP_PASSWORD.
  * Several profiles: paste the printed USER_…_PASSWORD_HASH line into .env.
@@ -59,7 +59,7 @@ async function main() {
     process.exit(0);
   }
   if (login && !/^[a-z0-9_-]{1,32}$/.test(login)) {
-    console.error(`Логин «${login}» не подходит: только строчные латинские буквы, цифры, «_» и «-» (до 32 символов), например vlad.`);
+    console.error(`Логин «${login}» не подходит: только строчные латинские буквы, цифры, «_» и «-» (до 32 символов), например user1.`);
     process.exit(1);
   }
   let password;

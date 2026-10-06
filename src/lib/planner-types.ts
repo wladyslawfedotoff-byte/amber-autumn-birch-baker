@@ -50,7 +50,7 @@ export type Task = {
   repeatDates?: string[];
   /** «Назначить»: who should do it (sees it even if not a member). */
   assignee?: string | null;
-  /** Who ticked it off last («выполнил(а) Женя»). */
+  /** Who ticked it off last («выполнил(а) Пользователь 2»). */
   completedBy?: string | null;
   /** Sync stamp (ms, server-corrected clock). Missing on old data = 0. */
   updatedAt?: number;
