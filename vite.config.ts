@@ -176,6 +176,18 @@ export default defineConfig(({ command, isPreview }) => ({
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
             serverDir: "./server",
+            // Baseline security headers for everything, including static
+            // assets (Nitro serves those before server/middleware runs).
+            // CSP and the rest are added by server/middleware/00.guard.ts.
+            routeRules: {
+              "/**": {
+                headers: {
+                  "x-content-type-options": "nosniff",
+                  "x-frame-options": "DENY",
+                  "referrer-policy": "same-origin",
+                },
+              },
+            },
           }),
         ]
       : []),
