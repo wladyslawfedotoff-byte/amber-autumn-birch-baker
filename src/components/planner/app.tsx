@@ -21,8 +21,8 @@ import { formatLong, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { View } from "@/lib/planner-types";
 import { scopeTasks } from "@/lib/queries";
-import { bindCloudSync } from "@/lib/cloud-sync";
-import { bindFolderSync } from "@/lib/sync-folder";
+import { bindServerSync } from "@/lib/server-sync";
+import { SyncIndicator } from "@/components/planner/sync-status";
 
 const MOBILE: { id: View; label: string; icon: typeof CalendarCheck }[] = [
   { id: "today", label: "Сегодня", icon: CalendarCheck },
@@ -82,14 +82,19 @@ export function PlannerApp() {
 
   useEffect(() => {
     let stop = () => {};
-    let stopCloud = () => {};
+    let cancelled = false;
+    let pristine = false;
+    try {
+      pristine = window.localStorage.getItem("srok-planner") === null;
+    } catch {
+      pristine = false;
+    }
     void Promise.resolve(usePlanner.persist.rehydrate()).then(() => {
-      stop = bindFolderSync();
-      stopCloud = bindCloudSync();
+      if (!cancelled) stop = bindServerSync({ pristine });
     });
     return () => {
+      cancelled = true;
       stop();
-      stopCloud();
     };
   }, []);
 
@@ -178,7 +183,7 @@ export function PlannerApp() {
     if (view === "assist") return "Разложить мысли на задачи";
     if (view === "schedule") return "Рабочие часы, свободные окна и накладки";
     if (view === "projects") return "Длинные дела по этапам";
-    if (view === "settings") return "Оформление и цвет";
+    if (view === "settings") return "Подключение, оформление и копия";
     if (view.startsWith("tag:")) {
       const n = scopeTasks(tasks, view, today).length;
       return n === 0 ? "Нет открытых задач с этим тегом" : `${n} открытых`;
@@ -266,6 +271,7 @@ export function PlannerApp() {
                 <Search className="size-5" />
               </Button>
             )}
+            <SyncIndicator onOpen={() => openView("settings")} />
             <ReminderBell dueCount={dueHits.length} open={bell} onToggle={() => setBell((open) => !open)} />
           </div>
           {showSearch ? (

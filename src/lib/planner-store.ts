@@ -1,5 +1,7 @@
-import { create } from "zustand";
+import { create, type StateCreator } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { syncNow } from "@/lib/sync/clock";
+import { COLLECTIONS, emptyTombstones, stampCollection, type Tombstones } from "@/lib/sync/merge";
 import { nextRepeat, shiftIso, todayIso } from "@/lib/dates";
 import { parseQuick } from "@/lib/quick-add";
 import { stageRange } from "@/lib/stage-range";
@@ -61,6 +63,10 @@ type PlannerState = {
   pomoDate: string;
   pomoCount: number;
   remindAck: Record<string, string>;
+  /** Deleted ids per collection (sync tombstones), pruned by the server after 30 days. */
+  tombstones: Tombstones;
+  /** Sync stamp of workStart/workEnd. */
+  settingsUpdatedAt: number;
   addTask: (input: NewTask) => string;
   updateTask: (id: string, patch: Partial<Omit<Task, "id">>) => void;
   toggleTask: (id: string) => void;
@@ -96,7 +102,6 @@ type PlannerState = {
   deleteCard: (projectId: string, cardId: string) => void;
   sendTaskToProject: (taskId: string, projectId: string) => void;
   setWorkHours: (start: string, end: string) => void;
-  importBackup: (raw: unknown) => boolean;
   ackReminder: (key: string, stamp: string) => void;
   setTheme: (theme: ThemeMode) => void;
   setAccent: (accent: AccentId) => void;
@@ -131,6 +136,8 @@ function seed(): Pick<
   | "pomoDate"
   | "pomoCount"
   | "remindAck"
+  | "tombstones"
+  | "settingsUpdatedAt"
 > {
   const today = todayIso();
   const stamp = Date.now();
@@ -157,6 +164,8 @@ function seed(): Pick<
     pomoDate: today,
     pomoCount: 1,
     remindAck: {},
+    tombstones: emptyTombstones(),
+    settingsUpdatedAt: 0,
     lists: [
       { id: "work", name: "Работа" },
       { id: "home", name: "Дом" },
@@ -376,9 +385,59 @@ function fillTasks(saved: Task[] | undefined, seedRows: Task[]): Task[] {
   }));
 }
 
+type Synced = (typeof COLLECTIONS)[number];
+type PersistedCreator = StateCreator<PlannerState, [["zustand/persist", unknown]], []>;
+
+/**
+ * Stamp local edits for sync: every action goes through this `set`, so changed
+ * or new entities get `updatedAt` and removed ones become tombstones without
+ * touching each action. Remote merges use `usePlanner.setState` directly and
+ * are never re-stamped; persist's rehydrate bypasses it too.
+ */
+export function stampPatch(prev: PlannerState, patch: Partial<PlannerState>, now = syncNow()): Partial<PlannerState> {
+  let out: Partial<PlannerState> = patch;
+  let tombstones: Tombstones | null = null;
+  for (const key of COLLECTIONS as readonly Synced[]) {
+    const next = patch[key] as { id: string; updatedAt?: number }[] | undefined;
+    const before = (prev[key] ?? []) as { id: string; updatedAt?: number }[];
+    if (next === undefined || next === before) continue;
+    const base: Tombstones = tombstones ?? prev.tombstones ?? emptyTombstones();
+    const prevTombs: Record<string, number> = base[key] ?? {};
+    const result = stampCollection(before, next, prevTombs, now);
+    if (out === patch) out = { ...patch };
+    (out as Record<string, unknown>)[key] = result.items;
+    if (result.tombs !== prevTombs) {
+      tombstones = { ...base, [key]: result.tombs };
+    }
+  }
+  if (tombstones) {
+    if (out === patch) out = { ...patch };
+    out.tombstones = tombstones;
+  }
+  const hoursChanged =
+    (patch.workStart !== undefined && patch.workStart !== prev.workStart) ||
+    (patch.workEnd !== undefined && patch.workEnd !== prev.workEnd);
+  if (hoursChanged) {
+    if (out === patch) out = { ...patch };
+    out.settingsUpdatedAt = Math.max(now, (prev.settingsUpdatedAt ?? 0) + 1);
+  }
+  return out;
+}
+
+function stamped(config: PersistedCreator): PersistedCreator {
+  return (set, get, api) => {
+    const stampedSet = ((partial: unknown, replace?: boolean) => {
+      const prev = get();
+      const patch = (typeof partial === "function" ? (partial as (s: PlannerState) => Partial<PlannerState>)(prev) : partial) as Partial<PlannerState>;
+      (set as (p: Partial<PlannerState>, r?: boolean) => void)(stampPatch(prev, patch ?? {}), replace);
+    }) as typeof set;
+    return config(stampedSet, get, api);
+  };
+}
+
 export const usePlanner = create<PlannerState>()(
   persist(
-    (set, get) => ({
+    stamped((set, get) => ({
       ...seed(),
       addTask: (input) => {
         const parsed = parseQuick(input.title);
@@ -662,21 +721,6 @@ renameList: (id, name) =>
           };
         }),
       setWorkHours: (start, end) => set({ workStart: start, workEnd: end }),
-      importBackup: (raw) => {
-        if (!raw || typeof raw !== "object") return false;
-        const data = raw as Record<string, unknown>;
-        if (!Array.isArray(data.tasks) || !Array.isArray(data.lists)) return false;
-        set({
-          tasks: data.tasks as Task[],
-          lists: data.lists as TaskList[],
-          habits: Array.isArray(data.habits) ? (data.habits as Habit[]) : [],
-          milestones: Array.isArray(data.milestones) ? (data.milestones as Milestone[]) : [],
-          projects: Array.isArray(data.projects) ? (data.projects as Project[]) : [],
-          workStart: typeof data.workStart === "string" ? data.workStart : "09:00",
-          workEnd: typeof data.workEnd === "string" ? data.workEnd : "18:00",
-        });
-        return true;
-      },
       ackReminder: (key, stamp) =>
         set((s) => ({ remindAck: { ...(s.remindAck ?? {}), [key]: stamp } })),
       setTheme: (theme) => set({ theme }),
@@ -741,7 +785,7 @@ renameList: (id, name) =>
         });
         return true;
       },
-    }),
+    })),
     {
       name: "srok-planner",
       skipHydration: true,
@@ -759,6 +803,8 @@ renameList: (id, name) =>
           tasks: fillTasks(saved.tasks, current.tasks),
           lists: saved.lists ?? current.lists,
           remindAck: saved.remindAck ?? {},
+          tombstones: { ...emptyTombstones(), ...(saved.tombstones ?? {}) },
+          settingsUpdatedAt: typeof saved.settingsUpdatedAt === "number" ? saved.settingsUpdatedAt : 0,
           theme: saved.theme === "dark" ? "dark" : "light",
           accent: isAccent(saved.accent) ? saved.accent : current.accent,
         };
