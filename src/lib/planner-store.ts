@@ -2,7 +2,8 @@ import { create, type StateCreator } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { syncNow } from "@/lib/sync/clock";
 import { COLLECTIONS, emptyTombstones, stampCollection, type Tombstones } from "@/lib/sync/merge";
-import { nextRepeat, shiftIso, todayIso } from "@/lib/dates";
+import { cleanDates, firstChosenDate, nextChosenDate, nextRepeat, shiftIso, todayIso } from "@/lib/dates";
+import { currentLogin } from "@/lib/use-capabilities";
 import { parseQuick } from "@/lib/quick-add";
 import { stageRange } from "@/lib/stage-range";
 import { isAccent, type AccentId } from "@/lib/accents";
@@ -70,6 +71,14 @@ type PlannerState = {
   addTask: (input: NewTask) => string;
   updateTask: (id: string, patch: Partial<Omit<Task, "id">>) => void;
   toggleTask: (id: string) => void;
+  /** «Выбранные даты»: replace the chosen dates (due follows the first one from today). */
+  setRepeatDates: (id: string, dates: string[]) => void;
+  /** «Совместная»: who else sees and edits the task (logins). */
+  setTaskMembers: (id: string, members: string[]) => void;
+  /** «Назначить»: who should do it (null = nobody). */
+  assignTask: (id: string, login: string | null) => void;
+  /** Share a whole list: its tasks are visible to these logins too. */
+  setListMembers: (id: string, members: string[]) => void;
   deleteTask: (id: string) => void;
   addSubtask: (taskId: string, title: string) => void;
   toggleSubtask: (taskId: string, subId: string) => void;
@@ -474,12 +483,42 @@ export const usePlanner = create<PlannerState>()(
         set((s) => ({
           tasks: s.tasks.map((t) => {
             if (t.id !== id) return t;
-            if (!t.done && t.repeat && t.due) {
-              return { ...t, done: false, completedAt: null, due: nextRepeat(t.due, t.repeat, todayIso()) };
+            const me = currentLogin() || null;
+            const by = me ? { completedBy: me } : {};
+            if (!t.done && t.repeat === "dates") {
+              // «Выбранные даты»: move to the next chosen date; none left → done.
+              const next = nextChosenDate(t.repeatDates, t.due, todayIso());
+              if (next) return { ...t, done: false, completedAt: null, due: next, ...by };
+              return { ...t, done: true, completedAt: Date.now(), ...by };
+            }
+            if (!t.done && t.repeat && t.repeat !== "dates" && t.due) {
+              return { ...t, done: false, completedAt: null, due: nextRepeat(t.due, t.repeat, todayIso()), ...by };
             }
             const done = !t.done;
-            return { ...t, done, completedAt: done ? Date.now() : null };
+            return { ...t, done, completedAt: done ? Date.now() : null, ...(done ? by : { completedBy: null }) };
           }),
+        })),
+      setRepeatDates: (id, dates) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== id) return t;
+            const clean = cleanDates(dates);
+            const due = firstChosenDate(clean, todayIso());
+            const reopen = t.done && due !== null && due >= todayIso();
+            return { ...t, repeat: "dates", repeatDates: clean, due, ...(reopen ? { done: false, completedAt: null } : {}) };
+          }),
+        })),
+      setTaskMembers: (id, members) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => (t.id === id ? { ...t, members: [...new Set(members)] } : t)),
+        })),
+      assignTask: (id, login) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => (t.id === id ? { ...t, assignee: login } : t)),
+        })),
+      setListMembers: (id, members) =>
+        set((s) => ({
+          lists: s.lists.map((l) => (l.id === id ? { ...l, members: [...new Set(members)] } : l)),
         })),
       deleteTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
       addSubtask: (taskId, title) => {
@@ -528,10 +567,18 @@ renameList: (id, name) =>
           lists: s.lists.map((l) => (l.id === id ? { ...l, name } : l)),
         })),
       deleteList: (id) =>
-        set((s) => ({
-          lists: s.lists.filter((l) => l.id !== id),
-          tasks: s.tasks.map((t) => (t.listId === id ? { ...t, listId: null } : t)),
-        })),
+        set((s) => {
+          const list = s.lists.find((l) => l.id === id);
+          const me = currentLogin();
+          // Somebody else's shared list: «удалить» = leave it; their tasks stay where they are.
+          const foreign = Boolean(me && list?.owner && list.owner !== me);
+          return {
+            lists: s.lists.filter((l) => l.id !== id),
+            tasks: s.tasks.map((t) =>
+              t.listId === id && (!foreign || t.owner === me) ? { ...t, listId: null } : t,
+            ),
+          };
+        }),
       addHabit: (name) => {
         const clean = name.trim();
         if (!clean) return;

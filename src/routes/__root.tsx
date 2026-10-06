@@ -1,9 +1,8 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
+import { APP_DESCRIPTION, APP_TITLE } from "@/lib/site";
 import appCss from "../styles.css?url";
-
-const APP_NAME = "Пора";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -11,10 +10,10 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-      { title: APP_NAME },
+      { title: APP_TITLE },
       {
         name: "description",
-        content: "Пора — задачи, календарь, привычки и фокус-таймер.",
+        content: APP_DESCRIPTION,
       },
       { name: "theme-color", content: "#e8e4db" },
     ],

@@ -1,6 +1,21 @@
 export type Priority = 0 | 1 | 2 | 3;
 
-export type Repeat = "day" | "weekdays" | "week" | "month";
+export type Repeat = "day" | "weekdays" | "week" | "month" | "dates";
+
+/**
+ * Sharing (several profiles, see src/lib/sync/world.ts). Set by the server /
+ * the share controls; absent with one profile.
+ */
+export type Shared = {
+  /** Login of the owner. Missing = the server's APP_OWNER (data from before profiles). */
+  owner?: string;
+  /** «Совместная»: logins that see and edit it too. */
+  members?: string[];
+  /** Server bookkeeping: last editor of a shared item. */
+  updatedBy?: string | null;
+  /** Server bookkeeping: access regained (forces the item back onto devices). */
+  aclAt?: number;
+};
 
 export type Subtask = {
   id: string;
@@ -31,15 +46,21 @@ export type Task = {
   endAt?: string | null;
   /** Completing the task moves the date forward instead of archiving it. */
   repeat?: Repeat | null;
+  /** repeat = "dates": the chosen ISO dates («Выбранные даты»). `due` is the current one. */
+  repeatDates?: string[];
+  /** «Назначить»: who should do it (sees it even if not a member). */
+  assignee?: string | null;
+  /** Who ticked it off last («выполнил(а) Женя»). */
+  completedBy?: string | null;
   /** Sync stamp (ms, server-corrected clock). Missing on old data = 0. */
   updatedAt?: number;
-};
+} & Shared;
 
 export type TaskList = {
   id: string;
   name: string;
   updatedAt?: number;
-};
+} & Shared;
 
 export type Habit = {
   id: string;
@@ -114,6 +135,7 @@ export type View =
   | "schedule"
   | "projects"
   | "settings"
+  | "shared"
   | `list:${string}`
   | `tag:${string}`
   | `day:${string}`;

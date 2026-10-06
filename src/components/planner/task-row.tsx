@@ -6,6 +6,7 @@ import { parseQuick } from "@/lib/quick-add";
 import { usePlanner } from "@/lib/planner-store";
 import type { Priority, Task } from "@/lib/planner-types";
 import { listName } from "@/lib/queries";
+import { ShareBadges } from "@/components/planner/sharing";
 
 function ring(priority: Priority): string {
   if (priority === 3) return "border-danger";
@@ -91,7 +92,7 @@ export function TaskRow({
               ) : task.remindAt ? (
                 <span className="tabular-nums">{task.remindAt}</span>
               ) : null}
-              {task.repeat ? <span>{repeatLabel(task.repeat)}</span> : null}
+              {task.repeat ? <span>{repeatLabel(task.repeat, task.repeatDates)}</span> : null}
               {showList ? <span>{listName(lists, task.listId)}</span> : null}
               {subs.length > 0 && task.done ? (
                 <span className="tabular-nums">
@@ -101,6 +102,7 @@ export function TaskRow({
               {(task.tags ?? []).slice(0, 2).map((tag) => (
                 <span key={tag}>#{tag}</span>
               ))}
+              <ShareBadges task={task} />
             </span>
           </button>
           {canPostpone ? (

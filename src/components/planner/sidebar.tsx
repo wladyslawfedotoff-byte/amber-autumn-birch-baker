@@ -9,6 +9,8 @@ import {
   Hourglass,
   Inbox,
   LayoutGrid,
+  LogOut,
+  Users,
   ListChecks,
   MessageSquare,
   Plus,
@@ -23,8 +25,11 @@ import { cn } from "@/lib/cn";
 import { todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { View } from "@/lib/planner-types";
-import { countInbox, countList, countOpen, countToday, countTomorrow, countWeek } from "@/lib/queries";
+import { countInbox, countList, countOpen, countToday, countTomorrow, countWeek, ownerOf, scopeTasks } from "@/lib/queries";
+import { logout } from "@/lib/server-sync";
+import { APP_NAME, APP_TAGLINE } from "@/lib/site";
 import { useCapabilities } from "@/lib/use-capabilities";
+import { useShareScope } from "@/lib/use-share-scope";
 
 const SMART: { id: View; label: string; icon: typeof Inbox }[] = [
   { id: "inbox", label: "Входящие", icon: Inbox },
@@ -63,8 +68,11 @@ export function Sidebar({
   const [adding, setAdding] = useState(false);
   const habitLeft = habits.filter((h) => !h.checks.includes(today)).length;
   // «Помощник» needs XAI_API_KEY on the server; hide it otherwise.
-  const { assistant } = useCapabilities();
+  const profile = useCapabilities();
+  const { assistant } = profile;
   const tools = assistant ? TOOLS : TOOLS.filter((item) => item.id !== "assist");
+  const share = useShareScope();
+  const smart = share ? [...SMART, { id: "shared" as View, label: "Общие", icon: Users }] : SMART;
 
   function count(id: View): number | null {
     if (id === "today") return countToday(tasks, today);
@@ -73,6 +81,7 @@ export function Sidebar({
     if (id === "checklist") return countOpen(tasks);
     if (id === "inbox") return countInbox(tasks);
     if (id === "habits") return habitLeft;
+    if (id === "shared") return share ? scopeTasks(tasks, "shared", today, share).length : null;
     return null;
   }
 
@@ -95,7 +104,10 @@ export function Sidebar({
             />
           </svg>
         </span>
-        <p className="min-w-0 flex-1 font-display text-xl leading-none tracking-tight">Пора</p>
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-xl leading-none tracking-tight">{APP_NAME}</p>
+          {APP_TAGLINE ? <p className="mt-0.5 truncate text-xs leading-none text-subtle">{APP_TAGLINE}</p> : null}
+        </div>
         {onClose ? (
           <Button size="icon" variant="ghost" aria-label="Закрыть меню" onClick={onClose}>
             <X className="size-5" />
@@ -106,7 +118,7 @@ export function Sidebar({
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Разделы">
         <p className="px-2 pb-1 text-xs font-medium text-subtle">Смарт-списки</p>
         <ul className="flex flex-col">
-          {SMART.map((item) => (
+          {smart.map((item) => (
             <NavRow
               key={item.id}
               item={item}
@@ -161,6 +173,9 @@ export function Sidebar({
                 >
                   <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate">{list.name}</span>
+                  {share && ((list.members ?? []).length > 0 || ownerOf(list, share.dataOwner) !== share.me) ? (
+                    <Users className="size-3.5 shrink-0 text-subtle" aria-label="общий список" />
+                  ) : null}
                   {n > 0 ? <span className="tabular-nums text-xs text-subtle">{n}</span> : null}
                 </button>
               </li>
@@ -253,6 +268,28 @@ export function Sidebar({
           <Settings className="size-4 shrink-0" strokeWidth={1.75} />
           <span className="min-w-0 flex-1 truncate">Настройки</span>
         </button>
+        {profile.login ? (
+          <div className="mt-1 flex items-center gap-2 px-2">
+            <span
+              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-medium text-fg"
+              aria-hidden="true"
+            >
+              {(profile.name || profile.login).slice(0, 1).toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-sm text-muted" title={profile.login}>
+              {profile.name || profile.login}
+            </span>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="flex h-10 items-center gap-1 rounded-md px-2 text-sm text-muted hover:bg-elevated hover:text-fg"
+              aria-label={`Выйти из профиля ${profile.name || profile.login}`}
+            >
+              <LogOut className="size-4" strokeWidth={1.75} />
+              Выйти
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

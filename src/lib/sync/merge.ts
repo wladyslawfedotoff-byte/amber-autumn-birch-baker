@@ -108,12 +108,16 @@ const META_KEYS = new Set(["id", "updatedAt", "_b", "_f", "_s", "_d"]);
 
 export type EntitySpecial = { sets: readonly string[]; keyed: readonly string[] };
 export const NO_SPECIAL: EntitySpecial = { sets: [], keyed: [] };
+/**
+ * Set-like fields merge per element. `members` (who an item is shared with)
+ * exists on every collection; `repeatDates` is the «Выбранные даты» repeat.
+ */
 export const ENTITY_SPECIAL: Record<Collection, EntitySpecial> = {
-  lists: NO_SPECIAL,
-  tasks: { sets: ["tags"], keyed: ["subtasks"] },
-  habits: { sets: ["checks"], keyed: [] },
-  milestones: NO_SPECIAL,
-  projects: NO_SPECIAL,
+  lists: { sets: ["members"], keyed: [] },
+  tasks: { sets: ["tags", "repeatDates", "members"], keyed: ["subtasks"] },
+  habits: { sets: ["checks", "members"], keyed: [] },
+  milestones: { sets: ["members"], keyed: [] },
+  projects: { sets: ["members"], keyed: [] },
 };
 
 function specialFor(special: EntitySpecial | Collection | undefined): EntitySpecial {
@@ -242,6 +246,13 @@ function dataKeys(...records: (Record<string, unknown> | null | undefined)[]): s
 }
 
 function tieValue(a: unknown, b: unknown): unknown {
+  // Same stamp, one side lacks the field: the value wins (a field the server
+  // filled in, e.g. `owner`, must not be dropped again by a copy without it).
+  if (a === undefined || a === null) {
+    if (b !== undefined && b !== null) return b;
+  } else if (b === undefined || b === null) {
+    return a;
+  }
   const ja = stableStringify(a);
   const jb = stableStringify(b);
   if (ja !== jb) return ja > jb ? a : b;
@@ -477,7 +488,7 @@ export function mergeCollection(
   return { items, tombs };
 }
 
-function pickSettings(a: SyncSettings, b: SyncSettings): SyncSettings {
+export function pickSettings(a: SyncSettings, b: SyncSettings): SyncSettings {
   const ta = stampOf(a.updatedAt);
   const tb = stampOf(b.updatedAt);
   if (ta !== tb) return ta > tb ? a : b;
@@ -660,6 +671,22 @@ function stampEntity(prev: SyncEntity, next: SyncEntity, stamp: number, special:
   if (Object.keys(s).length) out._s = s;
   if (Object.keys(d).length) out._d = d;
   return out as SyncEntity;
+}
+
+/**
+ * A server-side edit (sharing bookkeeping, attribution): the changed fields of
+ * `patch` get `stamp`, so they beat every copy the devices hold. Fields whose
+ * value does not change are ignored; returns `entity` itself when nothing changes.
+ */
+export function editEntity(entity: SyncEntity, patch: Record<string, unknown>, stamp: number, specialArg?: EntitySpecial | Collection): SyncEntity {
+  const changed = Object.keys(patch).filter((key) => !META_KEYS.has(key) && stableStringify(entity[key]) !== stableStringify(patch[key]));
+  if (!changed.length) return entity;
+  const next: SyncEntity = { ...entity };
+  for (const key of changed) {
+    if (patch[key] === undefined) delete next[key];
+    else next[key] = patch[key];
+  }
+  return stampEntity(entity, next, Math.max(stamp, stampOf(entity.updatedAt) + 1), specialFor(specialArg));
 }
 
 /**
