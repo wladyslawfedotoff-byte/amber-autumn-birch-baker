@@ -1,33 +1,65 @@
-# Pull pre-built private image from GHCR (no build on NAS).
-# Prefer this over `docker compose up --build` when CI publishes to ghcr.io.
+# «Пора» from the pre-built GHCR image (no build on the NAS).
 #
-# Prerequisites:
-#   1. PAT with read:packages (repo private → package stays private)
-#   2. echo TOKEN | docker login ghcr.io -u USERNAME --password-stdin
-#   3. cp .env.example .env  (set APP_URL, etc.)
+# The package ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker is PUBLIC
+# — no `docker login`, no token. The image contains NO secrets: the password
+# and session secret are supplied only here, at runtime.
 #
-# Start:
+# Synology Container Manager → Проект → Создать:
+#   path: /volume1/docker/pora   (create /volume1/docker/pora/data first)
+#   paste this file, replace СМЕНИТЕ_МЕНЯ with your password (or use .env).
+# CLI:
 #   docker compose -f docker-compose.ghcr.yml pull
 #   docker compose -f docker-compose.ghcr.yml up -d
 #
-# Image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
+# If your password contains "$", write it as "$$" (compose interpolation) or
+# use APP_PASSWORD_HASH (node scripts/hash-password.mjs) instead.
 
 services:
   app:
     image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
     container_name: pora-app
     restart: unless-stopped
-    env_file:
-      - .env
+    init: true
     environment:
       HOST: "0.0.0.0"
-      PORT: "${PORT:-8080}"
+      PORT: "8080"
       NITRO_HOST: "0.0.0.0"
-      NITRO_PORT: "${PORT:-8080}"
-      APP_URL: "${APP_URL:-}"
-      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-${APP_URL:-}}"
-      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-}"
-      DATABASE_URL: "${DATABASE_URL:-}"
-      XAI_API_KEY: "${XAI_API_KEY:-}"
+      NITRO_PORT: "8080"
+      APP_URL: "${APP_URL:-https://pora.fedotovvladislav.synology.me:8443}"
+      VITE_GROK_EXTENSIONS: "0"
+      DATA_DIR: /data
+      # Login password (min 8 chars). Until it is changed the app shows
+      # «Вход не настроен» and serves nothing else.
+      APP_PASSWORD: "${APP_PASSWORD:-СМЕНИТЕ_МЕНЯ}"
+      # Alternative to APP_PASSWORD (takes precedence when set):
+      # APP_PASSWORD_HASH: "scrypt:32768:8:1:..."
+      # Optional; generated into /data/.session-secret if not set:
+      # SESSION_SECRET: ""
+      # Optional; only if ./data is not writable (DSM user/group id):
+      # PUID: "1026"
+      # PGID: "100"
+    volumes:
+      - ./data:/data
     ports:
-      - "127.0.0.1:${PORT:-8080}:8080"
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    # labels:
+    #   autoheal: "true"
+
+  # --- Optional auto-restart of an "unhealthy" container (see docs/SYNOLOGY.md).
+  # Needs /var/run/docker.sock = full Docker control on the NAS; uncomment the
+  # labels above together with this service.
+  # autoheal:
+  #   image: willfarrell/autoheal:latest
+  #   container_name: pora-autoheal
+  #   restart: unless-stopped
+  #   environment:
+  #     AUTOHEAL_CONTAINER_LABEL: autoheal
+  #     AUTOHEAL_INTERVAL: "60"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock

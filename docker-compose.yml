@@ -1,15 +1,12 @@
-# Synology Container Manager / Docker Compose for «Пора».
-# App listens on loopback only — put DSM Reverse Proxy in front (HTTPS).
+# Synology Container Manager / Docker Compose for «Пора» — build on the NAS.
+# Prefer docker-compose.ghcr.yml (pulls the ready image from GHCR, no build).
 #
-# Default: app only. Tasks live in the browser (localStorage) with optional
-# WebDAV / folder sync from Settings — Postgres is NOT required.
+# The app listens on loopback only — DSM Reverse Proxy (HTTPS :8443) in front.
+# Data (tasks, revision, session secret, backups) lives in ./data on the host.
 #
-# Optional Postgres: uncomment the db service and set DATABASE_URL in .env
-# (needed only if you later enable auth / server migrations).
-#
-# Optional GHCR pull (no build on NAS): use docker-compose.ghcr.yml instead,
-# or comment out `build:` below and uncomment `image:`.
-#   image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
+# Values come from environment / .env next to this file (compose reads .env
+# automatically for ${...}). Never commit .env. See .env.example and
+# docs/SYNOLOGY.md.
 
 services:
   app:
@@ -20,58 +17,57 @@ services:
         NITRO_PRESET: node-server
         VITE_AUTH_ENABLED: "false"
     image: pora-app:latest
-    # Pull from private GHCR instead of building (requires docker login ghcr.io):
-    # image: ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest
     container_name: pora-app
     restart: unless-stopped
-    env_file:
-      - .env
+    init: true
     environment:
       HOST: "0.0.0.0"
-      PORT: "${PORT:-8080}"
+      PORT: "8080"
       NITRO_HOST: "0.0.0.0"
-      NITRO_PORT: "${PORT:-8080}"
-      # Public URL behind reverse proxy (auth cookies / redirects if auth enabled).
-      APP_URL: "${APP_URL:-}"
-      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-${APP_URL:-}}"
-      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-}"
+      NITRO_PORT: "8080"
+      # Public URL behind the reverse proxy (WITH the port), used for the
+      # login CSRF/origin check.
+      APP_URL: "${APP_URL:-https://pora.fedotovvladislav.synology.me:8443}"
+      # Login password (min 8 chars). Or set APP_PASSWORD_HASH instead
+      # (node scripts/hash-password.mjs). The app refuses to start serving
+      # until one of them is set.
+      APP_PASSWORD: "${APP_PASSWORD:-}"
+      APP_PASSWORD_HASH: "${APP_PASSWORD_HASH:-}"
+      # Optional: if empty, generated once into /data/.session-secret (0600).
+      SESSION_SECRET: "${SESSION_SECRET:-}"
+      DATA_DIR: /data
+      VITE_GROK_EXTENSIONS: "0"
+      # Optional: run as the owner of ./data (DSM user, e.g. 1026 / 100).
+      PUID: "${PUID:-}"
+      PGID: "${PGID:-}"
+      # Optional, not needed for «Пора» today.
       DATABASE_URL: "${DATABASE_URL:-}"
       XAI_API_KEY: "${XAI_API_KEY:-}"
+    volumes:
+      - ./data:/data
     ports:
-      # Only localhost — DSM Reverse Proxy / nginx on the NAS reaches this.
-      - "127.0.0.1:${PORT:-8080}:8080"
-    # Optional: attach to postgres network when db service is enabled
-    # depends_on:
-    #   db:
-    #     condition: service_healthy
-    # networks:
-    #   - pora-net
+      # Only localhost — the DSM Reverse Proxy reaches this.
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    # labels:
+    #   autoheal: "true"
 
-  # --- Optional Postgres (uncomment if you enable auth or server-side DB) ---
-  # db:
-  #   image: postgres:16-alpine
-  #   container_name: pora-db
+  # --- Optional: restart the container automatically when it is "unhealthy".
+  # `restart: unless-stopped` already restarts it after a crash (the server
+  # exits on fatal errors). autoheal also covers a hung-but-running process.
+  # NOTE: autoheal needs /var/run/docker.sock (= full control over Docker on
+  # the NAS). Enable only if you accept that; then uncomment the labels above.
+  # autoheal:
+  #   image: willfarrell/autoheal:latest
+  #   container_name: pora-autoheal
   #   restart: unless-stopped
   #   environment:
-  #     POSTGRES_USER: "${POSTGRES_USER:-pora}"
-  #     POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
-  #     POSTGRES_DB: "${POSTGRES_DB:-pora}"
+  #     AUTOHEAL_CONTAINER_LABEL: autoheal
+  #     AUTOHEAL_INTERVAL: "60"
   #   volumes:
-  #     - pora-pgdata:/var/lib/postgresql/data
-  #   # Do NOT publish 5432 to the LAN / internet.
-  #   expose:
-  #     - "5432"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pora} -d ${POSTGRES_DB:-pora}"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   networks:
-  #     - pora-net
-
-# volumes:
-#   pora-pgdata:
-
-# networks:
-#   pora-net:
-#     driver: bridge
+  #     - /var/run/docker.sock:/var/run/docker.sock
