@@ -21,6 +21,7 @@ import { formatLong, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { View } from "@/lib/planner-types";
 import { scopeTasks } from "@/lib/queries";
+import { useProfile } from "@/lib/use-capabilities";
 import { bindServerSync } from "@/lib/server-sync";
 import { SyncIndicator } from "@/components/planner/sync-status";
 
@@ -48,12 +49,14 @@ function viewTitle(view: View, lists: { id: string; name: string }[]): string {
   if (view === "schedule") return "Расписание";
   if (view === "projects") return "Проекты";
   if (view === "settings") return "Настройки";
+  if (view === "shared") return "Общие";
   if (view.startsWith("tag:")) return `#${view.slice(4)}`;
   if (view.startsWith("day:")) return formatLong(view.slice(4));
   return lists.find((list) => list.id === view.slice(5))?.name ?? "Список";
 }
 
 export function PlannerApp() {
+  const profile = useProfile();
   const lists = usePlanner((s) => s.lists);
   const tasks = usePlanner((s) => s.tasks);
   const theme = usePlanner((s) => s.theme);
@@ -183,7 +186,8 @@ export function PlannerApp() {
     if (view === "assist") return "Разложить мысли на задачи";
     if (view === "schedule") return "Рабочие часы, свободные окна и накладки";
     if (view === "projects") return "Длинные дела по этапам";
-    if (view === "settings") return "Подключение, оформление и копия";
+    if (view === "settings") return "Профиль, подключение, оформление и копия";
+    if (view === "shared") return "Совместные, назначенные и из общих списков";
     if (view.startsWith("tag:")) {
       const n = scopeTasks(tasks, view, today).length;
       return n === 0 ? "Нет открытых задач с этим тегом" : `${n} открытых`;
@@ -191,6 +195,13 @@ export function PlannerApp() {
     if (view.startsWith("day:")) {
       const n = scopeTasks(tasks, view, today).length;
       return n === 0 ? "На этот день задач нет" : `${n} открытых`;
+    }
+    if (view.startsWith("list:")) {
+      const list = lists.find((item) => item.id === view.slice(5));
+      const n = scopeTasks(tasks, view, today).length;
+      const shared = profile.multiUser && list && ((list.members ?? []).length > 0 || (list.owner && list.owner !== profile.login));
+      const base = n === 0 ? "Пока нет открытых задач" : `${n} открытых`;
+      return shared ? `${base} · общий список` : base;
     }
     const n = scopeTasks(tasks, view, today).length;
     return n === 0 ? "Пока нет открытых задач" : `${n} открытых`;
@@ -202,6 +213,7 @@ export function PlannerApp() {
     view === "week" ||
     view === "inbox" ||
     view === "done" ||
+    view === "shared" ||
     view.startsWith("list:") ||
     view.startsWith("tag:") ||
     view.startsWith("day:") ||
@@ -392,7 +404,7 @@ export function PlannerApp() {
 
       {task ? (
         <aside className="sheet sheet-safe absolute inset-x-0 bottom-0 z-50 flex w-full flex-col bg-surface lg:static lg:inset-auto lg:z-auto lg:w-96 lg:shrink-0 lg:border-l lg:border-line">
-          <TaskDetail taskId={task.id} onClose={() => setSelectedId(null)} />
+          <TaskDetail key={task.id} taskId={task.id} onClose={() => setSelectedId(null)} onOpen={setSelectedId} />
         </aside>
       ) : null}
     </div>

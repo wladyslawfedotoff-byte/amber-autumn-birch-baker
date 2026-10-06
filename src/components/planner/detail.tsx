@@ -2,8 +2,13 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { repeatLabel, todayIso } from "@/lib/dates";
+import { DateMultiPicker } from "@/components/planner/date-multi-picker";
+import { TaskShareControls } from "@/components/planner/sharing";
+import { DuplicateControls, NotesField, SubtasksBlock } from "@/components/planner/task-extras";
+import { cleanDates, dueLabel, repeatLabel, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
+import { ownerOf } from "@/lib/queries";
+import { displayName, useProfile } from "@/lib/use-capabilities";
 import { isImportant, isUrgent } from "@/lib/planner-types";
 import type { Priority, Repeat } from "@/lib/planner-types";
 
@@ -14,7 +19,7 @@ const LEVELS: { value: Priority; label: string }[] = [
   { value: 3, label: "Высокий" },
 ];
 
-export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () => void }) {
+export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClose: () => void; onOpen?: (id: string) => void }) {
   const task = usePlanner((s) => s.tasks.find((item) => item.id === taskId));
   const lists = usePlanner((s) => s.lists);
   const projects = usePlanner((s) => s.projects ?? []);
@@ -22,16 +27,17 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
   const addProject = usePlanner((s) => s.addProject);
   const sendTaskToProject = usePlanner((s) => s.sendTaskToProject);
   const deleteTask = usePlanner((s) => s.deleteTask);
-  const addSubtask = usePlanner((s) => s.addSubtask);
-  const toggleSubtask = usePlanner((s) => s.toggleSubtask);
-  const deleteSubtask = usePlanner((s) => s.deleteSubtask);
+  const setRepeatDates = usePlanner((s) => s.setRepeatDates);
+  const profile = useProfile();
   const [tag, setTag] = useState("");
-  const [sub, setSub] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [projectDraft, setProjectDraft] = useState("");
   const [makingProject, setMakingProject] = useState(false);
 
   if (!task) return null;
+  const me = profile.login;
+  const owner = profile.multiUser && me ? ownerOf(task, profile.dataOwner || me) : me;
+  const foreign = Boolean(profile.multiUser && me && owner !== me);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -52,16 +58,9 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
           className="w-full bg-transparent font-display text-3xl tracking-tight text-fg outline-none"
         />
 
-        <label className="mt-6 block text-xs font-medium text-subtle">
-          Заметка
-          <textarea
-            value={task.notes}
-            onChange={(event) => updateTask(task.id, { notes: event.target.value })}
-            rows={4}
-            placeholder="Контекст, ссылки, что не забыть"
-            className="mt-2 w-full resize-y rounded-md border border-line bg-elevated px-3 py-3 text-base font-normal leading-normal text-fg outline-none placeholder:text-subtle"
-          />
-        </label>
+        <NotesField task={task} />
+
+        <SubtasksBlock task={task} />
 
         <fieldset className="mt-5">
           <legend className="text-xs font-medium text-subtle">Приоритет</legend>
@@ -116,21 +115,35 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          <label className="block text-xs font-medium text-subtle">
-            Дата
-            <input
-              type="date"
-              value={task.due ?? ""}
-              onChange={(event) => updateTask(task.id, { due: event.target.value || null })}
-              className="mt-2 h-11 w-full rounded-md border border-line bg-elevated px-3 text-base font-normal text-fg"
-            />
-          </label>
+          {task.repeat === "dates" ? (
+            <div className="block text-xs font-medium text-subtle">
+              Дата
+              <p className="mt-2 flex h-11 items-center rounded-md border border-line bg-elevated px-3 text-base font-normal text-fg">
+                {task.due ? `ближайшая: ${dueLabel(task.due, todayIso())}` : task.done ? "все даты прошли" : "выберите даты ниже"}
+              </p>
+            </div>
+          ) : (
+            <label className="block text-xs font-medium text-subtle">
+              Дата
+              <input
+                type="date"
+                value={task.due ?? ""}
+                onChange={(event) => updateTask(task.id, { due: event.target.value || null })}
+                className="mt-2 h-11 w-full rounded-md border border-line bg-elevated px-3 text-base font-normal text-fg"
+              />
+            </label>
+          )}
           <label className="block text-xs font-medium text-subtle">
             Повтор
             <select
               value={task.repeat ?? ""}
               onChange={(event) => {
                 const repeat = (event.target.value || null) as Repeat | null;
+                if (repeat === "dates") {
+                  const start = cleanDates(task.repeatDates);
+                  setRepeatDates(task.id, start.length ? start : task.due ? [task.due] : []);
+                  return;
+                }
                 updateTask(task.id, { repeat, due: repeat && !task.due ? todayIso() : task.due });
               }}
               className="mt-2 h-11 w-full rounded-md border border-line bg-elevated px-3 text-base font-normal text-fg"
@@ -140,11 +153,22 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
               <option value="weekdays">{repeatLabel("weekdays")}</option>
               <option value="week">{repeatLabel("week")}</option>
               <option value="month">{repeatLabel("month")}</option>
+              <option value="dates">Выбранные даты…</option>
             </select>
-            {task.repeat ? (
+            {task.repeat === "dates" ? (
+              <span className="mt-2 block font-normal text-muted">
+                Отметьте дни в календаре — задача появится ровно в эти дни: в «Сегодня», календаре и «7 дней». Галочка переносит на следующую
+                выбранную дату, после последней задача закрывается.
+              </span>
+            ) : task.repeat ? (
               <span className="mt-2 block font-normal text-muted">Галочка ставит следующую дату, а не в архив.</span>
             ) : null}
           </label>
+          {task.repeat === "dates" ? (
+            <div className="sm:col-span-2 lg:col-span-1">
+              <DateMultiPicker value={task.repeatDates ?? []} onChange={(dates) => setRepeatDates(task.id, dates)} />
+            </div>
+          ) : null}
           <label className="block text-xs font-medium text-subtle">
             Напомнить
             <input
@@ -298,55 +322,16 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
           </form>
         </div>
 
-        <div className="mt-6">
-          <p className="text-xs font-medium text-subtle">Подзадачи</p>
-          <ul className="mt-2">
-            {task.subtasks.map((item) => (
-              <li key={item.id} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-pressed={item.done}
-                  onClick={() => toggleSubtask(task.id, item.id)}
-                  className="flex h-11 min-w-0 flex-1 items-center gap-3 text-left text-sm"
-                >
-                  <span
-                    className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded-full border",
-                      item.done ? "border-accent bg-accent" : "border-line",
-                    )}
-                  />
-                  <span className={item.done ? "text-subtle line-through" : "text-fg"}>{item.title}</span>
-                </button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`Удалить подзадачу ${item.title}`}
-                  onClick={() => deleteSubtask(task.id, item.id)}
-                >
-                  <X className="size-4" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <form
-            className="mt-1"
-            onSubmit={(event) => {
-              event.preventDefault();
-              addSubtask(task.id, sub);
-              setSub("");
-            }}
-          >
-            <input
-              value={sub}
-              onChange={(event) => setSub(event.target.value)}
-              placeholder="Новая подзадача"
-              aria-label="Новая подзадача"
-              className="h-11 w-full rounded-md border border-line bg-elevated px-3 text-base outline-none placeholder:text-subtle"
-            />
-          </form>
-        </div>
+        <TaskShareControls task={task} />
+
+        <DuplicateControls task={task} onOpen={onOpen} />
 
         <div className="mt-8">
+          {foreign ? (
+            <p className="mb-2 text-xs text-muted">
+              Это задача {displayName(owner, profile)}. «Убрать у себя» — она исчезнет только у вас и останется у владельца.
+            </p>
+          ) : null}
           {confirm ? (
             <div className="flex gap-2">
               <Button variant="soft" onClick={() => setConfirm(false)}>
@@ -359,12 +344,12 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
                   onClose();
                 }}
               >
-                Удалить
+                {foreign ? "Убрать" : "Удалить"}
               </Button>
             </div>
           ) : (
             <Button variant="ghost" className="text-danger" onClick={() => setConfirm(true)}>
-              Удалить задачу
+              {foreign ? "Убрать у себя" : "Удалить задачу"}
             </Button>
           )}
         </div>

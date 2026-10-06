@@ -1,4 +1,4 @@
-import { Check, GripVertical, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Plus } from "lucide-react";
 import { useState, type PointerEvent } from "react";
 import { cn } from "@/lib/cn";
 import { dueLabel, repeatLabel, shiftIso, todayIso } from "@/lib/dates";
@@ -6,6 +6,9 @@ import { parseQuick } from "@/lib/quick-add";
 import { usePlanner } from "@/lib/planner-store";
 import type { Priority, Task } from "@/lib/planner-types";
 import { listName } from "@/lib/queries";
+import { ShareBadges } from "@/components/planner/sharing";
+import { notesPreview, progressLabel, subtaskProgress } from "@/lib/task-tools";
+import { useSubtasksOpen } from "@/lib/use-subtasks-open";
 
 function ring(priority: Priority): string {
   if (priority === 3) return "border-danger";
@@ -35,8 +38,12 @@ export function TaskRow({
   const toggleTask = usePlanner((s) => s.toggleTask);
   const toggleSubtask = usePlanner((s) => s.toggleSubtask);
   const updateTask = usePlanner((s) => s.updateTask);
+  const addSubtask = usePlanner((s) => s.addSubtask);
   const subs = task.subtasks ?? [];
-  const doneSubs = subs.filter((s) => s.done).length;
+  const progress = subtaskProgress(task);
+  const [open, setOpen] = useSubtasksOpen(task.id, !task.done);
+  const [step, setStep] = useState("");
+  const preview = notesPreview(task.notes);
   const overdue = !task.done && task.due != null && task.due < today;
   const tomorrow = shiftIso(today, 1);
   const canPostpone = !task.done && !onDragStart && overdue;
@@ -79,6 +86,12 @@ export function TaskRow({
             >
               {task.title}
             </span>
+            {preview ? (
+              <span className="mt-0.5 flex items-center gap-1 text-xs text-muted">
+                <NotebookText className="size-3 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 truncate">{preview}</span>
+              </span>
+            ) : null}
             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
               {showDue && task.due ? (
                 <span className={overdue ? "text-danger" : undefined}>{dueLabel(task.due, today)}</span>
@@ -91,18 +104,31 @@ export function TaskRow({
               ) : task.remindAt ? (
                 <span className="tabular-nums">{task.remindAt}</span>
               ) : null}
-              {task.repeat ? <span>{repeatLabel(task.repeat)}</span> : null}
+              {task.repeat ? <span>{repeatLabel(task.repeat, task.repeatDates)}</span> : null}
               {showList ? <span>{listName(lists, task.listId)}</span> : null}
-              {subs.length > 0 && task.done ? (
-                <span className="tabular-nums">
-                  {doneSubs}/{subs.length}
-                </span>
-              ) : null}
               {(task.tags ?? []).slice(0, 2).map((tag) => (
                 <span key={tag}>#{tag}</span>
               ))}
+              <ShareBadges task={task} />
             </span>
           </button>
+          {progress.total > 0 ? (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label={`Подзадачи «${task.title}»: ${progress.done} из ${progress.total}. ${open ? "Свернуть" : "Показать"}`}
+              title={open ? "Свернуть подзадачи" : "Показать подзадачи"}
+              onClick={() => setOpen(!open)}
+              className={cn(
+                "flex h-11 shrink-0 items-center gap-1 rounded-full px-2 text-xs tabular-nums",
+                progress.done === progress.total ? "text-accent" : "text-muted",
+              )}
+            >
+              <ListChecks className="size-3.5" aria-hidden="true" />
+              {progressLabel(progress)}
+              {open ? <ChevronDown className="size-3.5" aria-hidden="true" /> : <ChevronRight className="size-3.5" aria-hidden="true" />}
+            </button>
+          ) : null}
           {canPostpone ? (
             <button
               type="button"
@@ -117,13 +143,14 @@ export function TaskRow({
             </button>
           ) : null}
         </div>
-        {!task.done && subs.length > 0 ? (
-          <ul className="mt-1">
+        {open && subs.length > 0 ? (
+          <ul className="mt-1" aria-label={`Подзадачи «${task.title}»`}>
             {subs.map((sub) => (
               <li key={sub.id}>
                 <button
                   type="button"
                   aria-pressed={sub.done}
+                  aria-label={`${sub.done ? "Снять отметку" : "Отметить"}: ${sub.title}`}
                   onClick={() => toggleSubtask(task.id, sub.id)}
                   className="flex h-10 w-full items-center gap-2 text-left text-sm"
                 >
@@ -141,6 +168,33 @@ export function TaskRow({
                 </button>
               </li>
             ))}
+            {!task.done ? (
+              <li>
+                <form
+                  className="flex h-10 items-center gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    addSubtask(task.id, step);
+                    setStep("");
+                  }}
+                >
+                  <Plus className="size-4 shrink-0 text-subtle" aria-hidden="true" />
+                  <input
+                    value={step}
+                    onChange={(event) => setStep(event.target.value)}
+                    onBlur={() => {
+                      if (!step.trim()) return;
+                      addSubtask(task.id, step);
+                      setStep("");
+                    }}
+                    placeholder="Ещё шаг"
+                    aria-label={`Добавить подзадачу к «${task.title}»`}
+                    enterKeyHint="done"
+                    className="h-10 min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-subtle"
+                  />
+                </form>
+              </li>
+            ) : null}
           </ul>
         ) : null}
       </div>

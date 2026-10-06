@@ -561,6 +561,14 @@ test("install page is in Russian and carries no Grok branding", () => {
 test("the project site.json names the app «Пора»", () => {
   const site = JSON.parse(readFileSync(join(TEMPLATE_ROOT, "src/lib/og/site.json"), "utf8"));
   assert.equal(site.title, "Пора");
+  assert.equal(site.tagline, "время делать");
+  assert.match(site.description, /^Пора — время делать\./);
+});
+
+test("the web manifest carries the description when given", () => {
+  const manifest = JSON.parse(renderWebManifest("nas.example.com", "Пора", "Пора — время делать."));
+  assert.equal(manifest.description, "Пора — время делать.");
+  assert.equal("description" in JSON.parse(renderWebManifest("nas.example.com", "Пора")), false);
 });
 
 // Tripwires: the deployed-app path only works if Nitro scans server/ — an

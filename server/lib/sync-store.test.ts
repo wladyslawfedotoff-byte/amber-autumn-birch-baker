@@ -278,3 +278,77 @@ test("an external rewrite of pora.json (restore script) is picked up", async () 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("profiles: a single-user pora.json on disk is migrated to APP_OWNER without losing anything", async () => {
+  const dir = tmp();
+  try {
+    const now = Date.now();
+    const data = emptyData();
+    data.tasks = [
+      { id: "t1", title: "Старое дело", updatedAt: now - 5000 },
+      { id: "t2", title: "Ещё одно", updatedAt: now - 4000 },
+    ];
+    data.lists = [{ id: "l1", name: "Дом", updatedAt: now - 6000 }];
+    data.tombstones.tasks.deleted = now - 3000;
+    writeFileSync(join(dir, "pora.json"), JSON.stringify({ revision: 42, updatedAt: now - 1000, data }));
+    const acl = { owner: "vlad", users: ["vlad", "zhena"] };
+    const store = new SyncStore(dir, { backupIntervalMs: 0 });
+    const vlad = await store.getFor("vlad", acl);
+    assert.equal(vlad.revision, 42, "owner's devices keep syncing with the same revision");
+    assert.deepEqual(vlad.data.tasks.map((t) => t.id), ["t1", "t2"]);
+    assert.equal(vlad.data.tombstones.tasks.deleted, now - 3000);
+    const zhena = await store.getFor("zhena", acl);
+    assert.equal(zhena.revision, 1);
+    assert.equal(zhena.data.tasks.length, 0, "the other profile starts empty");
+    // Nothing is written by reading.
+    assert.equal(JSON.parse(readFileSync(join(dir, "pora.json"), "utf8")).revision, 42);
+    // zhena adds her first task: the file becomes v2 with per-user states, vlad's data untouched.
+    writeFileSync(join(dir, "users.json"), JSON.stringify({ v: 1, users: { zhena: { epoch: 1 } } }));
+    const incoming = emptyData();
+    incoming.tasks = [{ id: "z1", title: "Её задача", updatedAt: now }];
+    const res = await store.putFor("zhena", acl, 1, incoming);
+    assert.equal(res.status, "ok");
+    const file = JSON.parse(readFileSync(join(dir, "pora.json"), "utf8"));
+    assert.equal(file.v, 2);
+    assert.deepEqual(Object.keys(file.users).sort(), ["vlad", "zhena"]);
+    assert.equal(file.users.vlad.revision, 42, "vlad's view did not change");
+    assert.equal(file.users.zhena.revision, 2);
+    assert.deepEqual(file.data.tasks.map((t: SyncEntity) => t.id).sort(), ["t1", "t2", "z1"]);
+    assert.equal(file.data.tasks.find((t: SyncEntity) => t.id === "z1").owner, "zhena");
+    assert.equal(file.data.tasks.find((t: SyncEntity) => t.id === "t1").owner, undefined, "old entities untouched (owner = APP_OWNER)");
+    // Stale If-Match → 409 with zhena's own view.
+    const conflict = await store.putFor("zhena", acl, 1, incoming);
+    assert.equal(conflict.status, "conflict");
+    assert.deepEqual(conflict.doc.data.tasks.map((t) => t.id), ["z1"]);
+    // Backups: pora.json and users.json of the same moment.
+    const backups = readdirSync(join(dir, "backups"));
+    assert.equal(backups.filter((n) => n.startsWith("pora-")).length, 1);
+    assert.equal(backups.filter((n) => n.startsWith("users-")).length, 1);
+    // Switching back to one profile serves the whole document again (users kept in the file).
+    const single = await new SyncStore(dir).get();
+    assert.deepEqual(single.data.tasks.map((t) => t.id).sort(), ["t1", "t2", "z1"]);
+    assert.ok(single.users?.zhena);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("backups: users-….json follows its pora-….json in the retention", async () => {
+  const dir = tmp();
+  try {
+    const store = new SyncStore(dir, { backupHourly: 0, backupDaily: 0 });
+    const backups = join(dir, "backups");
+    await import("node:fs/promises").then((fs) => fs.mkdir(backups, { recursive: true }));
+    const old = backupFileName(Date.UTC(2026, 0, 1), 1);
+    const fresh = backupFileName(Date.UTC(2026, 5, 1), 2);
+    for (const name of [old, fresh]) {
+      writeFileSync(join(backups, name), "{}");
+      writeFileSync(join(backups, `users-${name.slice(5)}`), "{}");
+    }
+    const removed = await store.pruneBackups();
+    assert.deepEqual(removed.sort(), [old, `users-${old.slice(5)}`].sort());
+    assert.deepEqual(readdirSync(backups).sort(), [fresh, `users-${fresh.slice(5)}`].sort());
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

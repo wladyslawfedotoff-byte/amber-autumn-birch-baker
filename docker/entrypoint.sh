@@ -25,14 +25,14 @@ if [ "$(id -u)" = "0" ]; then
     log "WARN  entrypoint: cannot create $DATA_DIR — проверьте volume (./data:/data) / check the volume mount"
   fi
   # Only our own files; never recurse into anything else the user mounted.
-  for path in "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/pora.json" "$DATA_DIR/.session-secret" "$DATA_DIR/.session-epoch"; do
+  for path in "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/pora.json" "$DATA_DIR/.session-secret" "$DATA_DIR/.session-epoch" "$DATA_DIR/users.json"; do
     [ -e "$path" ] || continue
     if ! chown "$APP_UID:$APP_GID" "$path" 2>/dev/null; then
       log "WARN  entrypoint: chown $APP_UID:$APP_GID $path failed"
     fi
   done
   if [ -d "$DATA_DIR/backups" ]; then
-    find "$DATA_DIR/backups" -maxdepth 1 -type f -name 'pora-*.json' -exec chown "$APP_UID:$APP_GID" {} + 2>/dev/null || true
+    find "$DATA_DIR/backups" -maxdepth 1 -type f \( -name 'pora-*.json' -o -name 'users-*.json' \) -exec chown "$APP_UID:$APP_GID" {} + 2>/dev/null || true
   fi
 
   if ! setpriv --reuid="$APP_UID" --regid="$APP_GID" --clear-groups sh -c 'test -w "$1"' _ "$DATA_DIR"; then

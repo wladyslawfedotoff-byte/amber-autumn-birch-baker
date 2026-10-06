@@ -1,9 +1,11 @@
+import { APP_NAME, APP_VERSION } from "@/lib/site";
 import { useRef, useState } from "react";
 import { ACCENTS } from "@/lib/accents";
 import { addFromBackup, saveBackup } from "@/lib/backup";
 import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
-import { dismissLegacyNote, logout, logoutEverywhere, syncServerNow } from "@/lib/server-sync";
+import { changePassword, dismissLegacyNote, logout, logoutEverywhere, syncServerNow } from "@/lib/server-sync";
+import { reloadProfile, useProfile } from "@/lib/use-capabilities";
 import { phaseLabel, useServerSyncStatus } from "@/lib/use-server-sync";
 
 function formatSyncTime(stamp: number | null): string {
@@ -16,6 +18,114 @@ function formatSyncTime(stamp: number | null): string {
   return `${day} в ${time}`;
 }
 
+const MIN_PASSWORD = 12;
+
+function ProfileSection() {
+  const profile = useProfile();
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+  if (!profile.login) return null;
+  const length = [...next].length;
+  const mismatch = repeat.length > 0 && repeat !== next;
+  const canSave = current.length > 0 && length >= MIN_PASSWORD && repeat === next && !busy;
+  const field = "mt-1 h-11 w-full rounded-md border border-line bg-surface px-3 text-base text-fg outline-none";
+  return (
+    <section aria-labelledby="profile-title">
+      <h2 id="profile-title" className="font-display text-lg tracking-tight">
+        Профиль
+      </h2>
+      <p className="mt-1 text-sm text-muted">
+        Вы вошли как <span className="font-medium text-fg">{profile.name || profile.login}</span>
+        {profile.name && profile.name !== profile.login ? <span className="text-subtle"> ({profile.login})</span> : null}.
+        {profile.multiUser
+          ? " У каждого профиля свои задачи, списки и привычки; общими становятся только те, которыми поделились."
+          : " Один профиль на сервере — второй человек добавляется в .env (APP_USERS), см. docs/SYNOLOGY.md."}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => {
+            setOpen((value) => !value);
+            setDone(false);
+            setError("");
+          }}
+          className="h-11 rounded-xl bg-elevated px-4 text-sm text-fg"
+        >
+          Сменить пароль
+        </button>
+        <button type="button" onClick={() => void logout()} className="h-11 rounded-xl px-4 text-sm text-muted">
+          Выйти из профиля
+        </button>
+      </div>
+      {done ? <p className="mt-2 text-sm text-ok" role="status">Пароль изменён. Остальные ваши устройства вышли — там войдите с новым паролем.</p> : null}
+      {open ? (
+        <form
+          className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!canSave) return;
+            setBusy(true);
+            setError("");
+            changePassword(current, next, repeat)
+              .then(() => {
+                setDone(true);
+                setOpen(false);
+                setCurrent("");
+                setNext("");
+                setRepeat("");
+                reloadProfile();
+              })
+              .catch((err: unknown) => setError(err instanceof Error ? err.message : "Не получилось."))
+              .finally(() => setBusy(false));
+          }}
+        >
+          <input type="text" name="username" value={profile.login} autoComplete="username" readOnly hidden aria-hidden="true" tabIndex={-1} />
+          <label className="block text-xs font-medium text-subtle">
+            Текущий пароль
+            <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} className={field} />
+          </label>
+          <label className="mt-3 block text-xs font-medium text-subtle">
+            Новый пароль
+            <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} className={field} aria-describedby="pw-hint" />
+          </label>
+          <p id="pw-hint" className={cn("mt-1 text-xs", next && length < MIN_PASSWORD ? "text-warn" : "text-muted")}>
+            Не короче {MIN_PASSWORD} символов{next ? ` (сейчас ${length})` : ""}. Удобнее всего фраза из 3–4 случайных слов через пробел — её легко
+            запомнить и трудно подобрать.
+          </p>
+          <label className="mt-3 block text-xs font-medium text-subtle">
+            Новый пароль ещё раз
+            <input type="password" autoComplete="new-password" value={repeat} onChange={(e) => setRepeat(e.target.value)} className={field} />
+          </label>
+          {mismatch ? <p className="mt-1 text-xs text-warn">Пароли пока не совпадают.</p> : null}
+          {error ? (
+            <p className="mt-2 text-xs text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <p className="mt-3 text-xs text-muted">
+            Новый пароль хранится на сервере (data/users.json) и заменяет пароль из .env. Остальные ваши устройства выйдут, это — останется. Забыли
+            пароль? Его сбрасывают на сервере: <code>docker exec pora-app node scripts/reset-password.mjs {profile.login}</code>.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="submit" disabled={!canSave} className="h-11 rounded-xl bg-accent px-4 text-sm text-accent-fg disabled:opacity-50">
+              {busy ? "Сохраняем…" : "Сохранить пароль"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="h-11 rounded-xl px-4 text-sm text-muted">
+              Отмена
+            </button>
+          </div>
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
 function ConnectionSection() {
   const status = useServerSyncStatus();
   const [busy, setBusy] = useState(false);
@@ -26,7 +136,9 @@ function ConnectionSection() {
   return (
     <section>
       <h2 className="font-display text-lg tracking-tight">Подключение</h2>
-      <p className="mt-1 text-sm text-muted">Задачи хранятся на вашем сервере и на этом устройстве.</p>
+      <p className="mt-1 text-sm text-muted">
+        Задачи хранятся на вашем сервере и на этом устройстве. {APP_NAME} · версия {APP_VERSION}
+      </p>
       <div className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm">
         <div className="flex items-center gap-2">
           <span
@@ -81,9 +193,9 @@ function ConnectionSection() {
             Выйти на всех устройствах?
           </p>
           <p className="mt-1 text-muted">
-            Все сеансы будут завершены, включая этот: на каждом телефоне и компьютере нужно будет снова ввести пароль.
-            Пригодится, если устройство потеряно или пароль мог узнать кто-то ещё — тогда смените и пароль в .env.
-            Данные не удаляются.
+            Все сеансы вашего профиля будут завершены, включая этот: на каждом вашем телефоне и компьютере нужно будет снова ввести пароль.
+            Пригодится, если устройство потеряно или пароль мог узнать кто-то ещё — тогда смените и пароль («Профиль» → «Сменить пароль»).
+            Другие профили не затронуты. Данные не удаляются.
           </p>
           {allError ? <p className="mt-2 text-xs text-danger">{allError}</p> : null}
           <div className="mt-3 flex flex-wrap gap-2">
@@ -174,6 +286,7 @@ export function SettingsView() {
 
   return (
     <div className="mx-auto max-w-md pb-8">
+      <ProfileSection />
       <ConnectionSection />
 
       <section className="mt-8">

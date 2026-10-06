@@ -4,10 +4,12 @@ import { TodayStrip, TodaySummary, WeekDays } from "@/components/planner/today-s
 import { AddTaskForm, TaskRow } from "@/components/planner/task-row";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { dueLabel, formatLong, shiftIso, todayIso } from "@/lib/dates";
+import { dueLabel, formatLong, shiftIso, todayIso, occursOn } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { Priority, Task, View } from "@/lib/planner-types";
 import { byNewest, doneInScope, matchesQuery, scopeTasks } from "@/lib/queries";
+import { ListShareBar } from "@/components/planner/sharing";
+import { useShareScope } from "@/lib/use-share-scope";
 
 function defaultsFor(view: View, today: string): { listId: string | null; due: string | null } {
   if (view.startsWith("list:")) return { listId: view.slice(5), due: null };
@@ -56,13 +58,22 @@ export function TaskViews({
   const found = searching
     ? tasks.filter((task) => matchesQuery(task, query, lists)).sort(byNewest)
     : [];
-  const open = scopeTasks(tasks, view, today).sort(byNewest);
-  const done = doneInScope(tasks, view, today);
+  const share = useShareScope();
+  const open = scopeTasks(tasks, view, today, share).sort(byNewest);
+  const done = doneInScope(tasks, view, today, share);
+  const currentList = view.startsWith("list:") ? lists.find((list) => list.id === view.slice(5)) : undefined;
   const canAdd = !searching && view !== "done" && view !== "calendar" && view !== "focus" && view !== "habits";
 
   return (
     <div>
-      {canAdd && view !== "today" ? (
+      {currentList && !searching ? <ListShareBar list={currentList} /> : null}
+      {view === "shared" && !searching ? (
+        <p className="mb-3 text-sm text-muted">
+          Задачи, которые видите не только вы: совместные, назначенные и из общих списков. Поделиться — откройте задачу → «Совместная» или
+          «Назначить»; целый список — в его заголовке.
+        </p>
+      ) : null}
+      {canAdd && view !== "today" && view !== "shared" ? (
         <AddTaskForm
           placeholder="Созвон завтра в 10"
           onAdd={(title) =>
@@ -155,12 +166,17 @@ export function TaskViews({
         </>
       ) : board ? (
         <PriorityBoard tasks={open} today={today} selectedId={selectedId} onOpen={onOpen} onPriority={(id, priority) => updateTask(id, { priority, important: priority >= 2 })} />
+      ) : open.length === 0 && view === "shared" ? (
+        <Empty
+          title="Общих задач пока нет"
+          hint="Откройте любую задачу и отметьте человека в «Совместная» — она появится здесь у обоих. Или «Назначить», чтобы поручить."
+        />
       ) : open.length === 0 && view !== "done" ? (
         <Empty
           title={
             view === "inbox" ? "Входящие пусты" : view === "tomorrow" ? "На завтра пусто" : view.startsWith("tag:") ? "С этим тегом пусто" : "Список пуст"
           }
-          hint="Добавьте задачу — она останется на этом устройстве."
+          hint={share ? "Добавьте задачу — она видна только вам, пока вы ею не поделитесь." : "Добавьте задачу — она останется на этом устройстве."}
         />
       ) : view === "done" ? (
         doneAll(tasks, selectedId, today, onOpen)
@@ -173,7 +189,7 @@ export function TaskViews({
               today={today}
               selected={selectedId === task.id}
               showDue
-              showList={view.startsWith("tag:")}
+              showList={view.startsWith("tag:") || view === "shared"}
               onOpen={onOpen}
             />
           ))}
@@ -300,7 +316,7 @@ function WeekGroups({
 }) {
   const days = Array.from({ length: 7 }, (_, index) => shiftIso(today, index));
   const groups = days
-    .map((day) => ({ day, items: tasks.filter((task) => task.due === day) }))
+    .map((day) => ({ day, items: tasks.filter((task) => occursOn(task, day)) }))
     .filter((group) => group.items.length > 0);
   if (groups.length === 0) {
     return <Empty title="Неделя свободна" hint="Задачи с датой на ближайшие 7 дней появятся здесь." />;

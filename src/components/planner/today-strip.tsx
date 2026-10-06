@@ -1,4 +1,4 @@
-import { countdownLabel, daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter } from "@/lib/dates";
+import { countdownLabel, daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter, occursOn } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { cn } from "@/lib/cn";
 
@@ -53,7 +53,7 @@ export function WeekDays({
   return (
     <div className="grid grid-cols-7 gap-1">
       {days.map((day) => {
-        const count = tasks.filter((task) => !task.done && task.due === day).length;
+        const count = tasks.filter((task) => !task.done && occursOn(task, day)).length;
         const habitsDone = habits.length > 0 && habits.every((habit) => habit.checks.includes(day));
         const on = day === selected;
         return (

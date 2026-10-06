@@ -69,7 +69,11 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((b - a) / 86_400_000);
 }
 
-export function repeatLabel(repeat: Repeat): string {
+export function repeatLabel(repeat: Repeat, dates?: readonly string[]): string {
+  if (repeat === "dates") {
+    const n = dates?.length ?? 0;
+    return n ? `выбранные даты (${n})` : "выбранные даты";
+  }
   if (repeat === "day") return "каждый день";
   if (repeat === "weekdays") return "по будням";
   if (repeat === "week") return "каждую неделю";
@@ -89,6 +93,45 @@ function addMonthsIso(iso: string, months: number): string {
   return todayIso(anchor);
 }
 
+/** Sorted unique valid ISO dates. */
+export function cleanDates(dates: readonly unknown[] | undefined | null): string[] {
+  if (!Array.isArray(dates)) return [];
+  return [...new Set(dates.filter((d): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort();
+}
+
+/**
+ * «Выбранные даты»: the occurrence to show after ticking off `due` — the first
+ * chosen date after `due` that is not in the past (missed dates are skipped
+ * like with the other repeats). null = none left (the task is done).
+ */
+export function nextChosenDate(dates: readonly string[] | undefined, due: string | null, today: string): string | null {
+  for (const date of cleanDates(dates)) {
+    if ((!due || date > due) && date >= today) return date;
+  }
+  return null;
+}
+
+/** The current occurrence for a freshly edited date set: the first chosen date from today on (else the last one). */
+export function firstChosenDate(dates: readonly string[] | undefined, today: string): string | null {
+  const sorted = cleanDates(dates);
+  return sorted.find((date) => date >= today) ?? sorted[sorted.length - 1] ?? null;
+}
+
+/** Dates on which a task shows up: all pending chosen dates for «Выбранные даты», else its due date. */
+export function taskDates(task: { due: string | null; repeat?: Repeat | null; repeatDates?: string[]; done?: boolean }): string[] {
+  if (task.repeat === "dates" && task.due && !task.done) {
+    const due = task.due;
+    const rest = cleanDates(task.repeatDates).filter((date) => date > due);
+    return [due, ...rest];
+  }
+  return task.due ? [task.due] : [];
+}
+
+export function occursOn(task: { due: string | null; repeat?: Repeat | null; repeatDates?: string[]; done?: boolean }, iso: string): boolean {
+  if (task.repeat === "dates" && !task.done) return taskDates(task).includes(iso);
+  return task.due === iso;
+}
+
 function stepRepeat(iso: string, repeat: Repeat): string {
   if (repeat === "day") return shiftIso(iso, 1);
   if (repeat === "week") return shiftIso(iso, 7);
@@ -99,7 +142,7 @@ function stepRepeat(iso: string, repeat: Repeat): string {
 }
 
 /** The next occurrence after both the current due date and today. */
-export function nextRepeat(due: string, repeat: Repeat, today: string): string {
+export function nextRepeat(due: string, repeat: Exclude<Repeat, "dates">, today: string): string {
   let cursor = stepRepeat(due, repeat);
   let guard = 0;
   while (cursor <= today && guard < 400) {

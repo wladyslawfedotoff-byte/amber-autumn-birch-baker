@@ -1,17 +1,19 @@
 /**
- * Single-password gate for everything dynamic: HTML pages, /api/*, and
+ * Login gate for everything dynamic: HTML pages, /api/*, and
  * TanStack server functions (/_serverFn/*, e.g. planTasks).
  *
  * Public: /api/health, /login, POST /api/login, POST /api/logout, the PWA
  * manifest/icons and built static assets (those are served by Nitro's static
  * handler before this middleware runs and contain no user data).
  *
- * FAIL CLOSED: with no APP_PASSWORD / APP_PASSWORD_HASH nothing else is served.
+ * FAIL CLOSED: with no usable password nothing else is served.
+ * A valid session stores its login in event.context (server/lib/principal.ts).
  */
 import { getAuthConfig } from "../lib/auth.ts";
 import { NO_LOG_HEADER, html, isSameOrigin, json, redirect, wantsHtml, type ServerEvent } from "../lib/http.ts";
 import { log, logThrottled } from "../lib/log.ts";
 import { notConfiguredPage } from "../lib/pages.ts";
+import { setPrincipalLogin } from "../lib/principal.ts";
 import { readSession, sessionCookie, shouldRenew } from "../lib/session-cookie.ts";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -55,7 +57,7 @@ export default function auth(event: ServerEvent): Response | undefined {
     }
     return wantsHtml(event)
       ? html(503, notConfiguredPage(config.reason), { [NO_LOG_HEADER]: "1" })
-      : json(503, { error: "auth_not_configured", message: "На сервере не задан APP_PASSWORD." }, { [NO_LOG_HEADER]: "1" });
+      : json(503, { error: "auth_not_configured", message: "На сервере не задан пароль (APP_PASSWORD или APP_USERS)." }, { [NO_LOG_HEADER]: "1" });
   }
 
   if (!SAFE_METHODS.has(method) && !isSameOrigin(event)) {
@@ -72,7 +74,10 @@ export default function auth(event: ServerEvent): Response | undefined {
     return json(403, { error: "cross_origin", message: "Запрос с чужого сайта отклонён." });
   }
 
-  if (config.mode === "disabled") return undefined;
+  if (config.mode === "disabled") {
+    setPrincipalLogin(event, config.owner);
+    return undefined;
+  }
   if (isLoginSurface(path) || isPublicAsset(path)) return undefined;
 
   const session = readSession(event);
@@ -84,7 +89,8 @@ export default function auth(event: ServerEvent): Response | undefined {
     return json(401, { error: "unauthorized", message: "Нужно войти." });
   }
   if (shouldRenew(session) && method !== "HEAD") {
-    event.res.headers.append("set-cookie", sessionCookie(event, session));
+    event.res.headers.append("set-cookie", sessionCookie(event, { login: session.login }, session));
   }
+  setPrincipalLogin(event, session.login);
   return undefined;
 }

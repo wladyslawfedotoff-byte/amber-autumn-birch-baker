@@ -1,9 +1,11 @@
-import { json } from "../../lib/http.ts";
+import type { ServerEvent } from "../../lib/http.ts";
+import me from "./me.get.ts";
 
 /**
- * What optional features this server has (authenticated: not on the login
- * surface, so 01.auth requires a session). Never reveals the key itself.
+ * What optional features this server has, plus the signed-in profile
+ * (authenticated: not on the login surface, so 01.auth requires a session).
+ * Never reveals the key itself. Same payload as /api/me.
  */
-export default function capabilities(): Response {
-  return json(200, { assistant: Boolean(process.env.XAI_API_KEY?.trim()) });
+export default function capabilities(event: ServerEvent): Response {
+  return me(event);
 }

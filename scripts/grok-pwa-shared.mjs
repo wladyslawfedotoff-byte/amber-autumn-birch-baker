@@ -162,12 +162,14 @@ export function renderInstallPageHtml(template, { host, url, appName } = {}) {
     .replaceAll("{{APP_URL}}", escapeHtml(stripInstallParams(url)));
 }
 
-export function renderWebManifest(hostHeader, appName = "") {
+export function renderWebManifest(hostHeader, appName = "", description = "") {
   const name = resolveAppName(hostHeader, appName);
+  const about = String(description ?? "").trim();
   return JSON.stringify(
     {
       name,
       short_name: name,
+      ...(about ? { description: about } : {}),
       id: "/",
       start_url: "/",
       scope: "/",
