@@ -291,33 +291,33 @@ test("profiles: a single-user pora.json on disk is migrated to APP_OWNER without
     data.lists = [{ id: "l1", name: "Дом", updatedAt: now - 6000 }];
     data.tombstones.tasks.deleted = now - 3000;
     writeFileSync(join(dir, "pora.json"), JSON.stringify({ revision: 42, updatedAt: now - 1000, data }));
-    const acl = { owner: "vlad", users: ["vlad", "zhena"] };
+    const acl = { owner: "user1", users: ["user1", "user2"] };
     const store = new SyncStore(dir, { backupIntervalMs: 0 });
-    const vlad = await store.getFor("vlad", acl);
-    assert.equal(vlad.revision, 42, "owner's devices keep syncing with the same revision");
-    assert.deepEqual(vlad.data.tasks.map((t) => t.id), ["t1", "t2"]);
-    assert.equal(vlad.data.tombstones.tasks.deleted, now - 3000);
-    const zhena = await store.getFor("zhena", acl);
-    assert.equal(zhena.revision, 1);
-    assert.equal(zhena.data.tasks.length, 0, "the other profile starts empty");
+    const user1 = await store.getFor("user1", acl);
+    assert.equal(user1.revision, 42, "owner's devices keep syncing with the same revision");
+    assert.deepEqual(user1.data.tasks.map((t) => t.id), ["t1", "t2"]);
+    assert.equal(user1.data.tombstones.tasks.deleted, now - 3000);
+    const user2 = await store.getFor("user2", acl);
+    assert.equal(user2.revision, 1);
+    assert.equal(user2.data.tasks.length, 0, "the other profile starts empty");
     // Nothing is written by reading.
     assert.equal(JSON.parse(readFileSync(join(dir, "pora.json"), "utf8")).revision, 42);
-    // zhena adds her first task: the file becomes v2 with per-user states, vlad's data untouched.
-    writeFileSync(join(dir, "users.json"), JSON.stringify({ v: 1, users: { zhena: { epoch: 1 } } }));
+    // user2 adds her first task: the file becomes v2 with per-user states, user1's data untouched.
+    writeFileSync(join(dir, "users.json"), JSON.stringify({ v: 1, users: { user2: { epoch: 1 } } }));
     const incoming = emptyData();
     incoming.tasks = [{ id: "z1", title: "Её задача", updatedAt: now }];
-    const res = await store.putFor("zhena", acl, 1, incoming);
+    const res = await store.putFor("user2", acl, 1, incoming);
     assert.equal(res.status, "ok");
     const file = JSON.parse(readFileSync(join(dir, "pora.json"), "utf8"));
     assert.equal(file.v, 2);
-    assert.deepEqual(Object.keys(file.users).sort(), ["vlad", "zhena"]);
-    assert.equal(file.users.vlad.revision, 42, "vlad's view did not change");
-    assert.equal(file.users.zhena.revision, 2);
+    assert.deepEqual(Object.keys(file.users).sort(), ["user1", "user2"]);
+    assert.equal(file.users.user1.revision, 42, "user1's view did not change");
+    assert.equal(file.users.user2.revision, 2);
     assert.deepEqual(file.data.tasks.map((t: SyncEntity) => t.id).sort(), ["t1", "t2", "z1"]);
-    assert.equal(file.data.tasks.find((t: SyncEntity) => t.id === "z1").owner, "zhena");
+    assert.equal(file.data.tasks.find((t: SyncEntity) => t.id === "z1").owner, "user2");
     assert.equal(file.data.tasks.find((t: SyncEntity) => t.id === "t1").owner, undefined, "old entities untouched (owner = APP_OWNER)");
-    // Stale If-Match → 409 with zhena's own view.
-    const conflict = await store.putFor("zhena", acl, 1, incoming);
+    // Stale If-Match → 409 with user2's own view.
+    const conflict = await store.putFor("user2", acl, 1, incoming);
     assert.equal(conflict.status, "conflict");
     assert.deepEqual(conflict.doc.data.tasks.map((t) => t.id), ["z1"]);
     // Backups: pora.json and users.json of the same moment.
@@ -327,7 +327,7 @@ test("profiles: a single-user pora.json on disk is migrated to APP_OWNER without
     // Switching back to one profile serves the whole document again (users kept in the file).
     const single = await new SyncStore(dir).get();
     assert.deepEqual(single.data.tasks.map((t) => t.id).sort(), ["t1", "t2", "z1"]);
-    assert.ok(single.users?.zhena);
+    assert.ok(single.users?.user2);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

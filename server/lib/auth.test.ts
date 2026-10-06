@@ -68,23 +68,23 @@ test("session tokens: valid, tamper-proof, expire, and die when the password cha
 
 test("session tokens carry the login; each login has its own key and epoch", () => {
   const now = 1_700_000_000_000;
-  const keys: Keys = { vlad: { fingerprint: "fpV", epoch: "0-0" }, zhena: { fingerprint: "fpZ", epoch: "0-3" } };
+  const keys: Keys = { user1: { fingerprint: "fpV", epoch: "0-0" }, user2: { fingerprint: "fpZ", epoch: "0-3" } };
   const lookup = (login: string) => keys[login] ?? null;
-  const vlad = mk("fpV", "0-0", now, undefined, "vlad");
-  const zhena = mk("fpZ", "0-3", now, undefined, "zhena");
-  assert.equal(verifySessionToken(vlad, SECRET, lookup, now + 1)?.login, "vlad");
-  assert.equal(verifySessionToken(zhena, SECRET, lookup, now + 1)?.login, "zhena");
+  const user1 = mk("fpV", "0-0", now, undefined, "user1");
+  const user2 = mk("fpZ", "0-3", now, undefined, "user2");
+  assert.equal(verifySessionToken(user1, SECRET, lookup, now + 1)?.login, "user1");
+  assert.equal(verifySessionToken(user2, SECRET, lookup, now + 1)?.login, "user2");
   // Swapping the login inside a token breaks the signature.
-  const forged = vlad.split(".");
-  forged[1] = "zhena";
+  const forged = user1.split(".");
+  forged[1] = "user2";
   assert.equal(verifySessionToken(forged.join("."), SECRET, lookup, now + 1), null, "login is signed");
-  // Per-user «выйти везде»: only zhena's epoch moves.
-  keys.zhena = { fingerprint: "fpZ", epoch: "0-4" };
-  assert.equal(verifySessionToken(zhena, SECRET, lookup, now + 1), null);
-  assert.ok(verifySessionToken(vlad, SECRET, lookup, now + 1));
+  // Per-user «выйти везде»: only user2's epoch moves.
+  keys.user2 = { fingerprint: "fpZ", epoch: "0-4" };
+  assert.equal(verifySessionToken(user2, SECRET, lookup, now + 1), null);
+  assert.ok(verifySessionToken(user1, SECRET, lookup, now + 1));
   // A removed login is rejected.
-  delete keys.vlad;
-  assert.equal(verifySessionToken(vlad, SECRET, lookup, now + 1), null);
+  delete keys.user1;
+  assert.equal(verifySessionToken(user1, SECRET, lookup, now + 1), null);
   assert.throws(() => mk("fp", 0, now, undefined, "Bad Login"));
 });
 
@@ -128,62 +128,62 @@ test("old (v1/v2) session cookies are rejected: users just log in again", () => 
 });
 
 test("profiles from .env: APP_USERS, USER_<LOGIN>_PASSWORD(_HASH), names, owner", () => {
-  const hash = hashPassword("zhena-password-1", { N: 1024 });
+  const hash = hashPassword("user2-password-1", { N: 1024 });
   const config = buildAuthConfig({
-    APP_USERS: "vlad, zhena,my-son",
-    USER_VLAD_PASSWORD: "vlad-password-123",
-    USER_VLAD_NAME: "Владислав",
-    USER_ZHENA_PASSWORD_HASH: hash,
+    APP_USERS: "user1, user2,my-son",
+    USER_USER1_PASSWORD: "user1-password-123",
+    USER_USER1_NAME: "Пользователь 1",
+    USER_USER2_PASSWORD_HASH: hash,
     USER_MY_SON_PASSWORD: "son-password-1234",
-    APP_OWNER: "vlad",
+    APP_OWNER: "user1",
   });
   assert.equal(config.mode, "users");
   assert.ok(isActive(config));
   if (!isActive(config)) return;
-  assert.deepEqual(config.logins, ["vlad", "zhena", "my-son"]);
-  assert.equal(config.owner, "vlad");
+  assert.deepEqual(config.logins, ["user1", "user2", "my-son"]);
+  assert.equal(config.owner, "user1");
   assert.equal(config.multiUser, true);
-  assert.equal(config.accounts.get("vlad")!.name, "Владислав");
-  assert.equal(config.accounts.get("zhena")!.name, "zhena");
-  assert.equal(config.accounts.get("vlad")!.verify!("vlad-password-123"), true);
-  assert.equal(config.accounts.get("vlad")!.verify!("zhena-password-1"), false);
-  assert.equal(config.accounts.get("zhena")!.verify!("zhena-password-1"), true);
+  assert.equal(config.accounts.get("user1")!.name, "Пользователь 1");
+  assert.equal(config.accounts.get("user2")!.name, "user2");
+  assert.equal(config.accounts.get("user1")!.verify!("user1-password-123"), true);
+  assert.equal(config.accounts.get("user1")!.verify!("user2-password-1"), false);
+  assert.equal(config.accounts.get("user2")!.verify!("user2-password-1"), true);
   assert.equal(config.accounts.get("my-son")!.verify!("son-password-1234"), true);
   assert.equal(envKey("my-son"), "MY_SON");
 });
 
 test("profiles: owner falls back to APP_PASSWORD; bad logins and clashes fail closed; broken users are disabled", () => {
-  const migrated = buildAuthConfig({ APP_USERS: "vlad,zhena", APP_PASSWORD: "old-shared-password", USER_ZHENA_PASSWORD: "zhena-password-1" });
+  const migrated = buildAuthConfig({ APP_USERS: "user1,user2", APP_PASSWORD: "old-shared-password", USER_USER2_PASSWORD: "user2-password-1" });
   assert.ok(isActive(migrated));
   if (isActive(migrated)) {
-    assert.equal(migrated.owner, "vlad", "default owner = first user");
-    assert.equal(migrated.accounts.get("vlad")!.verify!("old-shared-password"), true, "owner keeps the old password");
-    assert.equal(migrated.accounts.get("zhena")!.verify!("old-shared-password"), false, "nobody else gets it");
+    assert.equal(migrated.owner, "user1", "default owner = first user");
+    assert.equal(migrated.accounts.get("user1")!.verify!("old-shared-password"), true, "owner keeps the old password");
+    assert.equal(migrated.accounts.get("user2")!.verify!("old-shared-password"), false, "nobody else gets it");
   }
-  const owner2 = buildAuthConfig({ APP_USERS: "vlad,zhena", APP_OWNER: "zhena", APP_PASSWORD: "old-shared-password", USER_VLAD_PASSWORD: "vlad-password-123" });
-  assert.ok(isActive(owner2) && owner2.owner === "zhena" && owner2.accounts.get("zhena")!.verify!("old-shared-password"));
-  const unknownOwner = buildAuthConfig({ APP_USERS: "vlad", APP_OWNER: "petya", USER_VLAD_PASSWORD: "vlad-password-123" });
-  assert.ok(isActive(unknownOwner) && unknownOwner.owner === "vlad" && unknownOwner.problems.length === 1);
-  assert.equal(buildAuthConfig({ APP_USERS: "Vlad", USER_VLAD_PASSWORD: "vlad-password-123" }).mode, "invalid", "upper case");
-  assert.equal(buildAuthConfig({ APP_USERS: "влад", APP_PASSWORD: "vlad-password-123" }).mode, "invalid", "cyrillic");
-  assert.equal(buildAuthConfig({ APP_USERS: "a-b,a_b", USER_A_B_PASSWORD: "vlad-password-123" }).mode, "invalid", "env key clash");
-  assert.equal(buildAuthConfig({ APP_USERS: "vlad,vlad", USER_VLAD_PASSWORD: "vlad-password-123" }).mode, "invalid", "duplicate");
-  assert.equal(buildAuthConfig({ APP_USERS: "vlad,zhena" }).mode, "invalid", "nobody has a password");
-  const partly = buildAuthConfig({ APP_USERS: "vlad,zhena", USER_VLAD_PASSWORD: "vlad-password-123", USER_ZHENA_PASSWORD: "short" });
+  const owner2 = buildAuthConfig({ APP_USERS: "user1,user2", APP_OWNER: "user2", APP_PASSWORD: "old-shared-password", USER_USER1_PASSWORD: "user1-password-123" });
+  assert.ok(isActive(owner2) && owner2.owner === "user2" && owner2.accounts.get("user2")!.verify!("old-shared-password"));
+  const unknownOwner = buildAuthConfig({ APP_USERS: "user1", APP_OWNER: "petya", USER_USER1_PASSWORD: "user1-password-123" });
+  assert.ok(isActive(unknownOwner) && unknownOwner.owner === "user1" && unknownOwner.problems.length === 1);
+  assert.equal(buildAuthConfig({ APP_USERS: "User1", USER_USER1_PASSWORD: "user1-password-123" }).mode, "invalid", "upper case");
+  assert.equal(buildAuthConfig({ APP_USERS: "пользователь", APP_PASSWORD: "user1-password-123" }).mode, "invalid", "cyrillic");
+  assert.equal(buildAuthConfig({ APP_USERS: "a-b,a_b", USER_A_B_PASSWORD: "user1-password-123" }).mode, "invalid", "env key clash");
+  assert.equal(buildAuthConfig({ APP_USERS: "user1,user1", USER_USER1_PASSWORD: "user1-password-123" }).mode, "invalid", "duplicate");
+  assert.equal(buildAuthConfig({ APP_USERS: "user1,user2" }).mode, "invalid", "nobody has a password");
+  const partly = buildAuthConfig({ APP_USERS: "user1,user2", USER_USER1_PASSWORD: "user1-password-123", USER_USER2_PASSWORD: "short" });
   assert.ok(isActive(partly));
   if (isActive(partly)) {
-    assert.equal(partly.accounts.get("zhena")!.verify, null, "too short → this user cannot log in");
-    assert.equal(partly.problems[0]!.login, "zhena");
+    assert.equal(partly.accounts.get("user2")!.verify, null, "too short → this user cannot log in");
+    assert.equal(partly.problems[0]!.login, "user2");
   }
-  const placeholder = buildAuthConfig({ APP_USERS: "vlad", USER_VLAD_PASSWORD: "СМЕНИТЕ_МЕНЯ_ВЛАД" });
+  const placeholder = buildAuthConfig({ APP_USERS: "user1", USER_USER1_PASSWORD: "СМЕНИТЕ_МЕНЯ_ПОЛЬЗОВАТЕЛЬ1" });
   assert.equal(placeholder.mode, "invalid");
 });
 
 test("one profile (old .env): login admin / APP_DEFAULT_USER, data owner = that login", () => {
   const legacy = buildAuthConfig({ APP_PASSWORD: "old-shared-password" });
   assert.ok(isActive(legacy) && !legacy.multiUser && legacy.owner === "admin" && legacy.logins.join() === "admin");
-  const named = buildAuthConfig({ APP_PASSWORD: "old-shared-password", APP_DEFAULT_USER: "vlad" });
-  assert.ok(isActive(named) && named.owner === "vlad");
+  const named = buildAuthConfig({ APP_PASSWORD: "old-shared-password", APP_DEFAULT_USER: "user1" });
+  assert.ok(isActive(named) && named.owner === "user1");
   const bad = buildAuthConfig({ APP_PASSWORD: "old-shared-password", APP_DEFAULT_USER: "Не логин" });
   assert.ok(isActive(bad) && bad.owner === "admin");
 });
@@ -191,28 +191,28 @@ test("one profile (old .env): login admin / APP_DEFAULT_USER, data owner = that 
 test("users.json: in-app password wins over .env, reset brings .env back, epochs bump", () => {
   const dir = mkdtempSync(join(tmpdir(), "pora-users-"));
   try {
-    const config = buildAuthConfig({ APP_USERS: "vlad,zhena", USER_VLAD_PASSWORD: "vlad-password-123", USER_ZHENA_PASSWORD: "zhena-password-1" });
+    const config = buildAuthConfig({ APP_USERS: "user1,user2", USER_USER1_PASSWORD: "user1-password-123", USER_USER2_PASSWORD: "user2-password-1" });
     assert.ok(isActive(config));
     if (!isActive(config)) return;
-    const vlad = config.accounts.get("vlad")!;
-    const fp0 = effectiveFingerprint(vlad, dir);
-    assert.equal(verifyCredentials(config, "vlad", "vlad-password-123", dir)?.login, "vlad");
-    assert.equal(verifyCredentials(config, "nobody", "vlad-password-123", dir), null, "unknown login");
-    assert.equal(verifyCredentials(config, "zhena", "vlad-password-123", dir), null, "someone else's password");
-    setUserPassword("vlad", "new-vlad-password-1", 1000, dir);
-    assert.equal(verifyCredentials(config, "vlad", "vlad-password-123", dir), null, "old .env password no longer works");
-    assert.equal(verifyCredentials(config, "vlad", "new-vlad-password-1", dir)?.login, "vlad");
-    assert.notEqual(effectiveFingerprint(vlad, dir), fp0, "sessions of the old password die");
+    const user1 = config.accounts.get("user1")!;
+    const fp0 = effectiveFingerprint(user1, dir);
+    assert.equal(verifyCredentials(config, "user1", "user1-password-123", dir)?.login, "user1");
+    assert.equal(verifyCredentials(config, "nobody", "user1-password-123", dir), null, "unknown login");
+    assert.equal(verifyCredentials(config, "user2", "user1-password-123", dir), null, "someone else's password");
+    setUserPassword("user1", "new-user1-password-1", 1000, dir);
+    assert.equal(verifyCredentials(config, "user1", "user1-password-123", dir), null, "old .env password no longer works");
+    assert.equal(verifyCredentials(config, "user1", "new-user1-password-1", dir)?.login, "user1");
+    assert.notEqual(effectiveFingerprint(user1, dir), fp0, "sessions of the old password die");
     assert.equal(statSync(join(dir, "users.json")).mode & 0o777, 0o600);
-    assert.equal(userOverride("vlad", dir).epoch, 1);
-    assert.equal(userOverride("zhena", dir).epoch, undefined, "other users untouched");
+    assert.equal(userOverride("user1", dir).epoch, 1);
+    assert.equal(userOverride("user2", dir).epoch, undefined, "other users untouched");
     // reset (what scripts/reset-password.mjs does)
-    writeUsersFileSync(dir, withoutPassword(readUsersFile(dir), "vlad", 2000));
-    assert.equal(verifyCredentials(config, "vlad", "vlad-password-123", dir)?.login, "vlad");
-    assert.equal(effectiveFingerprint(vlad, dir), fp0);
-    assert.equal(userOverride("vlad", dir).epoch, 2);
-    bumpUserEpoch("zhena", dir);
-    assert.equal(userOverride("zhena", dir).epoch, 1);
+    writeUsersFileSync(dir, withoutPassword(readUsersFile(dir), "user1", 2000));
+    assert.equal(verifyCredentials(config, "user1", "user1-password-123", dir)?.login, "user1");
+    assert.equal(effectiveFingerprint(user1, dir), fp0);
+    assert.equal(userOverride("user1", dir).epoch, 2);
+    bumpUserEpoch("user2", dir);
+    assert.equal(userOverride("user2", dir).epoch, 1);
     assert.equal(readdirSync(dir).filter((name) => name.includes(".tmp-")).length, 0, "no temp files left");
   } finally {
     resetUserStoreCache();

@@ -282,27 +282,29 @@ sudo docker exec pora-app node scripts/restore-backup.mjs pora-2026-10-06T07-30-
 1. Сделайте копию: `sudo cp -a /volume1/docker/pora/data /volume1/docker/pora/data-before-profiles` (или проверьте свежую копию в Hyper Backup).
 2. Получите хэш пароля для второго профиля (спросит пароль дважды):
    ```bash
-   sudo docker exec -it pora-app node scripts/hash-password.mjs zhena
-   # → USER_ZHENA_PASSWORD_HASH=scrypt:32768:8:1:…
+   sudo docker exec -it pora-app node scripts/hash-password.mjs user2
+   # → USER_USER2_PASSWORD_HASH=scrypt:32768:8:1:…
    ```
 3. Добавьте в `/volume1/docker/pora/.env` (старые строки `APP_PASSWORD` / `APP_PASSWORD_HASH` **оставьте** — это пароль владельца):
    ```dotenv
-   APP_USERS=vlad,zhena
-   APP_OWNER=vlad
-   USER_VLAD_NAME=Влад
-   USER_ZHENA_NAME=Женя
-   USER_ZHENA_PASSWORD_HASH=scrypt:32768:8:1:<соль>:<хэш>
+   APP_USERS=user1,user2
+   APP_OWNER=user1
+   USER_USER1_NAME=Пользователь 1
+   USER_USER2_NAME=Пользователь 2
+   USER_USER2_PASSWORD_HASH=scrypt:32768:8:1:<соль>:<хэш>
    ```
    Логины — латиница `a–z`, цифры, `_` и `-`. Имя переменной: `USER_` + логин заглавными (`-` → `_`).
 4. Пересоздайте контейнер (переменные `.env` читаются только при создании): Container Manager → Проект `pora` → «Остановить» → «Собрать»/«Запустить», или `cd /volume1/docker/pora && sudo docker compose up -d --force-recreate`.
-5. Проверьте журнал: `auth.ready mode=users users=vlad,zhena owner=vlad`. Если есть `auth.user_problem` — у профиля нет пароля или он короче 12 символов (такой профиль не может войти, остальные работают).
+5. Проверьте журнал: `auth.ready mode=users users=user1,user2 owner=user1`. Если есть `auth.user_problem` — у профиля нет пароля или он короче 12 символов (такой профиль не может войти, остальные работают).
 6. На каждом устройстве один раз войдите заново, теперь с полем «Логин». Владелец видит все прежние задачи; у второго профиля — пусто. Устройство, на котором раньше работал владелец, при входе другим профилем не переносит его данные: оно загружает только данные вошедшего.
 
 Откат: уберите строки шага 3 и пересоздайте контейнер — всё снова видно под одним паролем (задачи второго профиля тоже окажутся в общем списке, ничего не удаляется).
 
 ### 9.2. Добавить ещё одного пользователя
 
-Допишите логин в `APP_USERS` (`APP_USERS=vlad,zhena,masha`), добавьте `USER_MASHA_PASSWORD_HASH=…` (п. 9.1, шаг 2) и по желанию `USER_MASHA_NAME=Маша`, пересоздайте контейнер. Убрать пользователя: удалите его из `APP_USERS` — его задачи остаются в файле и вернутся, если добавить логин снова.
+Профилей может быть сколько угодно, например `APP_USERS=user1,user2,user3`; для каждого логина задаются свои строки `USER_<ЛОГИН>_NAME` и `USER_<ЛОГИН>_PASSWORD` (или `USER_<ЛОГИН>_PASSWORD_HASH`). Логин — любое слово из латиницы a–z, цифр, `_` и `-`.
+
+Допишите логин в `APP_USERS` (`APP_USERS=user1,user2,user3`), добавьте `USER_USER3_PASSWORD_HASH=…` (п. 9.1, шаг 2) и по желанию `USER_USER3_NAME=Пользователь 3`, пересоздайте контейнер. Убрать пользователя: удалите его из `APP_USERS` — его задачи остаются в файле и вернутся, если добавить логин снова.
 
 ### 9.3. Сменить пароль
 
@@ -313,7 +315,7 @@ sudo docker exec pora-app node scripts/restore-backup.mjs pora-2026-10-06T07-30-
 
 ```bash
 sudo docker exec pora-app node scripts/reset-password.mjs --list    # у кого пароль задан в приложении
-sudo docker exec pora-app node scripts/reset-password.mjs zhena     # снова действует пароль из .env
+sudo docker exec pora-app node scripts/reset-password.mjs user2     # снова действует пароль из .env
 ```
 
 Скрипт удаляет пароль профиля из `data/users.json` и разлогинивает его устройства; перезапуск не нужен. Если забыт и пароль из `.env` — задайте новый хэш (п. 9.1, шаг 2), пересоздайте контейнер и выполните сброс.

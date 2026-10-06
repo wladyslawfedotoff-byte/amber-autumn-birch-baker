@@ -9,7 +9,7 @@ function others(profile: Capabilities, exclude: string[]): { login: string; name
   return profile.users.filter((user) => !exclude.includes(user.login));
 }
 
-/** Short line for a task row: «от Влада», «→ Женя», «вместе с Женей», «выполнил(а) Женя». */
+/** Short line for a task row: «от Пользователя 1», «→ Пользователь 2», «вместе с Пользователем 2», «выполнил(а) Пользователь 2». */
 export function ShareBadges({ task }: { task: Task }) {
   const profile = useProfile();
   const lists = usePlanner((s) => s.lists);

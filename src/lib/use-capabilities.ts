@@ -116,7 +116,7 @@ export function currentLogin(): string {
   return current.login;
 }
 
-/** Display name for a login («Женя» instead of "zhena"). */
+/** Display name for a login («Пользователь 2» instead of "user2"). */
 export function displayName(login: string | null | undefined, profile: Capabilities = current): string {
   if (!login) return "";
   return profile.users.find((user) => user.login === login)?.name ?? login;
