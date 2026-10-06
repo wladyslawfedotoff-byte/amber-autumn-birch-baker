@@ -14,6 +14,9 @@ test("fail closed without a password; AUTH_DISABLED only outside production", ()
   assert.equal(buildAuthConfig({ APP_PASSWORD: "short" }).mode, "invalid");
   assert.equal(buildAuthConfig({ APP_PASSWORD: "CHANGE_ME_STRONG_PASSWORD" }).mode, "invalid");
   assert.equal(buildAuthConfig({ APP_PASSWORD: "СМЕНИТЕ_МЕНЯ" }).mode, "invalid");
+  for (const example of ["ваш-длинный-пароль", "ваш-надёжный-пароль", "локальный-пароль-123"]) {
+    assert.equal(buildAuthConfig({ APP_PASSWORD: example }).mode, "invalid", example);
+  }
   assert.equal(buildAuthConfig({ APP_PASSWORD_HASH: "nonsense" }).mode, "invalid");
 });
 

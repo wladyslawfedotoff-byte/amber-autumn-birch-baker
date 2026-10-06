@@ -31,6 +31,11 @@ const PLACEHOLDERS = [
   "your-password",
   "ваш-пароль",
   "ваш_пароль",
+  // Examples from README / docs / the «нужен пароль» page.
+  "ваш-длинный-пароль",
+  "ваш-надёжный-пароль",
+  "ваш-надежный-пароль",
+  "локальный-пароль-123",
 ];
 
 export const MIN_PASSWORD_LENGTH = 8;
