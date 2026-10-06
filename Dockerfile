@@ -45,6 +45,8 @@ RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/migrations ./migrations
+# scripts/restore-backup.mjs imports the shared sync model directly.
+COPY --from=build /app/src/lib/sync ./src/lib/sync
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && mkdir -p /data && chown node:node /data

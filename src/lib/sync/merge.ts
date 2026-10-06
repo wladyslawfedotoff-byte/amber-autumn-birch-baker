@@ -7,8 +7,11 @@
  * on one device is not undone by an older copy on another device.
  *
  * Merge rules (per entity, by id):
- * - the copy with the larger `updatedAt` wins; equal stamps → deterministic pick
- *   (stable JSON compare) so every device converges on the same result;
+ * - fields are merged one by one (see "Field-level metadata" below): concurrent
+ *   edits of different fields both survive, the same field → newest stamp
+ *   wins, equal stamps → deterministic pick (stable JSON compare) so every
+ *   device converges on the same result; habit checks / tags merge as sets and
+ *   subtasks by id, each element with its own stamp;
  * - a tombstone beats any edit with `updatedAt <= deletedAt`; an edit made after
  *   the delete brings the entity back and drops the tombstone;
  * - tombstones older than the cutoff (server time − 30 days) are pruned.
@@ -80,17 +83,328 @@ export function sameData(a: SyncData, b: SyncData): boolean {
   return stableStringify(a) === stableStringify(b);
 }
 
-/** Same entity ignoring its `updatedAt` stamp. */
-export function sameIgnoringStamp(a: SyncEntity, b: SyncEntity): boolean {
-  return stableStringify({ ...a, updatedAt: undefined }) === stableStringify({ ...b, updatedAt: undefined });
+/* ------------------------------------------------------------------------- *
+ * Field-level metadata
+ *
+ * An entity edited by this version carries, next to its normal fields:
+ *   _b  base stamp: the stamp of every field that has no entry in `_f`
+ *   _f  { field: stamp } for fields edited after `_b`
+ *   _s  { setField: { element: ±stamp } } for set-like arrays (habit checks,
+ *       task tags): positive = present since, negative = removed at
+ *   _d  { keyedField: { childId: deletedAt } } for child lists with ids (subtasks)
+ * Children of a keyed list (subtasks) carry their own `updatedAt` (and `_b`/
+ * `_f` once edited); a child without a stamp has the parent field's stamp.
+ * Elements/children a copy does not mention have the field's stamp: present
+ * if listed in the array, absent otherwise.
+ *
+ * A "legacy" entity (no `_b`, or an `updatedAt` newer than all of its
+ * metadata because an older app version edited it) is read as if every field,
+ * element and child had the stamp `updatedAt`, i.e. exactly the old
+ * whole-entity last-writer-wins rule. That keeps old data and old clients
+ * working: they still converge, only with coarser conflict resolution.
+ * ------------------------------------------------------------------------- */
+
+const META_KEYS = new Set(["id", "updatedAt", "_b", "_f", "_s", "_d"]);
+
+export type EntitySpecial = { sets: readonly string[]; keyed: readonly string[] };
+export const NO_SPECIAL: EntitySpecial = { sets: [], keyed: [] };
+export const ENTITY_SPECIAL: Record<Collection, EntitySpecial> = {
+  lists: NO_SPECIAL,
+  tasks: { sets: ["tags"], keyed: ["subtasks"] },
+  habits: { sets: ["checks"], keyed: [] },
+  milestones: NO_SPECIAL,
+  projects: NO_SPECIAL,
+};
+
+function specialFor(special: EntitySpecial | Collection | undefined): EntitySpecial {
+  if (!special) return NO_SPECIAL;
+  return typeof special === "string" ? ENTITY_SPECIAL[special] : special;
 }
 
-function pickEntity(a: SyncEntity, b: SyncEntity): SyncEntity {
-  const ta = stampOf(a.updatedAt);
-  const tb = stampOf(b.updatedAt);
-  if (ta !== tb) return ta > tb ? a : b;
+type StampMap = Record<string, number>;
+type View = {
+  legacy: boolean;
+  base: number;
+  f: StampMap;
+  s: Record<string, StampMap>;
+  d: Record<string, StampMap>;
+};
+
+function dict<T>(): Record<string, T> {
+  return Object.create(null) as Record<string, T>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function stampMap(value: unknown, signed: boolean): StampMap {
+  const out = dict<number>();
+  const record = asRecord(value);
+  if (!record) return out;
+  for (const [key, raw] of Object.entries(record)) {
+    if (typeof raw !== "number" || !Number.isFinite(raw) || raw === 0) continue;
+    if (!signed && raw < 0) continue;
+    out[key] = raw;
+  }
+  return out;
+}
+
+function nestedMaps(value: unknown, signed: boolean): Record<string, StampMap> {
+  const out = dict<StampMap>();
+  const record = asRecord(value);
+  if (!record) return out;
+  for (const [key, raw] of Object.entries(record)) out[key] = stampMap(raw, signed);
+  return out;
+}
+
+function children(value: unknown): SyncEntity[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: SyncEntity[] = [];
+  for (const item of value) {
+    const record = asRecord(item);
+    if (!record || typeof record.id !== "string" || seen.has(record.id)) continue;
+    seen.add(record.id);
+    out.push(record as SyncEntity);
+  }
+  return out;
+}
+
+function elements(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string" || seen.has(item)) continue;
+    seen.add(item);
+    out.push(item);
+  }
+  return out;
+}
+
+function legacyView(updatedAt: number): View {
+  return { legacy: true, base: updatedAt, f: dict(), s: dict(), d: dict() };
+}
+
+function viewOf(entity: SyncEntity, special: EntitySpecial): View {
+  const updatedAt = stampOf(entity.updatedAt);
+  if (typeof entity._b !== "number" || !asRecord(entity._f)) return legacyView(updatedAt);
+  const base = stampOf(entity._b);
+  const f = stampMap(entity._f, false);
+  const s = nestedMaps(entity._s, true);
+  const d = nestedMaps(entity._d, false);
+  let max = base;
+  for (const stamp of Object.values(f)) max = Math.max(max, stamp);
+  for (const map of Object.values(s)) for (const stamp of Object.values(map)) max = Math.max(max, Math.abs(stamp));
+  for (const map of Object.values(d)) for (const stamp of Object.values(map)) max = Math.max(max, stamp);
+  for (const field of special.keyed) {
+    for (const child of children(entity[field])) max = Math.max(max, stampOf(child.updatedAt));
+  }
+  // An older app version edited the entity: fall back to whole-entity stamps.
+  if (updatedAt > max) return legacyView(updatedAt);
+  return { legacy: false, base, f, s, d };
+}
+
+function fieldStamp(view: View, field: string): number {
+  return view.f[field] ?? view.base;
+}
+
+/** Copy without sync metadata (also inside array members such as subtasks). */
+function stripMeta(entity: SyncEntity, deep = true): SyncEntity {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(entity)) {
+    if (key !== "id" && META_KEYS.has(key)) continue;
+    if (deep && Array.isArray(value)) {
+      out[key] = value.map((item) => {
+        const record = asRecord(item);
+        return record && typeof record.id === "string" ? stripMeta(record as SyncEntity, false) : item;
+      });
+    } else {
+      out[key] = value;
+    }
+  }
+  return out as SyncEntity;
+}
+
+/** Same entity ignoring every sync stamp (`updatedAt`, `_b`, `_f`, `_s`, `_d`, child stamps). */
+export function sameIgnoringStamp(a: SyncEntity, b: SyncEntity): boolean {
+  return stableStringify(stripMeta(a)) === stableStringify(stripMeta(b));
+}
+
+function dataKeys(...records: (Record<string, unknown> | null | undefined)[]): string[] {
+  const keys = new Set<string>();
+  for (const record of records) {
+    if (!record) continue;
+    for (const key of Object.keys(record)) if (!META_KEYS.has(key) && key !== "__proto__") keys.add(key);
+  }
+  return [...keys].sort();
+}
+
+function tieValue(a: unknown, b: unknown): unknown {
+  const ja = stableStringify(a);
+  const jb = stableStringify(b);
+  if (ja !== jb) return ja > jb ? a : b;
+  return a === undefined ? b : a;
+}
+
+function mergeSet(a: SyncEntity, va: View, b: SyncEntity, vb: View, field: string, fallback: number) {
+  const listA = elements(a[field]);
+  const listB = elements(b[field]);
+  const inA = new Set(listA);
+  const inB = new Set(listB);
+  const sa = va.s[field] ?? dict<number>();
+  const sb = vb.s[field] ?? dict<number>();
+  const fa = fieldStamp(va, field);
+  const fb = fieldStamp(vb, field);
+  // Order must not depend on which side is primary (otherwise two devices
+  // would keep pushing their own order): the side with the newest element
+  // change leads, the other side's extras follow.
+  const rankA = Math.max(fa, ...Object.values(sa).map(Math.abs));
+  const rankB = Math.max(fb, ...Object.values(sb).map(Math.abs));
+  const aLeads = rankA !== rankB ? rankA > rankB : stableStringify(listA) >= stableStringify(listB);
+  const [first, second] = aLeads ? [listA, listB] : [listB, listA];
+  const order: string[] = [];
+  const seen = new Set<string>();
+  for (const el of [...first, ...second, ...[...Object.keys(sa), ...Object.keys(sb)].sort()]) {
+    if (seen.has(el)) continue;
+    seen.add(el);
+    order.push(el);
+  }
+  const present: string[] = [];
+  const stamps = dict<number>();
+  for (const el of order) {
+    const ta = Math.abs(sa[el] ?? fa);
+    const tb = Math.abs(sb[el] ?? fb);
+    const pa = inA.has(el);
+    const pb = inB.has(el);
+    const on = ta > tb ? pa : tb > ta ? pb : pa || pb;
+    const stamp = Math.max(ta, tb);
+    if (on) present.push(el);
+    if (stamp !== fallback && stamp > 0) stamps[el] = on ? stamp : -stamp;
+  }
+  return { value: present, stamps };
+}
+
+function liftChild(child: SyncEntity, view: View, field: string): SyncEntity {
+  if (view.legacy) return { ...stripMeta(child, false), updatedAt: view.base };
+  return child.updatedAt === undefined ? { ...child, updatedAt: fieldStamp(view, field) } : child;
+}
+
+function orderIds(primary: string[], secondary: string[]): string[] {
+  const order = [...primary];
+  const seen = new Set(primary);
+  for (let index = secondary.length - 1; index >= 0; index--) {
+    const id = secondary[index]!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    let at = order.length;
+    for (let next = index + 1; next < secondary.length; next++) {
+      const pos = order.indexOf(secondary[next]!);
+      if (pos >= 0) {
+        at = pos;
+        break;
+      }
+    }
+    order.splice(at, 0, id);
+  }
+  return order;
+}
+
+function compactChild(child: SyncEntity, fallback: number): { child: SyncEntity; explicit: boolean } {
+  if (typeof child._b !== "number" && stampOf(child.updatedAt) === fallback) {
+    const { updatedAt: _drop, ...rest } = child;
+    return { child: rest as SyncEntity, explicit: false };
+  }
+  return { child, explicit: true };
+}
+
+function mergeKeyed(a: SyncEntity, va: View, b: SyncEntity, vb: View, field: string, fallback: number) {
+  const listA = children(a[field]);
+  const listB = children(b[field]);
+  const byA = new Map(listA.map((child) => [child.id, liftChild(child, va, field)]));
+  const byB = new Map(listB.map((child) => [child.id, liftChild(child, vb, field)]));
+  const da = va.d[field] ?? dict<number>();
+  const db = vb.d[field] ?? dict<number>();
+  const fa = fieldStamp(va, field);
+  const fb = fieldStamp(vb, field);
+  const idsA = listA.map((child) => child.id);
+  const idsB = listB.map((child) => child.id);
+  const rank = (list: SyncEntity[], view: View, field: string) =>
+    Math.max(fieldStamp(view, field), ...Object.values(view.d[field] ?? {}), ...list.map((child) => (view.legacy ? 0 : stampOf(child.updatedAt))));
+  const rankA = rank(listA, va, field);
+  const rankB = rank(listB, vb, field);
+  const aLeads = rankA !== rankB ? rankA > rankB : stableStringify(idsA) >= stableStringify(idsB);
+  const ids = aLeads ? orderIds(idsA, idsB) : orderIds(idsB, idsA);
+  for (const id of [...Object.keys(da), ...Object.keys(db)].sort()) if (!ids.includes(id)) ids.push(id);
+  const value: SyncEntity[] = [];
+  const tombs = dict<number>();
+  let explicit = false;
+  for (const id of ids) {
+    const ca = byA.get(id);
+    const cb = byB.get(id);
+    const delA = da[id] ?? (ca ? 0 : fa);
+    const delB = db[id] ?? (cb ? 0 : fb);
+    const deletedAt = Math.max(delA, delB);
+    const merged = ca && cb ? mergeEntity(ca, cb, NO_SPECIAL) : (ca ?? cb);
+    if (merged && stampOf(merged.updatedAt) > deletedAt) {
+      const compact = compactChild(merged, fallback);
+      explicit ||= compact.explicit;
+      value.push(compact.child);
+    } else if (deletedAt > 0 && deletedAt !== fallback) {
+      tombs[id] = deletedAt;
+    }
+  }
+  return { value, tombs, explicit };
+}
+
+/**
+ * Merge two copies of the same entity field by field. Commutative (also the
+ * order of set elements and children does not depend on the argument order).
+ */
+export function mergeEntity(a: SyncEntity, b: SyncEntity, specialArg?: EntitySpecial | Collection): SyncEntity {
   if (a === b) return a;
-  return stableStringify(a) >= stableStringify(b) ? a : b;
+  if (stableStringify(a) === stableStringify(b)) return a;
+  const special = specialFor(specialArg);
+  const va = viewOf(a, special);
+  const vb = viewOf(b, special);
+  const base = Math.max(va.base, vb.base);
+  const out: Record<string, unknown> = { id: a.id };
+  const f = dict<number>();
+  const s = dict<StampMap>();
+  const d = dict<StampMap>();
+  let explicitChildren = false;
+  for (const key of dataKeys(a, b, va.f, vb.f)) {
+    const ta = fieldStamp(va, key);
+    const tb = fieldStamp(vb, key);
+    const stamp = Math.max(ta, tb);
+    if (special.sets.includes(key)) {
+      const merged = mergeSet(a, va, b, vb, key, stamp);
+      out[key] = merged.value;
+      if (Object.keys(merged.stamps).length) s[key] = merged.stamps;
+    } else if (special.keyed.includes(key)) {
+      const merged = mergeKeyed(a, va, b, vb, key, stamp);
+      out[key] = merged.value;
+      explicitChildren ||= merged.explicit;
+      if (Object.keys(merged.tombs).length) d[key] = merged.tombs;
+    } else {
+      const value = ta > tb ? a[key] : tb > ta ? b[key] : tieValue(a[key], b[key]);
+      if (value !== undefined) out[key] = value;
+    }
+    if (stamp !== base) f[key] = stamp;
+  }
+  const updatedAt = Math.max(stampOf(a.updatedAt), stampOf(b.updatedAt), base);
+  const plain = !Object.keys(f).length && !Object.keys(s).length && !Object.keys(d).length && !explicitChildren;
+  if (plain && base === updatedAt) {
+    if (updatedAt > 0) out.updatedAt = updatedAt;
+    return out as SyncEntity;
+  }
+  out.updatedAt = updatedAt;
+  out._b = base;
+  out._f = f;
+  if (Object.keys(s).length) out._s = s;
+  if (Object.keys(d).length) out._d = d;
+  return out as SyncEntity;
 }
 
 function mergeTombs(a: TombstoneMap, b: TombstoneMap): TombstoneMap {
@@ -108,7 +422,7 @@ function mergeTombs(a: TombstoneMap, b: TombstoneMap): TombstoneMap {
  * `secondary` (so a task added at the top on the phone also lands at the top on
  * the computer), or appended when nothing follows.
  */
-function mergeOrdered(primary: SyncEntity[], secondary: SyncEntity[]): SyncEntity[] {
+function mergeOrdered(primary: SyncEntity[], secondary: SyncEntity[], special: EntitySpecial): SyncEntity[] {
   const winners = new Map<string, SyncEntity>();
   for (const item of secondary) winners.set(item.id, item);
   const order: string[] = [];
@@ -118,7 +432,7 @@ function mergeOrdered(primary: SyncEntity[], secondary: SyncEntity[]): SyncEntit
     seen.add(item.id);
     order.push(item.id);
     const other = winners.get(item.id);
-    winners.set(item.id, other ? pickEntity(item, other) : item);
+    winners.set(item.id, other ? mergeEntity(item, other, special) : item);
   }
   for (let index = secondary.length - 1; index >= 0; index--) {
     const item = secondary[index]!;
@@ -143,10 +457,11 @@ export function mergeCollection(
   primaryTombs: TombstoneMap,
   secondaryTombs: TombstoneMap,
   cutoff = 0,
+  special?: EntitySpecial | Collection,
 ): { items: SyncEntity[]; tombs: TombstoneMap } {
   const tombs = mergeTombs(primaryTombs, secondaryTombs);
   const items: SyncEntity[] = [];
-  for (const item of mergeOrdered(primary, secondary)) {
+  for (const item of mergeOrdered(primary, secondary, specialFor(special))) {
     const deletedAt = tombs[item.id];
     if (deletedAt !== undefined) {
       if (stampOf(item.updatedAt) <= deletedAt) continue;
@@ -179,7 +494,7 @@ export function mergeData(primary: SyncData, secondary: SyncData, options: Merge
   const cutoff = options.cutoff ?? 0;
   const out = emptyData();
   for (const key of COLLECTIONS) {
-    const merged = mergeCollection(primary[key], secondary[key], primary.tombstones[key], secondary.tombstones[key], cutoff);
+    const merged = mergeCollection(primary[key], secondary[key], primary.tombstones[key], secondary.tombstones[key], cutoff, key);
     out[key] = merged.items;
     out.tombstones[key] = merged.tombs;
   }
@@ -199,17 +514,169 @@ export function pruneTombstones(data: SyncData, cutoff: number): SyncData {
 }
 
 /**
- * Record local changes: entities whose object changed (or are new) get
- * `updatedAt = now`; ids that disappeared become tombstones. `now` is bumped
- * past the entity's previous stamp so a local edit always beats the version it
- * was made on, even if the device clock went backwards.
+ * Long offline: a device that has not synced for longer than the tombstone TTL
+ * may still hold entities that were deleted elsewhere and whose tombstones the
+ * server has already pruned. Drop local entities the server does not know at
+ * all (neither as item nor as tombstone) when they were last modified before
+ * the server's cutoff AND before this device's last clean sync
+ * (`syncedThrough`, server time) — i.e. the device had already delivered them,
+ * so their absence on the server means "deleted". Entities created or edited
+ * offline after the last sync are kept and pushed. Without `syncedThrough`
+ * (first sync of a device) nothing is dropped.
+ */
+export function dropStaleItems(local: SyncData, remote: SyncData, cutoff: number, syncedThrough: number | null | undefined): SyncData {
+  if (!syncedThrough || cutoff <= 0) return local;
+  let changed = false;
+  const out: SyncData = { ...local };
+  for (const key of COLLECTIONS) {
+    const known = new Set(remote[key].map((item) => item.id));
+    const tombs = remote.tombstones[key];
+    const kept = local[key].filter((item) => {
+      if (known.has(item.id) || tombs[item.id] !== undefined) return true;
+      const stamp = stampOf(item.updatedAt);
+      return !(stamp < cutoff && stamp <= syncedThrough);
+    });
+    if (kept.length !== local[key].length) {
+      out[key] = kept;
+      changed = true;
+    }
+  }
+  return changed ? out : local;
+}
+
+/** Give an entity (and its children) a single fresh stamp: it then beats every older copy everywhere. */
+export function restampEntity(entity: SyncEntity, now: number): SyncEntity {
+  return { ...stripMeta(entity), updatedAt: now };
+}
+
+/** Restamp a whole document (imported/restored data must win against what devices hold). */
+export function restampData(data: SyncData, now: number): SyncData {
+  const out: SyncData = { ...data, tombstones: emptyTombstones() };
+  for (const key of COLLECTIONS) {
+    out[key] = data[key].map((item) => restampEntity(item, now));
+    out.tombstones[key] = { ...data.tombstones[key] };
+  }
+  out.settings = { ...data.settings, updatedAt: now };
+  return out;
+}
+
+export type RestoreOptions = { now: number; replace?: boolean };
+
+/**
+ * Server-side restore of a backup into the current document. Every entity of
+ * the backup is restamped with `now`, so it wins against the copies devices
+ * hold (and anything the backup lacks inside it — a habit check, a subtask —
+ * counts as removed at `now`). Tombstones of restored ids are cleared. With
+ * `replace`, current entities missing from the backup are tombstoned at `now`
+ * (devices then drop them too); otherwise they are kept.
+ */
+export function restoreDocument(current: SyncData, backup: SyncData, options: RestoreOptions): SyncData {
+  const { now } = options;
+  const out = emptyData();
+  for (const key of COLLECTIONS) {
+    const restored = backup[key].map((item) => restampEntity(item, now));
+    const ids = new Set(restored.map((item) => item.id));
+    const tombs: TombstoneMap = {};
+    for (const [id, at] of Object.entries(current.tombstones[key])) if (!ids.has(id)) tombs[id] = at;
+    const rest: SyncEntity[] = [];
+    for (const item of current[key]) {
+      if (ids.has(item.id)) continue;
+      if (options.replace) tombs[item.id] = Math.max(now, stampOf(item.updatedAt) + 1);
+      else rest.push(item);
+    }
+    out[key] = [...restored, ...rest];
+    out.tombstones[key] = tombs;
+  }
+  out.settings = { ...backup.settings, updatedAt: Math.max(now, stampOf(current.settings.updatedAt) + 1) };
+  return out;
+}
+
+function changedFields(prev: SyncEntity, next: SyncEntity): string[] {
+  return dataKeys(prev, next).filter((key) => stableStringify(prev[key]) !== stableStringify(next[key]));
+}
+
+/** Record a local edit of one entity: only what changed gets the new stamp. */
+function stampEntity(prev: SyncEntity, next: SyncEntity, stamp: number, special: EntitySpecial): SyncEntity {
+  const view = viewOf(prev, special);
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(next)) if (!META_KEYS.has(key) || key === "id") out[key] = value;
+  const f = dict<number>();
+  for (const [key, value] of Object.entries(view.f)) f[key] = value;
+  const s = dict<StampMap>();
+  for (const [key, map] of Object.entries(view.s)) s[key] = Object.assign(dict<number>(), map);
+  const d = dict<StampMap>();
+  for (const [key, map] of Object.entries(view.d)) d[key] = Object.assign(dict<number>(), map);
+  for (const key of changedFields(prev, next)) {
+    if (special.sets.includes(key)) {
+      const before = new Set(elements(prev[key]));
+      const after = new Set(elements(next[key]));
+      const map = (s[key] ??= dict<number>());
+      for (const el of after) if (!before.has(el)) map[el] = stamp;
+      for (const el of before) if (!after.has(el)) map[el] = -stamp;
+    } else if (special.keyed.includes(key)) {
+      const before = new Map(children(prev[key]).map((child) => [child.id, child]));
+      const tombs = (d[key] ??= dict<number>());
+      const list: SyncEntity[] = [];
+      const seen = new Set<string>();
+      const nextList = Array.isArray(next[key]) ? (next[key] as unknown[]) : [];
+      for (const raw of nextList) {
+        const child = asRecord(raw) as SyncEntity | null;
+        if (!child || typeof child.id !== "string" || seen.has(child.id)) continue;
+        seen.add(child.id);
+        delete tombs[child.id];
+        const old = before.get(child.id);
+        if (!old) {
+          list.push({ ...stripMeta(child, false), updatedAt: stamp });
+        } else if (old === child || sameIgnoringStamp(old, child)) {
+          list.push(view.legacy ? stripMeta(old, false) : old);
+        } else {
+          const lifted = liftChild(old, view, key);
+          list.push(stampEntity(lifted, child, Math.max(stamp, stampOf(lifted.updatedAt) + 1), NO_SPECIAL));
+        }
+      }
+      for (const id of before.keys()) if (!seen.has(id)) tombs[id] = stamp;
+      out[key] = list;
+    } else {
+      f[key] = stamp;
+    }
+  }
+  if (view.legacy) {
+    // Child stamps of a legacy entity are not trusted (they all count as `updatedAt`).
+    for (const key of special.keyed) {
+      if (Array.isArray(out[key]) && !changedFields(prev, next).includes(key)) {
+        out[key] = (out[key] as unknown[]).map((item) => {
+          const record = asRecord(item);
+          return record && typeof record.id === "string" ? stripMeta(record as SyncEntity, false) : item;
+        });
+      }
+    }
+  }
+  for (const [key, value] of Object.entries(f)) if (value === view.base) delete f[key];
+  for (const key of Object.keys(s)) if (!Object.keys(s[key]!).length) delete s[key];
+  for (const key of Object.keys(d)) if (!Object.keys(d[key]!).length) delete d[key];
+  out.updatedAt = stamp;
+  out._b = view.base;
+  out._f = f;
+  if (Object.keys(s).length) out._s = s;
+  if (Object.keys(d).length) out._d = d;
+  return out as SyncEntity;
+}
+
+/**
+ * Record local changes: changed fields / set elements / subtasks of an entity
+ * get the stamp `now` (new entities are stamped as a whole); ids that
+ * disappeared become tombstones. `now` is bumped past the entity's previous
+ * stamp so a local edit always beats the version it was made on, even if the
+ * device clock went backwards.
  */
 export function stampCollection<T extends { id: string; updatedAt?: number }>(
   prevItems: readonly T[],
   nextItems: readonly T[],
   prevTombs: TombstoneMap,
   now: number,
+  specialArg?: EntitySpecial | Collection,
 ): { items: T[]; tombs: TombstoneMap } {
+  const special = specialFor(specialArg);
   const prevById = new Map(prevItems.map((item) => [item.id, item]));
   const nextIds = new Set<string>();
   let tombsChanged = false;
@@ -222,11 +689,10 @@ export function stampCollection<T extends { id: string; updatedAt?: number }>(
       delete tombs[item.id];
       tombsChanged = true;
     }
-    if (prev && sameIgnoringStamp(prev as SyncEntity, item as SyncEntity)) {
-      return item.updatedAt === prev.updatedAt ? item : { ...item, updatedAt: prev.updatedAt };
-    }
+    if (prev && sameIgnoringStamp(prev as SyncEntity, item as SyncEntity)) return prev;
     const stamp = Math.max(now, stampOf(prev?.updatedAt) + 1);
-    return { ...item, updatedAt: stamp };
+    if (!prev) return { ...stripMeta(item as unknown as SyncEntity), updatedAt: stamp } as unknown as T;
+    return stampEntity(prev as unknown as SyncEntity, item as unknown as SyncEntity, stamp, special) as unknown as T;
   });
   for (const prev of prevItems) {
     if (nextIds.has(prev.id)) continue;

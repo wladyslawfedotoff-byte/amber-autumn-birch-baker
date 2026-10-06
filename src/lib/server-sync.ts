@@ -17,12 +17,14 @@
  */
 import { usePlanner } from "@/lib/planner-store";
 import type { Habit, Milestone, Project, Task, TaskList } from "@/lib/planner-types";
-import { setClockOffset } from "@/lib/sync/clock";
+import { setClockOffset, syncNow } from "@/lib/sync/clock";
 import {
   COLLECTIONS,
+  dropStaleItems,
   mergeData,
   normalizeData,
   pruneTombstones,
+  restampEntity,
   sameData,
   type SyncData,
   type SyncEntity,
@@ -42,6 +44,8 @@ type Meta = {
   lastSyncAt: number | null;
   lastError: string | null;
   clockOffset: number;
+  /** Server time of the last sync after which this device had nothing left to push. */
+  syncedThrough: number | null;
 };
 
 export type SyncPhase = "idle" | "syncing" | "offline" | "error" | "unauthorized" | "unavailable";
@@ -57,7 +61,15 @@ export type ServerSyncStatus = {
 
 type RemoteDoc = { revision: number; updatedAt: number; serverNow: number; cutoff: number; data: unknown };
 
-const DEFAULT_META: Meta = { base: null, revision: null, dirty: false, lastSyncAt: null, lastError: null, clockOffset: 0 };
+const DEFAULT_META: Meta = {
+  base: null,
+  revision: null,
+  dirty: false,
+  lastSyncAt: null,
+  lastError: null,
+  clockOffset: 0,
+  syncedThrough: null,
+};
 
 function storage(): Storage | null {
   try {
@@ -197,18 +209,27 @@ function integrate(remote: RemoteDoc, timing?: { t0: number; t1: number }): bool
   if (!normalized.ok) throw new SyncError("error", `Сервер прислал неверные данные: ${normalized.error}`);
   const remoteData = normalized.data;
   const cutoff = Number(remote.cutoff) || 0;
+  const meta = readMeta();
   let merged: SyncData;
   if (pristine && editSeq === 0 && remote.revision > 0) {
     // First start on a fresh device: there is nothing local except the demo
     // seed, so take the server copy instead of mixing demo tasks into it.
     merged = remoteData;
   } else {
-    merged = mergeData(localData(), remoteData, { cutoff });
+    let local = localData();
+    // Back after a long time offline: drop what was deleted elsewhere while
+    // the server's tombstones for it have already expired. Skipped when the
+    // server document went backwards (reset data folder) — then nothing local
+    // is dropped and everything is uploaded again.
+    const serverIntact = remote.revision > 0 && (meta.revision === null || remote.revision >= meta.revision);
+    if (serverIntact) local = dropStaleItems(local, remoteData, cutoff, meta.syncedThrough);
+    merged = mergeData(local, remoteData, { cutoff });
   }
   pristine = false;
   if (!sameData(merged, localData())) applyData(merged);
   const needsPush = !sameData(pruneTombstones(merged, cutoff), pruneTombstones(remoteData, cutoff));
-  writeMeta({ base: remote.revision, revision: remote.revision, dirty: needsPush, clockOffset: offset });
+  const synced = !needsPush && Number.isFinite(remote.serverNow) ? { syncedThrough: remote.serverNow } : {};
+  writeMeta({ base: remote.revision, revision: remote.revision, dirty: needsPush, clockOffset: offset, ...synced });
   return needsPush;
 }
 
@@ -423,7 +444,12 @@ export function importBackupData(raw: unknown): number | null {
   for (const key of COLLECTIONS) {
     const known = new Set(local[key].map((item) => item.id));
     const deleted = local.tombstones[key];
-    const fresh = incoming[key].filter((item) => !known.has(item.id) && deleted[item.id] === undefined);
+    // Fresh stamp: an imported entry must not look like an old one that was
+    // deleted elsewhere long ago (and be dropped again on the next sync).
+    const now = syncNow();
+    const fresh = incoming[key]
+      .filter((item) => !known.has(item.id) && deleted[item.id] === undefined)
+      .map((item) => restampEntity(item, now));
     if (fresh.length) {
       next[key] = [...local[key], ...fresh];
       added += fresh.length;
@@ -448,6 +474,33 @@ export async function logout(): Promise<void> {
     redirecting = true;
     window.location.assign("/login");
   }
+}
+
+/**
+ * «Выйти на всех устройствах»: upload unsent changes, invalidate every session
+ * on the server (including this one) and go to the login page. Throws with a
+ * user-facing message when the server refused.
+ */
+export async function logoutEverywhere(): Promise<void> {
+  if (readMeta().dirty) await syncServerNow().catch(() => undefined);
+  let response: Response;
+  try {
+    response = await fetch("/api/logout-all", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new Error("Нет связи с сервером.");
+  }
+  if (response.status === 401) {
+    redirecting = true;
+    window.location.assign("/login?e=expired");
+    return;
+  }
+  if (!response.ok) throw new Error(`Сервер не смог завершить сеансы (ответ ${response.status}).`);
+  redirecting = true;
+  window.location.assign("/login");
 }
 
 // ---- wiring ------------------------------------------------------------------

@@ -403,7 +403,7 @@ export function stampPatch(prev: PlannerState, patch: Partial<PlannerState>, now
     if (next === undefined || next === before) continue;
     const base: Tombstones = tombstones ?? prev.tombstones ?? emptyTombstones();
     const prevTombs: Record<string, number> = base[key] ?? {};
-    const result = stampCollection(before, next, prevTombs, now);
+    const result = stampCollection(before, next, prevTombs, now, key);
     if (out === patch) out = { ...patch };
     (out as Record<string, unknown>)[key] = result.items;
     if (result.tombs !== prevTombs) {

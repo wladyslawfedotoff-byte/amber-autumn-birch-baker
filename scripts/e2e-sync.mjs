@@ -73,6 +73,75 @@ async function waitForText(page, text, label) {
   }
 }
 
+async function openView(page, label) {
+  const menu = page.locator('button[aria-label="Открыть меню"]');
+  if (await menu.isVisible()) await menu.click();
+  await page.locator(`text="${label}" >> visible=true`).first().click();
+}
+
+/** Local ISO date (like todayIso() in the app) `daysAgo` days back. */
+async function isoDay(page, daysAgo) {
+  return page.evaluate((back) => {
+    const d = new Date();
+    d.setDate(d.getDate() - back);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }, daysAgo);
+}
+
+async function habitButton(page, name, day) {
+  const button = page.locator(`button[aria-label="${name}, ${day}"]`);
+  if (!(await button.count())) await page.getByRole("button", { name: "Прошлая неделя" }).click();
+  return button;
+}
+
+/**
+ * Two devices tick different days of the same habit while offline; after
+ * reconnecting both ticks must survive on both (field-level merge).
+ */
+async function habitTwoClients(phone, phoneCtx, computer, computerCtx) {
+  const name = `Зарядка ${Date.now() % 100000}`;
+  await openView(computer, "Привычки");
+  await computer.fill('input[name="name"][placeholder="Новая привычка"]', name);
+  await computer.press('input[name="name"][placeholder="Новая привычка"]', "Enter");
+  await openView(phone, "Привычки");
+  await waitForText(phone, name, "phone (new habit)");
+  await syncedOnce(phone);
+  await syncedOnce(computer);
+  const today = await isoDay(phone, 0);
+  const yesterday = await isoDay(phone, 1);
+  await phoneCtx.setOffline(true);
+  await computerCtx.setOffline(true);
+  await (await habitButton(phone, name, today)).click();
+  await (await habitButton(computer, name, yesterday)).click();
+  await phoneCtx.setOffline(false);
+  await computerCtx.setOffline(false);
+  for (const [page, label] of [
+    [phone, "phone"],
+    [computer, "computer"],
+  ]) {
+    for (const day of [today, yesterday]) {
+      if (!(await page.locator(`button[aria-label="${name}, ${day}"]`).count())) {
+        const thisWeek = page.getByRole("button", { name: "Эта неделя" });
+        if (await thisWeek.isEnabled()) await thisWeek.click();
+        else await page.getByRole("button", { name: "Прошлая неделя" }).click();
+      }
+      await page
+        .locator(`button[aria-label="${name}, ${day}"][aria-pressed="true"]`)
+        .waitFor({ timeout: 30_000 })
+        .catch(() => fail(`${label}: habit check ${day} missing after reconnect`));
+    }
+  }
+  await syncedOnce(phone);
+  await syncedOnce(computer);
+  const doc = await serverDoc(computer);
+  const habit = doc.data.habits.find((h) => h.name === name);
+  if (!habit || !habit.checks.includes(today) || !habit.checks.includes(yesterday)) {
+    fail(`server habit checks: ${JSON.stringify(habit?.checks)}`);
+  }
+  console.log(`OK: offline habit ticks from two devices merged (${today}, ${yesterday}).`);
+}
+
 async function serverDoc(page) {
   return page.evaluate(async () => (await fetch("/api/sync", { cache: "no-store" })).json());
 }
@@ -82,7 +151,8 @@ async function main() {
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined });
   const problems = [];
   try {
-    const computer = await (await browser.newContext({ viewport: { width: 1280, height: 860 } })).newPage();
+    const computerCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+    const computer = await computerCtx.newPage();
     const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const phone = await phoneCtx.newPage();
     watch(computer, "computer", problems);
@@ -120,6 +190,8 @@ async function main() {
     const after = await serverDoc(computer);
     if (after.data.tasks.length !== before + 3) fail(`server has ${after.data.tasks.length} tasks, expected ${before + 3}`);
 
+    await habitTwoClients(phone2, phoneCtx, computer, computerCtx);
+
     // Settings → «Подключение».
     await phone2.click('button[aria-label="Открыть меню"]');
     await phone2.locator('text="Настройки" >> visible=true').first().click();
@@ -129,10 +201,18 @@ async function main() {
     await shot(computer, "computer-today");
 
     // Logout from the phone.
-    await phone2.getByRole("button", { name: "Выйти" }).click();
+    await phone2.getByRole("button", { name: "Выйти", exact: true }).click();
     await phone2.waitForURL(/\/login/);
     const status = await phone2.evaluate(async () => (await fetch("/api/sync")).status);
     if (status !== 401) fail(`after logout /api/sync answered ${status}`);
+
+    // «Выйти на всех устройствах» on the computer: its session dies as well.
+    await openView(computer, "Настройки");
+    await computer.getByRole("button", { name: "Выйти на всех устройствах" }).click();
+    await computer.getByRole("button", { name: "Да, выйти везде" }).click();
+    await computer.waitForURL(/\/login/);
+    const afterAll = await computer.evaluate(async () => (await fetch("/api/sync")).status);
+    if (afterAll !== 401) fail(`after logout-all /api/sync answered ${afterAll}`);
 
     // 409 (sync conflict → merge + retry) and 401 (the post-logout probe) are
     // expected protocol answers that Chrome still prints as resource errors.

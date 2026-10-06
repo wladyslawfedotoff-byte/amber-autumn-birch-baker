@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { TOMBSTONE_TTL_MS, emptyData, mergeData, pruneTombstones, sameData, stampCollection, type SyncData, type SyncEntity } from "../../src/lib/sync/merge.ts";
-import { SyncStore } from "./sync-store.ts";
+import { SyncStore, backupFileName, backupsToDelete } from "./sync-store.ts";
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), "pora-store-"));
@@ -110,7 +110,9 @@ test("backups rotate and corrupt files are set aside and restored from the newes
   const dir = tmp();
   try {
     let clock = 1_000_000;
-    const store = new SyncStore(dir, { backupKeep: 3, backupIntervalMs: 0, now: () => (clock += 1000) });
+    const hour = 3600_000;
+    // backups 2 h apart, keep 3 hourly / 0 daily → 3 left
+    const store = new SyncStore(dir, { backupHourly: 3, backupDaily: 0, backupIntervalMs: 0, now: () => (clock += 2 * hour) });
     for (let i = 0; i < 6; i++) {
       await store.put(i, { ...emptyData(), tasks: [{ id: `t${i}`, title: `T${i}`, updatedAt: i + 1 }] });
     }
@@ -217,6 +219,61 @@ test("first connection of a device merges its local data with the server (never 
     await computer.sync(store);
     assert.deepEqual(phone.titles(), ["C", "P"]);
     assert.deepEqual(computer.titles(), ["C", "P"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("tiered backup retention keeps newest per hour and per day", () => {
+  const hour = 3600_000;
+  const day = 24 * hour;
+  const start = Date.UTC(2026, 0, 1);
+  const names: string[] = [];
+  // every 20 minutes for 40 days
+  for (let t = start, rev = 1; t < start + 40 * day; t += 20 * 60_000, rev++) names.push(backupFileName(t, rev));
+  names.push("notes.txt");
+  const doomed = new Set(backupsToDelete(names, 24, 30));
+  const kept = names.filter((name) => !doomed.has(name) && name !== "notes.txt");
+  assert.ok(!doomed.has("notes.txt"), "foreign files are never deleted");
+  assert.ok(kept.includes(names[names.length - 2]!), "newest kept");
+  // 24 hourly (one of them also the newest of its day) + 30 daily, overlapping on the last day
+  assert.ok(kept.length >= 30 && kept.length <= 54, `kept ${kept.length}`);
+  const days = new Set(kept.map((name) => name.slice(5, 15)));
+  assert.equal(days.size, 30);
+  assert.deepEqual(backupsToDelete([backupFileName(start, 1)], 0, 0), [], "the newest backup always stays");
+});
+
+test("leftover temp files are removed at startup and health does not create files", async () => {
+  const dir = tmp();
+  try {
+    writeFileSync(join(dir, "pora.json.tmp-123-abcd"), "half");
+    writeFileSync(join(dir, ".health-99"), "");
+    const store = new SyncStore(dir);
+    await store.get();
+    assert.deepEqual(readdirSync(dir).filter((n) => n.includes("tmp") || n.startsWith(".health")), []);
+    const before = readdirSync(dir).sort();
+    for (let i = 0; i < 5; i++) assert.equal(await store.isWritable(), true);
+    assert.deepEqual(readdirSync(dir).sort(), before);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an external rewrite of pora.json (restore script) is picked up", async () => {
+  const dir = tmp();
+  try {
+    const store = new SyncStore(dir);
+    await store.put(0, { ...emptyData(), tasks: [{ id: "a", title: "A", updatedAt: 1 }] });
+    const disk = JSON.parse(readFileSync(join(dir, "pora.json"), "utf8"));
+    disk.revision = 7;
+    disk.data.tasks[0].title = "restored";
+    writeFileSync(join(dir, "pora.json.new"), JSON.stringify(disk));
+    // rename like the script does (new inode)
+    const { renameSync } = await import("node:fs");
+    renameSync(join(dir, "pora.json.new"), join(dir, "pora.json"));
+    const doc = await store.get();
+    assert.equal(doc.revision, 7);
+    assert.equal(doc.data.tasks[0]!.title, "restored");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

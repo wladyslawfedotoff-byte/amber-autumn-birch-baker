@@ -10,7 +10,13 @@
  *   retries. On a matching revision the incoming document is still merged into
  *   the stored one (idempotent per-entity merge) so nothing can be lost.
  * - Before replacing the file, a copy is kept in `${DATA_DIR}/backups/`
- *   (at most one per BACKUP_INTERVAL_MINUTES, newest BACKUP_KEEP kept).
+ *   (at most one per BACKUP_INTERVAL_MINUTES) with tiered retention: the newest
+ *   copy of each of the last BACKUP_HOURLY hours and of each of the last
+ *   BACKUP_DAILY days (defaults 24 / 30).
+ * - Leftover `pora.json.tmp-*` files (a crash or a full disk mid-write) are
+ *   removed on startup and after a failed write.
+ * - An external change of pora.json (scripts/restore-backup.mjs) is noticed by
+ *   its size/mtime/inode and the file is re-read.
  */
 import { constants, promises as fs } from "node:fs";
 import { randomBytes } from "node:crypto";
@@ -38,7 +44,67 @@ function envInt(name: string, fallback: number, min: number): number {
   return Number.isFinite(value) && value >= min ? value : fallback;
 }
 
-export type StoreOptions = { backupKeep?: number; backupIntervalMs?: number; now?: () => number };
+export type StoreOptions = {
+  backupHourly?: number;
+  backupDaily?: number;
+  backupIntervalMs?: number;
+  now?: () => number;
+};
+
+const BACKUP_NAME = /^pora-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-r\d+(?:-[a-z-]+)?\.json$/;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const WRITABLE_CACHE_MS = 60_000;
+
+export function backupFileName(time: number, revision: number, suffix = ""): string {
+  const stamp = new Date(time).toISOString().replace(/[:.]/g, "-");
+  return `pora-${stamp}-r${revision}${suffix ? `-${suffix}` : ""}.json`;
+}
+
+/** Backup time from its file name, or null for foreign files. */
+export function backupTime(name: string): number | null {
+  const match = BACKUP_NAME.exec(name);
+  if (!match) return null;
+  const [, y, mo, d, h, mi, sec, ms] = match;
+  const time = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(sec), Number(ms));
+  return Number.isFinite(time) ? time : null;
+}
+
+/**
+ * Tiered retention: keep the newest backup overall, the newest backup of each
+ * of the `hourly` most recent hours that have one, and the newest backup of
+ * each of the `daily` most recent days (UTC) that have one. Returns the names
+ * to delete. Files that are not backups are never touched.
+ */
+export function backupsToDelete(names: string[], hourly: number, daily: number): string[] {
+  const dated = names
+    .map((name) => ({ name, time: backupTime(name) }))
+    .filter((entry): entry is { name: string; time: number } => entry.time !== null)
+    .sort((a, b) => b.time - a.time || (a.name < b.name ? 1 : -1));
+  const keep = new Set<string>();
+  if (dated[0]) keep.add(dated[0].name);
+  const hours = new Set<number>();
+  const days = new Set<number>();
+  for (const entry of dated) {
+    const hour = Math.floor(entry.time / HOUR_MS);
+    if (!hours.has(hour) && hours.size < hourly) {
+      hours.add(hour);
+      keep.add(entry.name);
+    }
+    const day = Math.floor(entry.time / DAY_MS);
+    if (!days.has(day) && days.size < daily) {
+      days.add(day);
+      keep.add(entry.name);
+    }
+  }
+  return dated.filter((entry) => !keep.has(entry.name)).map((entry) => entry.name);
+}
+
+type FileSig = { size: number; mtimeMs: number; ino: number };
+
+function sameSig(a: FileSig | null, b: FileSig | null): boolean {
+  return Boolean(a && b && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ino === b.ino);
+}
 
 export class SyncStore {
   readonly dir: string;
@@ -47,18 +113,53 @@ export class SyncStore {
   private doc: StoredDoc | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private lastBackupAt = 0;
-  private readonly backupKeep: number;
+  private readonly backupHourly: number;
+  private readonly backupDaily: number;
   private readonly backupIntervalMs: number;
   private readonly now: () => number;
+  private fileSig: FileSig | null = null;
+  private cleaned = false;
+  private lastWriteFailed = false;
+  private writable: { at: number; ok: boolean } | null = null;
   onCorrupt?: (info: { aside: string; backup: string | null; error: unknown }) => void;
+  onWarn?: (event: string, fields: Record<string, unknown>, error?: unknown) => void;
 
   constructor(dir: string, options: StoreOptions = {}) {
     this.dir = dir;
     this.file = join(dir, "pora.json");
     this.backupDir = join(dir, "backups");
-    this.backupKeep = options.backupKeep ?? 10;
+    this.backupHourly = options.backupHourly ?? 24;
+    this.backupDaily = options.backupDaily ?? 30;
     this.backupIntervalMs = options.backupIntervalMs ?? 30 * 60 * 1000;
     this.now = options.now ?? Date.now;
+  }
+
+  private warn(event: string, fields: Record<string, unknown>, error?: unknown): void {
+    if (this.onWarn) this.onWarn(event, fields, error);
+    else log("warn", event, fields, error);
+  }
+
+  private async stat(file: string): Promise<FileSig | null> {
+    try {
+      const st = await fs.stat(file);
+      return { size: st.size, mtimeMs: st.mtimeMs, ino: st.ino };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Remove temp files left by an interrupted write (and probes of older versions). */
+  async cleanupTempFiles(): Promise<string[]> {
+    let names: string[];
+    try {
+      names = await fs.readdir(this.dir);
+    } catch {
+      return [];
+    }
+    const stale = names.filter((name) => name.startsWith("pora.json.tmp-") || name.startsWith(".health-"));
+    for (const name of stale) await fs.unlink(join(this.dir, name)).catch(() => undefined);
+    if (stale.length) this.warn("data.temp_removed", { count: stale.length });
+    return stale;
   }
 
   private exclusive<T>(task: () => Promise<T>): Promise<T> {
@@ -78,9 +179,29 @@ export class SyncStore {
   }
 
   private async load(): Promise<StoredDoc> {
-    if (this.doc) return this.doc;
+    if (!this.cleaned) {
+      this.cleaned = true;
+      await this.cleanupTempFiles();
+    }
+    if (this.doc) {
+      const sig = await this.stat(this.file);
+      if (!sig || sameSig(sig, this.fileSig)) return this.doc;
+      // Changed behind our back (restore script): re-read it.
+      try {
+        const fresh = await this.readDoc(this.file);
+        log("info", "data.reloaded", { revision: fresh.revision, previous: this.doc.revision });
+        this.doc = fresh;
+        this.fileSig = sig;
+        return this.doc;
+      } catch (error) {
+        this.warn("data.reload_failed", { file: this.file }, error);
+        return this.doc;
+      }
+    }
     try {
+      const sig = await this.stat(this.file);
       this.doc = await this.readDoc(this.file);
+      this.fileSig = sig;
       return this.doc;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -139,22 +260,39 @@ export class SyncStore {
   }
 
   private async write(doc: StoredDoc, hadPrevious: boolean): Promise<void> {
-    await fs.mkdir(this.dir, { recursive: true });
-    if (hadPrevious) await this.backup().catch(() => undefined);
-    const tmp = `${this.file}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
-    const handle = await fs.open(tmp, "w", 0o600);
     try {
-      await handle.writeFile(JSON.stringify(doc));
-      await handle.sync();
-    } finally {
-      await handle.close();
+      await this.writeFile(doc, hadPrevious);
+      this.lastWriteFailed = false;
+    } catch (error) {
+      this.lastWriteFailed = true;
+      this.writable = { at: this.now(), ok: false };
+      throw error;
     }
+  }
+
+  private async writeFile(doc: StoredDoc, hadPrevious: boolean): Promise<void> {
+    await fs.mkdir(this.dir, { recursive: true });
+    if (hadPrevious) {
+      await this.backup().catch((error) => {
+        this.warn("backup.failed", { dir: this.backupDir }, error);
+      });
+    }
+    const tmp = `${this.file}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
     try {
+      const handle = await fs.open(tmp, "w", 0o600);
+      try {
+        await handle.writeFile(JSON.stringify(doc));
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
       await fs.rename(tmp, this.file);
     } catch (error) {
+      // Full disk / permissions: never leave a half-written temp file behind.
       await fs.unlink(tmp).catch(() => undefined);
       throw error;
     }
+    this.fileSig = await this.stat(this.file);
     try {
       const dirHandle = await fs.open(this.dir, "r");
       await dirHandle.sync().catch(() => undefined);
@@ -168,28 +306,44 @@ export class SyncStore {
     const now = this.now();
     if (now - this.lastBackupAt < this.backupIntervalMs) return;
     await fs.mkdir(this.backupDir, { recursive: true });
-    const stamp = new Date(now).toISOString().replace(/[:.]/g, "-");
     const rev = this.doc?.revision ?? 0;
-    await fs.copyFile(this.file, join(this.backupDir, `pora-${stamp}-r${rev}.json`));
+    await fs.copyFile(this.file, join(this.backupDir, backupFileName(now, rev)));
     this.lastBackupAt = now;
-    const names = (await fs.readdir(this.backupDir)).filter((name) => name.startsWith("pora-") && name.endsWith(".json")).sort();
-    for (const name of names.slice(0, Math.max(0, names.length - this.backupKeep))) {
-      await fs.unlink(join(this.backupDir, name)).catch(() => undefined);
-    }
+    await this.pruneBackups();
   }
 
-  /** True when the data directory accepts writes (used by /api/health). */
+  /** Apply the tiered retention to the backups folder. */
+  async pruneBackups(): Promise<string[]> {
+    const names = await fs.readdir(this.backupDir);
+    const doomed = backupsToDelete(names, this.backupHourly, this.backupDaily);
+    for (const name of doomed) await fs.unlink(join(this.backupDir, name)).catch(() => undefined);
+    return doomed;
+  }
+
+  /**
+   * True when the data directory accepts writes (used by /api/health). Cheap:
+   * no file is created; the answer is cached for a minute and a failed save
+   * keeps it false until the next successful one.
+   */
   async isWritable(): Promise<boolean> {
-    const probe = join(this.dir, `.health-${process.pid}`);
+    const now = this.now();
+    if (this.writable && now - this.writable.at < WRITABLE_CACHE_MS) return this.writable.ok;
+    let ok: boolean;
     try {
-      await fs.mkdir(this.dir, { recursive: true });
       await fs.access(this.dir, constants.W_OK);
-      await fs.writeFile(probe, String(this.now()));
-      await fs.unlink(probe);
-      return true;
-    } catch {
-      return false;
+      ok = !this.lastWriteFailed;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        ok = await fs.mkdir(this.dir, { recursive: true }).then(
+          () => true,
+          () => false,
+        );
+      } else {
+        ok = false;
+      }
     }
+    this.writable = { at: now, ok };
+    return ok;
   }
 }
 
@@ -198,7 +352,8 @@ let store: SyncStore | null = null;
 export function getStore(): SyncStore {
   if (!store) {
     store = new SyncStore(dataDir(), {
-      backupKeep: envInt("BACKUP_KEEP", 10, 1),
+      backupHourly: envInt("BACKUP_HOURLY", 24, 0),
+      backupDaily: envInt("BACKUP_DAILY", 30, 0),
       backupIntervalMs: envInt("BACKUP_INTERVAL_MINUTES", 30, 0) * 60 * 1000,
     });
     store.onCorrupt = ({ aside, backup, error }) => {
