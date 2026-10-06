@@ -791,3 +791,15 @@ export function normalizeData(raw: unknown): NormalizeResult {
   }
   return { ok: true, data: out };
 }
+
+/**
+ * Another browser tab saved its planner state. Replacing ours with it (what a
+ * plain rehydrate does) loses whatever this tab changed in the meantime — e.g.
+ * a subtask added a moment ago, when the other tab wrote its older copy (a
+ * focus-timer tick, a sync) right after us. Both copies carry per-field stamps,
+ * so merge them exactly like a server copy: every edit survives, deletions
+ * stay deleted, and both tabs converge on the same data.
+ */
+export function adoptOtherTab(mine: SyncData, theirs: SyncData): SyncData {
+  return mergeData(theirs, mine, { cutoff: 0 });
+}

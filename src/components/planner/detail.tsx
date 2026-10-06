@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { DateMultiPicker } from "@/components/planner/date-multi-picker";
 import { TaskShareControls } from "@/components/planner/sharing";
+import { DuplicateControls, NotesField, SubtasksBlock } from "@/components/planner/task-extras";
 import { cleanDates, dueLabel, repeatLabel, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { ownerOf } from "@/lib/queries";
@@ -18,7 +19,7 @@ const LEVELS: { value: Priority; label: string }[] = [
   { value: 3, label: "Высокий" },
 ];
 
-export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () => void }) {
+export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClose: () => void; onOpen?: (id: string) => void }) {
   const task = usePlanner((s) => s.tasks.find((item) => item.id === taskId));
   const lists = usePlanner((s) => s.lists);
   const projects = usePlanner((s) => s.projects ?? []);
@@ -26,13 +27,9 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
   const addProject = usePlanner((s) => s.addProject);
   const sendTaskToProject = usePlanner((s) => s.sendTaskToProject);
   const deleteTask = usePlanner((s) => s.deleteTask);
-  const addSubtask = usePlanner((s) => s.addSubtask);
-  const toggleSubtask = usePlanner((s) => s.toggleSubtask);
-  const deleteSubtask = usePlanner((s) => s.deleteSubtask);
   const setRepeatDates = usePlanner((s) => s.setRepeatDates);
   const profile = useProfile();
   const [tag, setTag] = useState("");
-  const [sub, setSub] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [projectDraft, setProjectDraft] = useState("");
   const [makingProject, setMakingProject] = useState(false);
@@ -61,16 +58,9 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
           className="w-full bg-transparent font-display text-3xl tracking-tight text-fg outline-none"
         />
 
-        <label className="mt-6 block text-xs font-medium text-subtle">
-          Заметка
-          <textarea
-            value={task.notes}
-            onChange={(event) => updateTask(task.id, { notes: event.target.value })}
-            rows={4}
-            placeholder="Контекст, ссылки, что не забыть"
-            className="mt-2 w-full resize-y rounded-md border border-line bg-elevated px-3 py-3 text-base font-normal leading-normal text-fg outline-none placeholder:text-subtle"
-          />
-        </label>
+        <NotesField task={task} />
+
+        <SubtasksBlock task={task} />
 
         <fieldset className="mt-5">
           <legend className="text-xs font-medium text-subtle">Приоритет</legend>
@@ -334,53 +324,7 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
 
         <TaskShareControls task={task} />
 
-        <div className="mt-6">
-          <p className="text-xs font-medium text-subtle">Подзадачи</p>
-          <ul className="mt-2">
-            {task.subtasks.map((item) => (
-              <li key={item.id} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-pressed={item.done}
-                  onClick={() => toggleSubtask(task.id, item.id)}
-                  className="flex h-11 min-w-0 flex-1 items-center gap-3 text-left text-sm"
-                >
-                  <span
-                    className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded-full border",
-                      item.done ? "border-accent bg-accent" : "border-line",
-                    )}
-                  />
-                  <span className={item.done ? "text-subtle line-through" : "text-fg"}>{item.title}</span>
-                </button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`Удалить подзадачу ${item.title}`}
-                  onClick={() => deleteSubtask(task.id, item.id)}
-                >
-                  <X className="size-4" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <form
-            className="mt-1"
-            onSubmit={(event) => {
-              event.preventDefault();
-              addSubtask(task.id, sub);
-              setSub("");
-            }}
-          >
-            <input
-              value={sub}
-              onChange={(event) => setSub(event.target.value)}
-              placeholder="Новая подзадача"
-              aria-label="Новая подзадача"
-              className="h-11 w-full rounded-md border border-line bg-elevated px-3 text-base outline-none placeholder:text-subtle"
-            />
-          </form>
-        </div>
+        <DuplicateControls task={task} onOpen={onOpen} />
 
         <div className="mt-8">
           {foreign ? (

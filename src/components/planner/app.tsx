@@ -404,7 +404,7 @@ export function PlannerApp() {
 
       {task ? (
         <aside className="sheet sheet-safe absolute inset-x-0 bottom-0 z-50 flex w-full flex-col bg-surface lg:static lg:inset-auto lg:z-auto lg:w-96 lg:shrink-0 lg:border-l lg:border-line">
-          <TaskDetail taskId={task.id} onClose={() => setSelectedId(null)} />
+          <TaskDetail key={task.id} taskId={task.id} onClose={() => setSelectedId(null)} onOpen={setSelectedId} />
         </aside>
       ) : null}
     </div>

@@ -6,6 +6,7 @@ import { cleanDates, firstChosenDate, nextChosenDate, nextRepeat, shiftIso, toda
 import { currentLogin } from "@/lib/use-capabilities";
 import { parseQuick } from "@/lib/quick-add";
 import { stageRange } from "@/lib/stage-range";
+import { duplicateTask as duplicateTaskData, listInNotes, splitLines } from "@/lib/task-tools";
 import { isAccent, type AccentId } from "@/lib/accents";
 import type {
   FocusClock,
@@ -80,7 +81,12 @@ type PlannerState = {
   /** Share a whole list: its tasks are visible to these logins too. */
   setListMembers: (id: string, members: string[]) => void;
   deleteTask: (id: string) => void;
+  /** One subtask per line (a pasted list becomes several). */
   addSubtask: (taskId: string, title: string) => void;
+  /** «Дублировать»: copy right after the original; returns the copy's id. */
+  duplicateTask: (id: string, due?: string | null) => string | null;
+  /** Lines of the notes that look like a list («- молоко») become subtasks. */
+  notesToSubtasks: (taskId: string) => number;
   toggleSubtask: (taskId: string, subId: string) => void;
   deleteSubtask: (taskId: string, subId: string) => void;
   addList: (name: string) => string;
@@ -522,18 +528,44 @@ export const usePlanner = create<PlannerState>()(
         })),
       deleteTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
       addSubtask: (taskId, title) => {
-        const clean = title.trim();
-        if (!clean) return;
+        const titles = splitLines(title);
+        if (!titles.length) return;
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === taskId
               ? {
                   ...t,
-                  subtasks: [...t.subtasks, { id: uid(), title: clean, done: false }],
+                  subtasks: [...(t.subtasks ?? []), ...titles.map((clean) => ({ id: uid(), title: clean, done: false }))],
                 }
               : t,
           ),
         }));
+      },
+      duplicateTask: (id, due) => {
+        const original = get().tasks.find((t) => t.id === id);
+        if (!original) return null;
+        const copy = duplicateTaskData(original, { id: uid(), newSubId: uid, now: Date.now(), due });
+        set((s) => {
+          const at = s.tasks.findIndex((t) => t.id === id);
+          const tasks = [...s.tasks];
+          tasks.splice(at < 0 ? 0 : at + 1, 0, copy);
+          return { tasks };
+        });
+        return copy.id;
+      },
+      notesToSubtasks: (taskId) => {
+        const task = get().tasks.find((t) => t.id === taskId);
+        if (!task) return 0;
+        const { items, rest } = listInNotes(task.notes);
+        if (!items.length) return 0;
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === taskId
+              ? { ...t, notes: rest, subtasks: [...(t.subtasks ?? []), ...items.map((title) => ({ id: uid(), title, done: false }))] }
+              : t,
+          ),
+        }));
+        return items.length;
       },
       toggleSubtask: (taskId, subId) =>
         set((s) => ({
@@ -541,7 +573,7 @@ export const usePlanner = create<PlannerState>()(
             t.id === taskId
               ? {
                   ...t,
-                  subtasks: t.subtasks.map((sub) =>
+                  subtasks: (t.subtasks ?? []).map((sub) =>
                     sub.id === subId ? { ...sub, done: !sub.done } : sub,
                   ),
                 }
@@ -552,7 +584,7 @@ export const usePlanner = create<PlannerState>()(
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === taskId
-              ? { ...t, subtasks: t.subtasks.filter((sub) => sub.id !== subId) }
+              ? { ...t, subtasks: (t.subtasks ?? []).filter((sub) => sub.id !== subId) }
               : t,
           ),
         })),

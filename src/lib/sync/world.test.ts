@@ -267,3 +267,35 @@ test("custom-dates repeat («Выбранные даты») merges per date acro
     assert.deepEqual([...(device.data.tasks[0]!.repeatDates as string[])].sort(), ["2026-10-07", "2026-12-24", "2027-01-15"]);
   }
 });
+
+test("subtasks: added on one device survive the server and reach the other device and the partner", () => {
+  const server = { doc: world({}) };
+  const phone = new Device("vlad");
+  const laptop = new Device("vlad");
+  const partner = new Device("zhena");
+  phone.edit(() => [task("trip", {}, T0 + 1)], T0 + 1);
+  phone.sync(server, T0 + 2);
+  laptop.sync(server, T0 + 3);
+  // add two subtasks on the phone, one more on the laptop at the same time
+  phone.edit((ts) => ts.map((t) => ({ ...t, subtasks: [{ id: "s1", title: "Билеты", done: false }, { id: "s2", title: "Отель", done: false }] })), T0 + 10);
+  laptop.edit((ts) => ts.map((t) => ({ ...t, subtasks: [{ id: "s3", title: "Страховка", done: false }] })), T0 + 11);
+  phone.sync(server, T0 + 12);
+  laptop.sync(server, T0 + 13);
+  phone.sync(server, T0 + 14);
+  const titles = (d: Device) => ((d.data.tasks[0]!.subtasks as SyncEntity[]) ?? []).map((s) => s.title).sort();
+  assert.deepEqual(titles(phone), ["Билеты", "Отель", "Страховка"]);
+  assert.deepEqual(titles(laptop), ["Билеты", "Отель", "Страховка"]);
+  // share with the partner: she sees the subtasks and ticks one, the owner gets it back
+  phone.edit((ts) => ts.map((t) => ({ ...t, members: ["zhena"] })), T0 + 20);
+  phone.sync(server, T0 + 21);
+  partner.sync(server, T0 + 22);
+  assert.deepEqual(titles(partner), ["Билеты", "Отель", "Страховка"]);
+  partner.edit((ts) => ts.map((t) => ({ ...t, subtasks: (t.subtasks as SyncEntity[]).map((s) => (s.id === "s1" ? { ...s, done: true } : s)) })), T0 + 30);
+  partner.sync(server, T0 + 31);
+  laptop.sync(server, T0 + 32);
+  const s1 = (laptop.data.tasks[0]!.subtasks as SyncEntity[]).find((s) => s.id === "s1")!;
+  assert.equal(s1.done, true);
+  assert.equal((laptop.data.tasks[0]!.subtasks as SyncEntity[]).length, 3);
+  // the stored world doc keeps them too (single-user / restore paths read it as is)
+  assert.equal((server.doc.data.tasks[0]!.subtasks as SyncEntity[]).length, 3);
+});

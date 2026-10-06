@@ -74,6 +74,7 @@ export default async function syncPut(event: ServerEvent): Promise<Response> {
     cutoff: now - TOMBSTONE_TTL_MS,
     user: user.login,
     profiles: user.multiUser,
+    owner: user.owner,
     data: result.doc.data,
   };
   const etag = `"${result.doc.revision}"`;

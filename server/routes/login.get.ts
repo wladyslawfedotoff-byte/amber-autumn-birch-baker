@@ -8,6 +8,7 @@ export default function loginGet(event: ServerEvent): Response {
   const config = getAuthConfig();
   if (config.mode === "disabled" || readSession(event)) return redirect(next);
   const multiUser = "multiUser" in config && config.multiUser;
-  const login = event.url.searchParams.get("u") || lastLogin(event);
+  const owner = "owner" in config ? config.owner : "";
+  const login = multiUser ? event.url.searchParams.get("u") || lastLogin(event) : owner;
   return html(200, loginPage({ error: event.url.searchParams.get("e"), next, login, multiUser }));
 }

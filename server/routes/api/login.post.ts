@@ -69,8 +69,9 @@ export default async function login(event: ServerEvent): Promise<Response> {
     });
     return fail("rate", 429, { "retry-after": String(verdict.retryAfterSec) });
   }
-  // One profile: the login may be left empty (old clients, scripts, the CI smoke test).
-  if (!creds.login && !config.multiUser) creds.login = config.owner;
+  // One profile: the login field is not shown and whatever arrives (nothing
+  // from old clients and scripts, a password manager's saved name) is ignored.
+  if (!config.multiUser) creds.login = config.owner;
   if (!creds.login) return fail("nologin", 400);
   if (!creds.password) return fail("empty", 400);
 

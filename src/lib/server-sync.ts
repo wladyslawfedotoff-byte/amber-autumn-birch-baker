@@ -25,6 +25,7 @@ import type { Habit, Milestone, Project, Task, TaskList } from "@/lib/planner-ty
 import { setClockOffset, syncNow } from "@/lib/sync/clock";
 import {
   COLLECTIONS,
+  adoptOtherTab,
   dropStaleItems,
   mergeData,
   normalizeData,
@@ -74,6 +75,8 @@ type RemoteDoc = {
   data: unknown;
   user?: string;
   profiles?: boolean;
+  /** Profile that owns data created before profiles were enabled. */
+  owner?: string;
 };
 
 const DEFAULT_META: Meta = {
@@ -230,8 +233,11 @@ function integrate(remote: RemoteDoc, timing?: { t0: number; t1: number }): bool
   let meta = readMeta();
   const remoteUser = remote.profiles && typeof remote.user === "string" ? remote.user : null;
   let switched = false;
-  if (remoteUser && meta.login && meta.login !== remoteUser) {
-    // Somebody else signed in on this device: their data only.
+  // Somebody else signed in on this device: their data only. A device that
+  // synced before profiles were enabled (no meta.login yet) holds the data
+  // owner's copy, so another profile must not merge it into their own.
+  const legacyCopyOfOwner = !meta.login && meta.revision !== null && typeof remote.owner === "string";
+  if (remoteUser && (meta.login ? meta.login !== remoteUser : legacyCopyOfOwner && remote.owner !== remoteUser)) {
     switched = true;
     meta = writeMeta({ ...DEFAULT_META, clockOffset: meta.clockOffset });
   }
@@ -642,11 +648,22 @@ export function bindServerSync(options: { pristine: boolean }): () => void {
   const onStorage = (event: StorageEvent) => {
     if (event.key === STORE_KEY) {
       // Another tab saved: adopt it without treating it as our own edit (that
-      // tab already marked the shared dirty flag and will upload it).
+      // tab already marked the shared dirty flag and will upload it). Merge,
+      // never replace: its save may predate an edit made here a moment ago
+      // (that is how freshly added subtasks used to vanish). A removed copy
+      // (sign-out in that tab) is taken as is.
+      const mine = event.newValue === null ? null : localData();
       applying++;
-      void Promise.resolve(usePlanner.persist.rehydrate()).finally(() => {
-        applying--;
-      });
+      void Promise.resolve(usePlanner.persist.rehydrate())
+        .then(() => {
+          if (!mine) return;
+          const theirs = localData();
+          const merged = adoptOtherTab(mine, theirs);
+          if (!sameData(merged, theirs)) applyData(merged);
+        })
+        .finally(() => {
+          applying--;
+        });
     } else if (event.key === META_KEY || event.key === LEGACY_NOTE_KEY) {
       emit();
     }

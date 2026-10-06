@@ -16,7 +16,7 @@ export default async function syncGet(event: ServerEvent): Promise<Response> {
   }
   return json(
     200,
-    { revision: doc.revision, updatedAt: doc.updatedAt, serverNow: now, cutoff: now - TOMBSTONE_TTL_MS, user: user.login, profiles: user.multiUser, data: doc.data },
+    { revision: doc.revision, updatedAt: doc.updatedAt, serverNow: now, cutoff: now - TOMBSTONE_TTL_MS, user: user.login, profiles: user.multiUser, owner: user.owner, data: doc.data },
     { etag, vary: "cookie" },
   );
 }
