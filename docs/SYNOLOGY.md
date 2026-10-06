@@ -16,46 +16,107 @@ https://pora.fedotovvladislav.synology.me:8443  →  http://127.0.0.1:8080 (ко
 
 ## Образ публичный, но без секретов
 
-`ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest` — **публичный** пакет: `docker login` и токен для pull не нужны. В образе нет паролей и ключей; пароль задаётся только в окружении контейнера (Container Manager / `.env` на NAS). Никогда не добавляйте секреты в `Dockerfile`, `docker-compose*.yml` в git или в ARG сборки.
+`ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest` — **публичный** пакет: `docker login` и токен для pull не нужны. В образе нет паролей и ключей. Все секреты лежат **только** в файле `.env` на NAS рядом с `compose.yaml`; compose подключает его через `env_file`. Никогда не добавляйте секреты в `Dockerfile`, в `docker-compose*.yml` / `compose.yaml` или в ARG сборки.
 
 CI (`.github/workflows/docker-ghcr.yml`) собирает и публикует образ при каждом push в `main` (теги `:latest` и `:sha-<short>`); для pull request только собирает и прогоняет smoke-тест контейнера.
 
-## 1. Подготовка папки
+## 1. Папка проекта
 
-1. Package Center → установите **Container Manager**.
+Итоговая структура на NAS:
+
+```
+/volume1/docker/pora/
+├── compose.yaml   ← описание контейнера (без секретов)
+├── .env           ← секреты: APP_PASSWORD или APP_PASSWORD_HASH, по желанию SESSION_SECRET, XAI_API_KEY
+└── data/          ← данные приложения: pora.json, backups/, .session-secret
+```
+
+1. Package Center → установите **Container Manager** и **Text Editor** («Текстовый редактор», нужен для создания `.env`).
 2. File Station → общая папка `docker` → создайте `pora`, внутри — **`data`**:
    `/volume1/docker/pora/data`
    (или по SSH: `mkdir -p /volume1/docker/pora/data`).
 3. Права на `data`: контейнер сам выставляет владельца при старте (он стартует как root, готовит `/data` и затем работает от непривилегированного пользователя `node`, uid 1000). Если в журнале контейнера видно `папка данных … недоступна для записи`, сделайте одно из двух:
    - File Station → `docker/pora/data` → Свойства → Разрешения → дайте «Чтение и запись» (например, группе Everyone, с применением к вложенным);
-   - или добавьте в environment `PUID`/`PGID` владельца папки (узнать: SSH → `id <ваш-пользователь-DSM>`, обычно `1026` и `100`).
+   - или добавьте в `.env` строки `PUID=…` и `PGID=…` владельца папки (узнать: SSH → `id <ваш-пользователь-DSM>`, обычно `1026` и `100`).
 
-Клонировать репозиторий на NAS **не обязательно** — для варианта A хватает compose-файла ниже. Если клонируете, не вставляйте токен в URL (`https://<TOKEN>@github.com/…` остаётся в `.git/config` и истории shell). Используйте SSH-ключ (`git clone git@github.com:wladyslawfedotoff-byte/amber-autumn-birch-baker.git pora`) или credential helper.
+Клонировать репозиторий на NAS **не обязательно** — для варианта A хватает `compose.yaml` и `.env`. Если клонируете, не вставляйте токен в URL (`https://<TOKEN>@github.com/…` остаётся в `.git/config` и истории shell). Используйте SSH-ключ (`git clone git@github.com:wladyslawfedotoff-byte/amber-autumn-birch-baker.git pora`) или credential helper.
 
-## 2. Пароль
+## 2. Файл `.env` с секретами
 
-Нужна одна переменная — **`APP_PASSWORD`** (минимум 8 символов). Пока она не задана (или осталась `СМЕНИТЕ_МЕНЯ`), приложение ничего не показывает, кроме страницы «Вход не настроен» (fail closed), а `/api/health` работает.
+Шаблон с подробными комментариями — [`.env.example`](../.env.example). Минимальный `.env`:
 
-Вместо открытого пароля можно задать хэш **`APP_PASSWORD_HASH`** (scrypt; он имеет приоритет):
-
-```bash
-# на любом компьютере с Node 22 из клона репозитория
-node scripts/hash-password.mjs
-# или прямо в запущенном контейнере
-docker exec -it pora-app node scripts/hash-password.mjs
+```dotenv
+APP_PASSWORD='ваш-длинный-пароль'
 ```
 
-Хэш выглядит как `scrypt:32768:8:1:<соль>:<хэш>` — в нём нет `$`, его можно вставлять в compose как есть. Если в открытом пароле есть `$`, в compose пишите его как `$$` (или используйте хэш).
+или, лучше, хэш вместо открытого пароля:
+
+```dotenv
+APP_PASSWORD_HASH=scrypt:32768:8:1:<соль>:<хэш>
+```
+
+### Как создать `.env` на Synology
+
+1. Откройте **Text Editor** (главное меню DSM) → «Файл» → «Создать».
+2. Вставьте содержимое `.env.example` (или только нужные строки) и впишите свои значения.
+3. «Файл» → «Сохранить как» → папка `docker/pora`, имя файла ровно **`.env`** (с точкой в начале, без `.txt`). Кодировка UTF-8.
+4. Проверьте по SSH: `ls -la /volume1/docker/pora` — должны быть `compose.yaml`, `.env`, `data`.
+
+Можно и подготовить файл на компьютере и загрузить через File Station — главное, чтобы имя было `.env`, а не `env.txt` / `.env.txt`.
+
+**Файл обязателен:** если `.env` нет, проект не запустится (Compose: `Failed to load …/.env` или `env file …/.env not found`). Необязательный `env_file` (`required: false`) в Compose из Container Manager (v2.20) не поддерживается, поэтому используется обычный `env_file: - .env`.
+
+### Права на `.env`
+
+Читать файл должен только администратор:
+
+- File Station → `docker/pora/.env` → Свойства → **Разрешения**: оставьте доступ только своей учётной записи администратора (или группе `administrators`), удалите `Everyone`, `users` и прочих пользователей. Если права наследуются от папки `docker`, отключите наследование для этого файла.
+- По SSH дополнительно: `sudo chmod 600 /volume1/docker/pora/.env`. Container Manager работает от root и прочитает файл в любом случае.
+- Не открывайте общий доступ (ссылки File Station) к папке `docker/pora`.
+
+`.env` **никогда не попадает в GitHub**: он в `.gitignore` и `.dockerignore`, в репозитории лежит только шаблон `.env.example` без настоящих значений.
+
+### Пароль и хэш
+
+Нужна одна из переменных — **`APP_PASSWORD`** (минимум 8 символов) или **`APP_PASSWORD_HASH`** (scrypt, имеет приоритет). Пока ни одна не задана (или осталась заглушка `СМЕНИТЕ_МЕНЯ`), приложение ничего не показывает, кроме страницы «Вход не настроен» (fail closed), а `/api/health` работает.
+
+Хэш рекомендуется: тогда открытого пароля нет ни в `.env`, ни в настройках контейнера (переменные окружения видны в Container Manager → Контейнер → Подробности и в `docker inspect` любому администратору DSM). Получить хэш (скрипт `scripts/hash-password.mjs` спросит пароль дважды, ввод скрыт):
+
+```bash
+# на NAS по SSH, без клона репозитория
+sudo docker run --rm -it --entrypoint node ghcr.io/wladyslawfedotoff-byte/amber-autumn-birch-baker:latest scripts/hash-password.mjs
+# или в уже запущенном контейнере
+sudo docker exec -it pora-app node scripts/hash-password.mjs
+# или на компьютере с Node 22 в клоне репозитория
+node scripts/hash-password.mjs
+```
+
+Хэш выглядит как `scrypt:32768:8:1:<соль>:<хэш>` и содержит только `A–Z a–z 0–9 : _ -` — его можно вставлять в `.env` как есть, без кавычек.
+
+### Символ `$` и кавычки в `.env`
+
+Проверено на Docker Compose v2.20.1 (Container Manager DSM 7.2) и v5.6:
+
+| Строка в `.env` | Значение в контейнере |
+| --- | --- |
+| `APP_PASSWORD=ab$cd` | `ab` — `$cd` считается подстановкой переменной (в журнале предупреждение) |
+| `APP_PASSWORD="ab$cd"` | `ab` — в двойных кавычках подстановка тоже работает |
+| `APP_PASSWORD='ab$cd'` | `ab$cd` — одинарные кавычки: всё буквально |
+| `APP_PASSWORD=ab$$cd` | `ab$cd` — `$$` означает один `$` |
+| `APP_PASSWORD=ab\$cd` | `ab\` — обратная косая черта **не** экранирует `$` |
+| `APP_PASSWORD=ab #cd` | `ab` — « #» без кавычек начинает комментарий |
+
+То есть в `env_file` (как и в самом compose-файле) `$` **без кавычек нужно удваивать** или брать значение в одинарные кавычки. Одинарную кавычку внутри `'…'` в Compose v2.20 записать нельзя. Проще всего — пароль без `$ ' " \ #` и пробелов или `APP_PASSWORD_HASH`.
 
 Смена пароля или `SESSION_SECRET` разлогинивает все устройства. Сессия живёт 30 дней и продлевается при использовании. Ограничение: 5 неверных попыток за 15 минут с одного IP (плюс общая задержка при массовом переборе); неудачные попытки пишутся в журнал (`login.failed`).
 
 ## 3. Проект в Container Manager (вариант A, рекомендуется — готовый образ)
 
-Container Manager → **Проект** → **Создать**:
+Сначала создайте `data/` и `.env` (п. 1–2). Затем Container Manager → **Проект** → **Создать**:
 
 - Название: `pora`
 - Путь: `/volume1/docker/pora`
-- Источник: «Создать docker-compose.yml» и вставить:
+- Источник: «Создать docker-compose.yml» и вставить содержимое [`docker-compose.ghcr.yml`](../docker-compose.ghcr.yml) (Container Manager сохранит его как `compose.yaml`). Основная часть:
 
 ```yaml
 services:
@@ -64,17 +125,16 @@ services:
     container_name: pora-app
     restart: unless-stopped
     init: true
+    env_file:
+      - .env
     environment:
       HOST: "0.0.0.0"
       PORT: "8080"
       NITRO_HOST: "0.0.0.0"
       NITRO_PORT: "8080"
       APP_URL: "https://pora.fedotovvladislav.synology.me:8443"
-      VITE_GROK_EXTENSIONS: "0"
       DATA_DIR: /data
-      APP_PASSWORD: "СМЕНИТЕ_МЕНЯ"
-      # PUID: "1026"   # только если ./data недоступна для записи
-      # PGID: "100"
+      VITE_GROK_EXTENSIONS: "0"
     volumes:
       - ./data:/data
     ports:
@@ -87,16 +147,23 @@ services:
       retries: 3
 ```
 
-Замените `СМЕНИТЕ_МЕНЯ` на свой пароль → «Далее» → «Готово». Тот же файл лежит в репозитории как `docker-compose.ghcr.yml` (там значения можно брать из `.env`, см. `.env.example`).
+→ «Далее» → «Готово». В `compose.yaml` секретов нет; **не** добавляйте `APP_PASSWORD` и другие секреты в `environment:` — значения из `environment` перекрывают `.env`, даже пустые.
 
 `APP_URL` — публичный адрес **с портом** `:8443`: по нему сервер проверяет Origin у входа и изменений (защита от CSRF). Если заходите и по другому адресу, имя хоста всё равно должно совпадать с тем, что передаёт Reverse Proxy.
+
+После изменения `.env` контейнер нужно **пересоздать**: простой «Перезапуск» оставляет старые значения. В Container Manager: Проект `pora` → «Собрать» (Build), либо по SSH:
+
+```bash
+cd /volume1/docker/pora && sudo docker compose up -d --force-recreate
+```
 
 ### Вариант B: сборка на NAS
 
 ```bash
 cd /volume1/docker/pora   # клон репозитория
-cp .env.example .env      # задайте APP_PASSWORD
-docker compose up -d --build
+cp .env.example .env      # задайте APP_PASSWORD или APP_PASSWORD_HASH
+chmod 600 .env
+sudo docker compose up -d --build
 ```
 
 Сборка требует RAM/CPU; вариант A проще.
@@ -131,11 +198,11 @@ Container Manager → Образ → `ghcr.io/…/amber-autumn-birch-baker` → 
 
 ```bash
 cd /volume1/docker/pora
-docker compose pull
-docker compose up -d
+sudo docker compose pull
+sudo docker compose up -d
 ```
 
-Данные в `./data` сохраняются между обновлениями.
+Данные в `./data` и секреты в `.env` сохраняются между обновлениями.
 
 ## 7. Первое подключение устройств
 
@@ -146,8 +213,10 @@ docker compose up -d
 
 ## Troubleshooting
 
-- **«Вход не настроен» (503):** не задан `APP_PASSWORD`/`APP_PASSWORD_HASH`, пароль короче 8 символов или остался `СМЕНИТЕ_МЕНЯ`. Причина — в журнале (`auth.not_configured reason=…`).
+- **«Вход не настроен» (503):** в `.env` не задан `APP_PASSWORD`/`APP_PASSWORD_HASH`, пароль короче 8 символов или остался `СМЕНИТЕ_МЕНЯ`. Причина — в журнале (`auth.not_configured reason=…`).
 - **Вход сразу возвращает на /login с сообщением «Запрос пришёл не с этого сайта»:** адрес в браузере не совпадает с `APP_URL` (проверьте порт `:8443`) и с хостом, который передаёт прокси.
-- **unhealthy / `dataWritable:false`:** нет прав на `/volume1/docker/pora/data` → см. п. 1.3 (права или `PUID`/`PGID`).
+- **unhealthy / `dataWritable:false`:** нет прав на `/volume1/docker/pora/data` → см. п. 1.3 (права или `PUID`/`PGID` в `.env`).
+- **`Failed to load …/.env` / `env file … not found`:** нет файла `/volume1/docker/pora/.env` или он назван иначе (`.env.txt`) → п. 2.
+- **Пароль «не подходит», а в журнале `The "…" variable is not set`:** в пароле есть `$` без кавычек → возьмите значение в одинарные кавычки или используйте `APP_PASSWORD_HASH` (п. 2), затем пересоздайте контейнер.
 - **Слишком много попыток (429):** подождите 15 минут или перезапустите контейнер.
 - **Восстановить данные из копии:** остановите контейнер, скопируйте нужный `data/backups/pora-….json` поверх `data/pora.json`, запустите. Устройства сольют свои локальные данные с восстановленной версией (то, что есть на устройствах, вернётся на сервер; чтобы откатить и их, перед этим выйдите на устройствах и очистите данные сайта).

@@ -22,6 +22,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Secrets come only from .env (env_file); the template must parse cleanly
+      # (no stray "$" interpolation warnings) and reach the container env.
+      - name: Validate compose files with env_file
+        run: |
+          set -eu
+          cp .env.example .env
+          for f in docker-compose.ghcr.yml docker-compose.yml; do
+            docker compose -f "$f" config > /tmp/compose.out 2> /tmp/compose.err
+            cat /tmp/compose.err
+            if grep -qi warn /tmp/compose.err; then echo "warnings in $f"; exit 1; fi
+            grep -q 'APP_PASSWORD: СМЕНИТЕ_МЕНЯ' /tmp/compose.out
+          done
+          rm -f .env
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

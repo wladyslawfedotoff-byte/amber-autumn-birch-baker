@@ -1,9 +1,13 @@
 node_modules/
 .project_id
 .github_repo
+# Secrets: only the template .env.example is tracked.
 .env
 .env.*
 !.env.example
+# Runtime data of a local `docker compose up` (pora.json, .session-secret, backups).
+/data/
+/ci-data/
 .output/
 .vercel/
 .nitro/

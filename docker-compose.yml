@@ -1,12 +1,12 @@
-# Synology Container Manager / Docker Compose for «Пора» — build on the NAS.
-# Prefer docker-compose.ghcr.yml (pulls the ready image from GHCR, no build).
+# «Пора» — сборка образа на NAS из клона репозитория.
+# Проще и легче для NAS: docker-compose.ghcr.yml (готовый образ из GHCR).
 #
-# The app listens on loopback only — DSM Reverse Proxy (HTTPS :8443) in front.
-# Data (tasks, revision, session secret, backups) lives in ./data on the host.
+#   cp .env.example .env    # задайте APP_PASSWORD или APP_PASSWORD_HASH
+#   docker compose up -d --build
 #
-# Values come from environment / .env next to this file (compose reads .env
-# automatically for ${...}). Never commit .env. See .env.example and
-# docs/SYNOLOGY.md.
+# Файл .env ОБЯЗАТЕЛЕН (иначе «Failed to load …/.env») и никогда не
+# попадает в git и в образ (.gitignore, .dockerignore). Данные — в ./data.
+# Подробно: docs/SYNOLOGY.md.
 
 services:
   app:
@@ -20,33 +20,25 @@ services:
     container_name: pora-app
     restart: unless-stopped
     init: true
+    # Секреты и необязательные настройки — только из .env рядом с этим файлом.
+    # Не добавляйте APP_PASSWORD / APP_PASSWORD_HASH / SESSION_SECRET /
+    # XAI_API_KEY в environment ниже: environment перекрывает env_file,
+    # даже пустым значением.
+    env_file:
+      - .env
     environment:
       HOST: "0.0.0.0"
       PORT: "8080"
       NITRO_HOST: "0.0.0.0"
       NITRO_PORT: "8080"
-      # Public URL behind the reverse proxy (WITH the port), used for the
-      # login CSRF/origin check.
-      APP_URL: "${APP_URL:-https://pora.fedotovvladislav.synology.me:8443}"
-      # Login password (min 8 chars). Or set APP_PASSWORD_HASH instead
-      # (node scripts/hash-password.mjs). The app refuses to start serving
-      # until one of them is set.
-      APP_PASSWORD: "${APP_PASSWORD:-}"
-      APP_PASSWORD_HASH: "${APP_PASSWORD_HASH:-}"
-      # Optional: if empty, generated once into /data/.session-secret (0600).
-      SESSION_SECRET: "${SESSION_SECRET:-}"
+      # Публичный адрес за Reverse Proxy DSM, С портом (проверка Origin/CSRF).
+      APP_URL: "https://pora.fedotovvladislav.synology.me:8443"
       DATA_DIR: /data
       VITE_GROK_EXTENSIONS: "0"
-      # Optional: run as the owner of ./data (DSM user, e.g. 1026 / 100).
-      PUID: "${PUID:-}"
-      PGID: "${PGID:-}"
-      # Optional, not needed for «Пора» today.
-      DATABASE_URL: "${DATABASE_URL:-}"
-      XAI_API_KEY: "${XAI_API_KEY:-}"
     volumes:
       - ./data:/data
     ports:
-      # Only localhost — the DSM Reverse Proxy reaches this.
+      # Только localhost — наружу выходит Reverse Proxy DSM (HTTPS :8443).
       - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
@@ -57,11 +49,11 @@ services:
     # labels:
     #   autoheal: "true"
 
-  # --- Optional: restart the container automatically when it is "unhealthy".
-  # `restart: unless-stopped` already restarts it after a crash (the server
-  # exits on fatal errors). autoheal also covers a hung-but-running process.
-  # NOTE: autoheal needs /var/run/docker.sock (= full control over Docker on
-  # the NAS). Enable only if you accept that; then uncomment the labels above.
+  # --- Необязательно: автоперезапуск контейнера в состоянии «unhealthy».
+  # `restart: unless-stopped` уже поднимает упавший контейнер (сервер
+  # завершается при фатальной ошибке); autoheal нужен для «зависшего» процесса.
+  # ВНИМАНИЕ: autoheal требует /var/run/docker.sock (= полный контроль над
+  # Docker на NAS). Включайте осознанно, вместе с labels выше.
   # autoheal:
   #   image: willfarrell/autoheal:latest
   #   container_name: pora-autoheal
