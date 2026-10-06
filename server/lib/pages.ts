@@ -86,9 +86,9 @@ export function notConfiguredPage(reason: string): string {
   <h1>Пора</h1>
   <p>Приложение закрыто: на сервере не задан пароль для входа.</p>
   <ol>
-    <li>Откройте Container Manager → «Проект» → проект «Пора» → «Изменить».</li>
-    <li>В разделе <code>environment</code> добавьте строку <code>APP_PASSWORD: "ваш-надёжный-пароль"</code> (не короче 8 символов).</li>
-    <li>Сохраните и перезапустите проект.</li>
+    <li>В папке проекта на NAS (рядом с <code>compose.yaml</code>) откройте файл <code>.env</code> — шаблон в <code>.env.example</code>.</li>
+    <li>Впишите строку <code>APP_PASSWORD='ваш-надёжный-пароль'</code> (не короче 8 символов).</li>
+    <li>Сохраните файл и пересоздайте контейнер (Container Manager → «Проект» → «Собрать» или <code>docker compose up -d --force-recreate</code>).</li>
   </ol>
   <p style="margin-top:12px;font-size:13px">Вместо открытого пароля можно указать <code>APP_PASSWORD_HASH</code> — его печатает <code>node scripts/hash-password.mjs</code>.</p>
   <p style="margin-top:12px;font-size:12px;color:var(--subtle)">Причина: ${escapeHtml(reason)}</p>

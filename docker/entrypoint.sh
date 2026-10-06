@@ -38,7 +38,7 @@ if [ "$(id -u)" = "0" ]; then
   if ! setpriv --reuid="$APP_UID" --regid="$APP_GID" --clear-groups sh -c 'test -w "$1"' _ "$DATA_DIR"; then
     log "ERROR entrypoint: папка данных $DATA_DIR недоступна для записи пользователю $APP_UID:$APP_GID."
     log "ERROR entrypoint: Synology: File Station → docker/pora/data → Свойства → Разрешения — дайте «Чтение и запись» (например, группе Everyone),"
-    log "ERROR entrypoint: или задайте PUID/PGID владельца папки (id пользователя DSM, обычно 1026 и 100) в environment."
+    log "ERROR entrypoint: или задайте PUID/PGID владельца папки (id пользователя DSM, обычно 1026 и 100) в файле .env."
     log "ERROR entrypoint: data folder $DATA_DIR is not writable for uid $APP_UID — fix permissions or set PUID/PGID. Starting anyway (health will report 503)."
   fi
 

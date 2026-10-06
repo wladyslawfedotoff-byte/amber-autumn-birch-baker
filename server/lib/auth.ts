@@ -97,7 +97,7 @@ export function getAuthConfig(): AuthConfig {
   if (cachedConfig.mode === "unconfigured" || cachedConfig.mode === "invalid") {
     log("error", "auth.not_configured", {
       reason: cachedConfig.reason,
-      hint: "Container Manager → проект → environment: APP_PASSWORD=<ваш пароль> (или APP_PASSWORD_HASH), затем перезапустите контейнер",
+      hint: "задайте APP_PASSWORD=<пароль> (или APP_PASSWORD_HASH) в файле .env рядом с compose.yaml и пересоздайте контейнер (docker compose up -d --force-recreate)",
     });
   } else if (cachedConfig.mode === "disabled") {
     log("warn", "auth.DISABLED", {
