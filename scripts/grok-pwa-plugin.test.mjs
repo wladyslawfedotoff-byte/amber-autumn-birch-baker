@@ -21,6 +21,11 @@ import { renderInstallPage } from "./grok-pwa-plugin.mjs";
 
 const TEMPLATE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// The project's own src/lib/og/site.json (title «Пора») and public/og.jpg
+// would otherwise leak into tests of the title / og:image fallbacks via the
+// default cwd. Those tests run against an empty workspace instead.
+const NO_WORKSPACE = { cwd: mkdtempSync(join(tmpdir(), "grok-og-empty-")), site: {} };
+
 test("injects before </head>", () => {
   const out = injectGrokPwaHead("<html><head><title>x</title></head><body></body></html>");
   assert.match(out, /rel="manifest"/);
@@ -105,7 +110,7 @@ test("does not duplicate x:creator tags", () => {
 test("platform chrome overwrites share-card metas and always sets og:title", () => {
   const html =
     '<html><head><title>Hello World</title><meta property="og:title" content="Old"><meta name="twitter:card" content="summary"></head></html>';
-  const out = injectGrokPwaHead(html, { appName: "Wild Race" });
+  const out = injectGrokPwaHead(html, { ...NO_WORKSPACE, appName: "Wild Race" });
   assert.match(out, /name="twitter:card" content="summary_large_image"/);
   assert.match(out, /property="og:title" content="Hello World"/);
   assert.doesNotMatch(out, /content="Old"/);
@@ -245,6 +250,7 @@ test("site title Grok App is a real name, not a sentinel", () => {
 
 test("published grok.me slug is still a title fallback", () => {
   const out = injectGrokPwaHead("<html><head></head></html>", {
+    ...NO_WORKSPACE,
     host: "wild-race.grok.me",
   });
   assert.match(out, /property="og:title" content="Wild Race"/);
@@ -304,6 +310,7 @@ test("vercel Host without a public hostname emits no og:image", () => {
 
 test("emits og:image for a public host and prefers a custom card", () => {
   const placeholder = injectGrokPwaHead("<html><head></head></html>", {
+    cwd: NO_WORKSPACE.cwd,
     appName: "Wild Race",
     host: "wild-race.grok.me",
     site: { title: "Wild Race" },
@@ -315,6 +322,7 @@ test("emits og:image for a public host and prefers a custom card", () => {
   assert.match(placeholder, /property="og:image:width" content="1200"/);
 
   const custom = injectGrokPwaHead("<html><head></head></html>", {
+    cwd: NO_WORKSPACE.cwd,
     appName: "Wild Race",
     host: "wild-race.grok.me",
     site: { title: "Wild Race", card: "custom", type: "x:game" },
@@ -325,6 +333,7 @@ test("emits og:image for a public host and prefers a custom card", () => {
 
 test("placeholder og:image appends site.color when it is 6-digit hex", () => {
   const themed = injectGrokPwaHead("<html><head></head></html>", {
+    cwd: NO_WORKSPACE.cwd,
     host: "wild-race.grok.me",
     site: { title: "Wild Race", color: "#FF4D2E" },
   });
@@ -334,6 +343,7 @@ test("placeholder og:image appends site.color when it is 6-digit hex", () => {
   );
 
   const invalid = injectGrokPwaHead("<html><head></head></html>", {
+    cwd: NO_WORKSPACE.cwd,
     host: "wild-race.grok.me",
     site: { title: "Wild Race", color: "red" },
   });
@@ -341,6 +351,7 @@ test("placeholder og:image appends site.color when it is 6-digit hex", () => {
 
   const custom = injectGrokPwaHead("<html><head></head></html>", {
     host: "wild-race.grok.me",
+    cwd: NO_WORKSPACE.cwd,
     site: { title: "Wild Race", card: "custom", color: "FF4D2E" },
   });
   assert.doesNotMatch(custom, /color=/);
@@ -349,6 +360,7 @@ test("placeholder og:image appends site.color when it is 6-digit hex", () => {
 test("document title entities are not double-escaped on og:title", () => {
   const out = injectGrokPwaHead(
     "<html><head><title>Cats &amp; Dogs</title></head></html>",
+    NO_WORKSPACE,
   );
   assert.match(out, /property="og:title" content="Cats &amp; Dogs"/);
   assert.doesNotMatch(out, /Cats &amp;amp; Dogs/);
@@ -363,14 +375,17 @@ test("site.json title wins over the host slug", () => {
 });
 
 test("injects into documents with no head element", () => {
-  const out = injectGrokPwaHead("<html><body>hi</body></html>", { appName: "Solo" });
+  const out = injectGrokPwaHead("<html><body>hi</body></html>", {
+    ...NO_WORKSPACE,
+    appName: "Solo",
+  });
   assert.match(out, /<head>/);
   assert.match(out, /property="og:title" content="Solo"/);
   assert.match(out, /<\/head>/);
 });
 
 test("streaming injector matches </HEAD> case-insensitively", () => {
-  const injector = createHeadInjector({ appName: "Wild Race" });
+  const injector = createHeadInjector({ ...NO_WORKSPACE, appName: "Wild Race" });
   const chunks = [
     ...injector.push("<html><HEAD><title>x</title></HE"),
     ...injector.push("AD><body>hello</body></html>"),
@@ -430,7 +445,10 @@ test("is idempotent", () => {
 });
 
 test("uses the app name in the injected title tag", () => {
-  const out = injectGrokPwaHead("<html><head></head></html>", { appName: "Wild Race" });
+  const out = injectGrokPwaHead("<html><head></head></html>", {
+    ...NO_WORKSPACE,
+    appName: "Wild Race",
+  });
   assert.match(out, /apple-mobile-web-app-title" content="Wild Race"/);
 });
 
@@ -519,6 +537,23 @@ test("manifest name override wins over the host slug", () => {
   const manifest = JSON.parse(renderWebManifest("wild-race.grok.me", "Пора"));
   assert.equal(manifest.name, "Пора");
   assert.equal(manifest.short_name, "Пора");
+});
+
+test("manifest name override is used on a non-grok.me host", () => {
+  const manifest = JSON.parse(renderWebManifest("nas.example.com:8443", "Пора"));
+  assert.equal(manifest.name, "Пора");
+  const fallback = JSON.parse(renderWebManifest("nas.example.com:8443", "  "));
+  assert.equal(fallback.name, "Grok App");
+});
+
+test("install page uses the site name when given", () => {
+  const html = renderInstallPage("nas.example.com", "/?install=1", "Пора");
+  assert.match(html, /Пора/);
+});
+
+test("the project site.json names the app «Пора»", () => {
+  const site = JSON.parse(readFileSync(join(TEMPLATE_ROOT, "src/lib/og/site.json"), "utf8"));
+  assert.equal(site.title, "Пора");
 });
 
 // Tripwires: the deployed-app path only works if Nitro scans server/ — an
