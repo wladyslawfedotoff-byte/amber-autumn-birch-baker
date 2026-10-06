@@ -49,7 +49,7 @@ function shell(title: string, body: string): string {
 
 export const LOGIN_ERRORS: Record<string, string> = {
   wrong: "Неверный логин или пароль.",
-  nologin: "Введите логин — короткое имя латиницей, например vlad.",
+  nologin: "Введите логин — короткое имя латиницей, например user1.",
   rate: "Слишком много попыток. Подождите несколько минут и попробуйте снова.",
   origin: "Запрос пришёл не с этого сайта. Обновите страницу и попробуйте ещё раз.",
   empty: "Введите пароль.",
@@ -114,7 +114,7 @@ export function loginPage(options: { error?: string | null; next?: string | null
   const login = /^[a-z0-9_-]{1,32}$/.test(options.login ?? "") ? options.login! : "";
   const loginField = options.multiUser
     ? `<label for="login">Логин</label>
-  <input id="login" name="login" type="text" value="${escapeHtml(login)}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required ${login ? "" : "autofocus"} enterkeyhint="next" placeholder="например, vlad">
+  <input id="login" name="login" type="text" value="${escapeHtml(login)}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required ${login ? "" : "autofocus"} enterkeyhint="next" placeholder="например, user1">
   <p class="hint">Латиницей, как в файле .env на сервере. Запомним на этом устройстве.</p>`
     : `<input type="text" name="username" value="${escapeHtml(login || "pora")}" autocomplete="username" hidden aria-hidden="true" tabindex="-1">`;
   return shell(
@@ -145,7 +145,7 @@ export function notConfiguredPage(reason: string): string {
     <li>Впишите строку <code>APP_PASSWORD='ваш-надёжный-пароль'</code> (не короче 12 символов; лучше фраза из нескольких слов, 16+ символов).</li>
     <li>Сохраните файл и пересоздайте контейнер (Container Manager → «Проект» → «Собрать» или <code>docker compose up -d --force-recreate</code>).</li>
   </ol>
-  <p style="margin-top:12px;font-size:13px">Вместо открытого пароля можно указать <code>APP_PASSWORD_HASH</code> — его печатает <code>node scripts/hash-password.mjs</code>. Несколько профилей: <code>APP_USERS=vlad,zhena</code> и <code>USER_VLAD_PASSWORD=…</code> — см. <code>.env.example</code>.</p>
+  <p style="margin-top:12px;font-size:13px">Вместо открытого пароля можно указать <code>APP_PASSWORD_HASH</code> — его печатает <code>node scripts/hash-password.mjs</code>. Несколько профилей: <code>APP_USERS=user1,user2</code> и <code>USER_USER1_PASSWORD=…</code> — см. <code>.env.example</code>.</p>
   <p style="margin-top:12px;font-size:12px;color:var(--subtle)">Причина: ${escapeHtml(reason)}</p>
 </div>`,
   );
