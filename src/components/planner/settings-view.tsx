@@ -3,7 +3,7 @@ import { ACCENTS } from "@/lib/accents";
 import { addFromBackup, saveBackup } from "@/lib/backup";
 import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
-import { dismissLegacyNote, logout, syncServerNow } from "@/lib/server-sync";
+import { dismissLegacyNote, logout, logoutEverywhere, syncServerNow } from "@/lib/server-sync";
 import { phaseLabel, useServerSyncStatus } from "@/lib/use-server-sync";
 
 function formatSyncTime(stamp: number | null): string {
@@ -19,6 +19,9 @@ function formatSyncTime(stamp: number | null): string {
 function ConnectionSection() {
   const status = useServerSyncStatus();
   const [busy, setBusy] = useState(false);
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [allBusy, setAllBusy] = useState(false);
+  const [allError, setAllError] = useState("");
   const label = phaseLabel(status);
   return (
     <section>
@@ -60,7 +63,49 @@ function ConnectionSection() {
         <button type="button" onClick={() => void logout()} className="h-11 rounded-xl px-4 text-sm text-muted">
           Выйти
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAllError("");
+            setConfirmAll(true);
+          }}
+          aria-expanded={confirmAll}
+          className="h-11 rounded-xl px-4 text-sm text-danger"
+        >
+          Выйти на всех устройствах
+        </button>
       </div>
+      {confirmAll ? (
+        <div role="alertdialog" aria-labelledby="logout-all-title" className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm">
+          <p id="logout-all-title" className="font-medium">
+            Выйти на всех устройствах?
+          </p>
+          <p className="mt-1 text-muted">
+            Все сеансы будут завершены, включая этот: на каждом телефоне и компьютере нужно будет снова ввести пароль.
+            Пригодится, если устройство потеряно или пароль мог узнать кто-то ещё — тогда смените и пароль в .env.
+            Данные не удаляются.
+          </p>
+          {allError ? <p className="mt-2 text-xs text-danger">{allError}</p> : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={allBusy}
+              onClick={() => {
+                setAllBusy(true);
+                logoutEverywhere()
+                  .catch((error: unknown) => setAllError(error instanceof Error ? error.message : "Не получилось."))
+                  .finally(() => setAllBusy(false));
+              }}
+              className="h-11 rounded-xl bg-danger px-4 text-sm text-on-danger disabled:opacity-60"
+            >
+              {allBusy ? "Завершаем сеансы…" : "Да, выйти везде"}
+            </button>
+            <button type="button" disabled={allBusy} onClick={() => setConfirmAll(false)} className="h-11 rounded-xl px-4 text-sm text-muted">
+              Отмена
+            </button>
+          </div>
+        </div>
+      ) : null}
       {status.legacyNote ? (
         <p className="mt-3 text-xs text-muted">
           {status.legacyNote}{" "}

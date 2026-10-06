@@ -514,7 +514,7 @@ test("rejects hosts that are not plain slugs", () => {
 
 test("renders install page markup", () => {
   const html = renderInstallPage("wild-race.grok.me", "/?install=1&platform=ios");
-  assert.match(html, /Add Wild Race to your/);
+  assert.match(html, /Добавьте «Wild Race» на/);
   assert.match(html, /\/__grok\/install\/styles\.css/);
   assert.match(html, /href="\/"/);
   assert.equal(html.includes("{{APP_NAME}}"), false);
@@ -549,6 +549,13 @@ test("manifest name override is used on a non-grok.me host", () => {
 test("install page uses the site name when given", () => {
   const html = renderInstallPage("nas.example.com", "/?install=1", "Пора");
   assert.match(html, /Пора/);
+});
+
+test("install page is in Russian and carries no Grok branding", () => {
+  const html = renderInstallPage("nas.example.com", "/?install=1", "Пора");
+  assert.match(html, /<html lang="ru"/);
+  assert.equal(/Powered by|>Grok<|logo-grok/.test(html), false);
+  assert.match(html, /экран «Домой»/);
 });
 
 test("the project site.json names the app «Пора»", () => {
