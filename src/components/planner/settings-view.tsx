@@ -1,3 +1,4 @@
+import { APP_NAME, APP_VERSION } from "@/lib/site";
 import { useRef, useState } from "react";
 import { ACCENTS } from "@/lib/accents";
 import { addFromBackup, saveBackup } from "@/lib/backup";
@@ -135,7 +136,9 @@ function ConnectionSection() {
   return (
     <section>
       <h2 className="font-display text-lg tracking-tight">Подключение</h2>
-      <p className="mt-1 text-sm text-muted">Задачи хранятся на вашем сервере и на этом устройстве.</p>
+      <p className="mt-1 text-sm text-muted">
+        Задачи хранятся на вашем сервере и на этом устройстве. {APP_NAME} · версия {APP_VERSION}
+      </p>
       <div className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm">
         <div className="flex items-center gap-2">
           <span

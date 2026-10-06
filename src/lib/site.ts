@@ -11,3 +11,7 @@ export const APP_TAGLINE: string = site.tagline;
 /** «Пора — время делать» */
 export const APP_TITLE: string = APP_TAGLINE ? `${APP_NAME} — ${APP_TAGLINE}` : APP_NAME;
 export const APP_DESCRIPTION: string = site.description;
+
+declare const __APP_VERSION__: string | undefined;
+/** package.json version, injected at build time by vite.config.ts. */
+export const APP_VERSION: string = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
