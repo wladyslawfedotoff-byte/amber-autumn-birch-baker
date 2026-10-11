@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Menu, Search, X } from "lucide-react";
+import { Columns3, List, Menu, Search, Trash2, X } from "lucide-react";
 import { AssistView } from "@/components/planner/assist-view";
 import { CalendarView } from "@/components/planner/calendar-view";
 import { ChecklistView } from "@/components/planner/checklist-view";
@@ -17,7 +17,7 @@ import { TaskViews } from "@/components/planner/task-views";
 import { Button } from "@/components/ui/button";
 import { beep } from "@/lib/beep";
 import { cn } from "@/lib/cn";
-import { formatLong, shiftIso, todayIso } from "@/lib/dates";
+import { formatLong, formatRange, formatShortDay, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { View } from "@/lib/planner-types";
 import { scopeTasks } from "@/lib/queries";
@@ -27,7 +27,7 @@ import { SyncIndicator } from "@/components/planner/sync-status";
 import { DoneToastBar } from "@/components/planner/done-toast";
 import { Fab, QuickComposer } from "@/components/planner/quick-composer";
 import { TAB_ICONS } from "@/components/planner/tab-icons";
-import { TAB_OPTIONS } from "@/lib/ui-prefs";
+import { TAB_OPTIONS, canBoard } from "@/lib/ui-prefs";
 import { useViewportFrame } from "@/lib/use-viewport-frame";
 
 function viewTitle(view: View, lists: { id: string; name: string }[]): string {
@@ -81,7 +81,9 @@ export function PlannerApp() {
   const addTask = usePlanner((s) => s.addTask);
   const [composer, setComposer] = useState(false);
   const composerRef = useRef<HTMLInputElement>(null);
+  /** Day shown by «Календарь» / «Расписание»: the «+» adds to it. */
   const [calendarDay, setCalendarDay] = useState<string | null>(null);
+  const [board, setBoard] = useState(false);
   /** «×» on the reminder strip hides it until a new reminder comes (no «Понятно» needed). */
   const [bannerHidden, setBannerHidden] = useState("");
   const closeComposer = useCallback(() => {
@@ -121,6 +123,9 @@ export function PlannerApp() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.dataset.accent = accent;
+    // Safari tints its bars from theme-color: match the app surface (no grey band under the tab bar).
+    const surface = getComputedStyle(document.documentElement).getPropertyValue("--surface").trim();
+    if (surface) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", surface);
   }, [theme, accent]);
 
   useViewportFrame();
@@ -144,8 +149,19 @@ export function PlannerApp() {
     if (selectedId && !tasks.some((item) => item.id === selectedId)) setSelectedId(null);
   }, [selectedId, tasks]);
 
+  function openComposer() {
+    setComposer(true);
+    // Focus inside the tap: iOS opens the keyboard only for that.
+    const input = composerRef.current;
+    input?.focus({ preventScroll: true });
+    // Desktop: the composer is display:none until opened — focus after paint.
+    if (input && document.activeElement !== input) requestAnimationFrame(() => composerRef.current?.focus({ preventScroll: true }));
+  }
+
   function openView(next: View) {
     setView(next);
+    setBoard(false);
+    setCalendarDay(null);
     setComposer(false);
     if (next !== "projects") setProjectId(null);
     setDrawer(false);
@@ -153,6 +169,11 @@ export function PlannerApp() {
     setQuery("");
     setSearchOpen(false);
     setConfirmList(false);
+  }
+
+  function openProject(id: string) {
+    openView("projects");
+    setProjectId(id);
   }
 
   function openHit(hit: { kind: string; refId: string }) {
@@ -168,22 +189,22 @@ export function PlannerApp() {
   const subtitle = (() => {
     if (query.trim()) return "Поиск по названию, заметке и тегам";
     if (view === "today") return "";
-    if (view === "week") return `${formatLong(today)} — ${formatLong(shiftIso(today, 6))}`;
-    if (view === "tomorrow") return formatLong(shiftIso(today, 1));
+    if (view === "week") return formatRange(today, shiftIso(today, 6));
+    if (view === "tomorrow") return formatShortDay(shiftIso(today, 1), true);
     if (view === "inbox") return "Без списка";
     if (view === "done") return "Недавно выполненные";
     if (view === "archive") return "Старые выполненные задачи";
     if (view === "calendar") return "";
     if (view === "focus") return "";
     if (view === "habits") return "";
-    if (view === "checklist") return "Все открытые задачи";
+    if (view === "checklist") return "Все открытые";
     if (view === "matrix") return "";
     if (view === "dates") return "";
     if (view === "assist") return "";
     if (view === "schedule") return "";
     if (view === "projects") return "";
     if (view === "settings") return "";
-    if (view === "shared") return "Совместные, назначенные и из общих списков";
+    if (view === "shared") return "Видны не только вам";
     if (view.startsWith("tag:")) {
       const n = scopeTasks(tasks, view, today).length;
       return n === 0 ? "Нет открытых задач с этим тегом" : `${n} открытых`;
@@ -197,7 +218,7 @@ export function PlannerApp() {
       const n = scopeTasks(tasks, view, today).length;
       const shared = profile.multiUser && list && ((list.members ?? []).length > 0 || (list.owner && list.owner !== profile.login));
       const base = n === 0 ? "Пока нет открытых задач" : `${n} открытых`;
-      return shared ? `${base} · общий список` : base;
+      return shared ? `${base} · общий` : base;
     }
     const n = scopeTasks(tasks, view, today).length;
     return n === 0 ? "Пока нет открытых задач" : `${n} открытых`;
@@ -219,10 +240,11 @@ export function PlannerApp() {
   const showSearch = searchOpen || query.trim().length > 0;
   const quick = (() => {
     if (query.trim()) return null;
-    if (view === "calendar") {
+    if (view === "calendar" || view === "schedule") {
       const day = calendarDay ?? today;
-      return { title: `На ${formatLong(day).toLowerCase()}`, placeholder: "Встреча в 15", defaults: { due: day, listId: null } };
+      return { title: day === today ? "На сегодня" : `На ${formatLong(day).toLowerCase()}`, placeholder: "Встреча в 15", defaults: { due: day, listId: null } };
     }
+    if (view === "checklist") return { title: "Во «Входящие»", placeholder: "Созвон завтра в 10", defaults: { due: null, listId: null } };
     if (!showLists || view === "done" || view === "archive" || view === "shared") return null;
     if (view === "today") return { title: "На сегодня", placeholder: "Созвон завтра в 10", defaults: { due: today, listId: null } };
     if (view === "tomorrow") return { title: "На завтра", placeholder: "Созвон завтра в 10", defaults: { due: shiftIso(today, 1), listId: null } };
@@ -245,14 +267,14 @@ export function PlannerApp() {
   return (
     <div className="app-frame vv-frame flex overflow-hidden bg-surface text-fg">
       <aside className="hidden h-full w-64 shrink-0 border-r border-line md:flex">
-        <Sidebar view={view} onView={openView} />
+        <Sidebar view={view} onView={openView} onProject={openProject} />
       </aside>
 
       {drawer ? (
         <div className="sheet absolute inset-x-0 bottom-0 z-40 md:hidden">
           <button type="button" className="scrim absolute inset-0" aria-label="Закрыть меню" onClick={() => setDrawer(false)} />
           <div className="sheet-safe absolute inset-y-0 left-0 flex w-72 flex-col bg-bg">
-            <Sidebar view={view} onView={openView} onClose={() => setDrawer(false)} />
+            <Sidebar view={view} onView={openView} onClose={() => setDrawer(false)} onProject={openProject} />
           </div>
         </div>
       ) : null}
@@ -280,24 +302,18 @@ export function PlannerApp() {
               )}
               {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
             </div>
-            {listId ? (
-              confirmList ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    deleteList(listId);
-                    setView("inbox");
-                    setConfirmList(false);
-                  }}
-                >
-                  Удалить
-                </Button>
-              ) : (
-                <Button variant="ghost" className="text-muted" onClick={() => setConfirmList(true)}>
-                  Удалить
-                </Button>
-              )
+            {canBoard(view) && !query.trim() ? (
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-pressed={board}
+                aria-label={board ? "Показать списком" : "Показать доской"}
+                title={board ? "Списком" : "Доской"}
+                onClick={() => setBoard(!board)}
+                className={board ? "text-accent" : undefined}
+              >
+                {board ? <List className="size-5" /> : <Columns3 className="size-5" />}
+              </Button>
             ) : null}
             {showSearch ? null : (
               <Button size="icon" variant="ghost" aria-label="Поиск" onClick={() => setSearchOpen(true)}>
@@ -308,7 +324,7 @@ export function PlannerApp() {
             <ReminderBell dueCount={dueHits.length} open={bell} onToggle={() => setBell((open) => !open)} />
           </div>
           {showSearch ? (
-            <label className="relative mt-3 block">
+            <label className="relative mt-1.5 block">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle" />
               <input
                 value={query}
@@ -316,7 +332,7 @@ export function PlannerApp() {
                 placeholder="Поиск"
                 aria-label="Поиск задач"
                 autoFocus
-                className="card-lift h-11 w-full rounded-2xl bg-elevated pr-11 pl-10 text-base outline-none placeholder:text-subtle"
+                className="h-10 w-full rounded-xl bg-elevated pr-11 pl-10 text-base outline-none placeholder:text-subtle"
                 suppressHydrationWarning
               />
               <button
@@ -326,7 +342,7 @@ export function PlannerApp() {
                   setQuery("");
                   setSearchOpen(false);
                 }}
-                className="absolute top-0 right-0 flex size-11 items-center justify-center text-subtle"
+                className="absolute top-0 right-0 flex size-10 items-center justify-center text-subtle"
               >
                 <X className="size-4" />
               </button>
@@ -356,7 +372,7 @@ export function PlannerApp() {
         ) : null}
 
         <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-2 md:px-8 md:py-6", quick && "pb-24 md:pb-6")}>
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-2 pb-24 md:px-8 md:py-6">
           {showLists ? (
             <TaskViews
               key={view}
@@ -365,7 +381,34 @@ export function PlannerApp() {
               selectedId={selectedId}
               onOpen={setSelectedId}
               onPickDay={(day) => openView(day === today ? "today" : `day:${day}`)}
+              board={board}
             />
+          ) : null}
+          {listId && !query.trim() ? (
+            <div className="mt-6 flex justify-center">
+              {confirmList ? (
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setConfirmList(false)}>
+                    Отмена
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      deleteList(listId);
+                      setView("inbox");
+                      setConfirmList(false);
+                    }}
+                  >
+                    Удалить · задачи во «Входящие»
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="ghost" size="sm" className="text-subtle" onClick={() => setConfirmList(true)}>
+                  <Trash2 className="size-4" /> Удалить список
+                </Button>
+              )}
+            </div>
           ) : null}
           {!query.trim() && view === "calendar" ? <CalendarView selectedId={selectedId} onOpen={setSelectedId} onDayChange={setCalendarDay} /> : null}
           {!query.trim() && view === "checklist" ? <ChecklistView selectedId={selectedId} onOpen={setSelectedId} /> : null}
@@ -377,9 +420,11 @@ export function PlannerApp() {
           {!query.trim() && view === "schedule" ? (
             <ScheduleScreen
               onOpen={setSelectedId}
-              onOpenProjects={(id) => {
-                setProjectId(id);
-                openView("projects");
+              onOpenProjects={openProject}
+              onDayChange={setCalendarDay}
+              onQuickAdd={(day) => {
+                setCalendarDay(day);
+                openComposer();
               }}
             />
           ) : null}
@@ -389,11 +434,7 @@ export function PlannerApp() {
         {quick ? (
           <Fab
             label="Добавить задачу"
-            onClick={() => {
-              setComposer(true);
-              // Focus inside the tap: iOS opens the keyboard only for that.
-              composerRef.current?.focus({ preventScroll: true });
-            }}
+            onClick={openComposer}
           />
         ) : null}
         </div>
@@ -401,16 +442,16 @@ export function PlannerApp() {
         <DoneToastBar />
 
         {focus.running || focus.note ? (
-          <div className="flex h-14 shrink-0 items-center gap-3 border-t border-line px-4">
-            <span className="font-display text-xl tabular-nums">{formatFocusClock(focus.seconds)}</span>
+          <div className="flex h-12 shrink-0 items-center gap-3 border-t border-line px-4">
+            <span className="text-base font-semibold tabular-nums">{formatFocusClock(focus.seconds)}</span>
             <span className="min-w-0 flex-1 truncate text-sm text-muted">
               {focus.note ?? (focus.mode === "work" ? "Фокус" : "Перерыв")}
             </span>
-            <Button variant="soft" onClick={() => (focus.running ? pauseFocus() : startFocus())}>
+            <Button variant="soft" size="sm" className="h-9 rounded-full" onClick={() => (focus.running ? pauseFocus() : startFocus())}>
               {focus.running ? "Пауза" : "Дальше"}
             </Button>
             {view !== "focus" ? (
-              <Button variant="ghost" onClick={() => openView("focus")}>
+              <Button variant="ghost" size="sm" className="h-9" onClick={() => openView("focus")}>
                 Открыть
               </Button>
             ) : null}

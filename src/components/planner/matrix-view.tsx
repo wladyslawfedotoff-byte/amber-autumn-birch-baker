@@ -123,7 +123,7 @@ function Quadrant({
       aria-label={quad.title}
       className={cn(
         "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-elevated",
-        dropOver ? "border-accent ring-2 ring-accent" : "border-line",
+        dropOver ? "border-accent ring-2 ring-accent" : "border-transparent",
       )}
     >
       <button

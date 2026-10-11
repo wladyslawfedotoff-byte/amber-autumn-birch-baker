@@ -103,3 +103,18 @@ export function boardBounds(spans: Span[], workStart: number, workEnd: number): 
   const to = Math.ceil(Math.max(...points) / 60) * 60;
   return { from: Math.max(0, from), to: Math.min(24 * 60, Math.max(to, from + 60)) };
 }
+
+/** Tap on an empty part of the board: the half-hour slot under the finger, one hour long, kept inside the board. */
+export function slotAt(fraction: number, from: number, to: number, length = 60): { start: number; end: number } {
+  const raw = from + Math.max(0, Math.min(1, fraction)) * (to - from);
+  let start = Math.floor(raw / 30) * 30;
+  start = Math.max(from, Math.min(start, to - 30));
+  return { start, end: Math.min(to, start + length) };
+}
+
+/** Where the board opens: an hour before «now» today, otherwise just before the first block or the start of work. */
+export function focusMinute({ isToday, now, spans, workStart }: { isToday: boolean; now: number; spans: Span[]; workStart: number }): number {
+  if (isToday) return Math.max(0, now - 60);
+  const first = spans.reduce((min, span) => Math.min(min, span.start), Number.POSITIVE_INFINITY);
+  return Math.max(0, (Number.isFinite(first) ? first : workStart) - 30);
+}

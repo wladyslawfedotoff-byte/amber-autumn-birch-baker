@@ -6,22 +6,27 @@ const STYLE = `
 :root{--bg:#e8e4db;--surface:#f6f4ef;--elevated:#fffcf7;--fg:#1c1d1a;--muted:#5c5f59;--subtle:#8a8d86;--line:#ddd8ce;--accent:#243e4a;--accent-fg:#f4f2eb;--danger:#8d3b3b;color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--bg:#121310;--surface:#191a17;--elevated:#22231f;--fg:#f3f1ea;--muted:#c2c4bc;--subtle:#9a9d95;--line:#34362f;--accent:#d7e0da;--accent-fg:#141614;--danger:#e7b0b0;color-scheme:dark}}
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font-family:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
-main{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:max(24px,env(safe-area-inset-top)) 20px max(24px,env(safe-area-inset-bottom))}
-.card{width:100%;max-width:360px;background:var(--surface);border-radius:24px;padding:32px 24px;box-shadow:0 0 0 1px color-mix(in oklab,var(--fg) 8%,transparent),0 12px 32px -18px color-mix(in oklab,var(--fg) 30%,transparent)}
-h1{font-family:"Newsreader",Georgia,"Times New Roman",serif;font-weight:600;font-size:40px;letter-spacing:-0.02em;line-height:1.1;margin:0 0 4px}
-p{margin:0;color:var(--muted);font-size:15px}
-label{display:block;margin:24px 0 6px;font-size:14px;color:var(--muted)}
-input{width:100%;height:48px;border:0;border-radius:14px;background:var(--elevated);color:var(--fg);padding:0 14px;font:inherit;font-size:17px;outline:none;box-shadow:0 0 0 1px color-mix(in oklab,var(--fg) 10%,transparent)}
+html,body{margin:0;min-height:100%;background:var(--surface);color:var(--fg);font-family:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;line-height:1.4;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
+main{min-height:100vh;min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;padding:max(56px,calc(env(safe-area-inset-top) + 40px)) 20px max(24px,env(safe-area-inset-bottom))}
+.card{width:100%;max-width:340px}
+@media (min-width:640px){html,body{background:var(--bg)}main{align-items:center;padding-top:24px}.card{background:var(--surface);border-radius:20px;padding:28px 24px;box-shadow:0 0 0 1px color-mix(in oklab,var(--fg) 8%,transparent),0 12px 32px -18px color-mix(in oklab,var(--fg) 30%,transparent)}}
+.brand{display:flex;align-items:center;gap:10px;margin:0 0 6px}
+.logo{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:var(--accent);color:var(--accent-fg);flex:none}
+h1{font-weight:600;font-size:22px;letter-spacing:-0.01em;line-height:1.2;margin:0}
+p{margin:0;color:var(--muted);font-size:14px}
+label{display:block;margin:18px 0 6px;font-size:12px;font-weight:500;color:var(--subtle);text-transform:uppercase;letter-spacing:.03em}
+input{width:100%;height:46px;border:0;border-radius:12px;background:var(--elevated);color:var(--fg);padding:0 14px;font:inherit;font-size:17px;outline:none;box-shadow:0 0 0 1px color-mix(in oklab,var(--fg) 8%,transparent)}
+input::placeholder{color:var(--subtle)}
 input:focus{box-shadow:0 0 0 2px color-mix(in oklab,var(--accent) 75%,transparent)}
-button{margin-top:16px;width:100%;height:48px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-fg);font:inherit;font-size:16px;font-weight:500;cursor:pointer}
-.hint{margin:6px 0 0;font-size:13px;color:var(--subtle)}
-.tagline{font-family:"Newsreader",Georgia,serif;font-size:19px;color:var(--muted);margin:0 0 6px}
-.error{margin-top:14px;color:var(--danger);font-size:14px}
+button{margin-top:20px;width:100%;height:46px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-fg);font:inherit;font-size:16px;font-weight:500;cursor:pointer}
+.hint{margin:6px 2px 0;font-size:12px;color:var(--subtle)}
+.tagline{font-size:14px;color:var(--muted);margin:0 0 2px}
+.error{margin-top:12px;padding:10px 12px;border-radius:12px;background:color-mix(in oklab,var(--danger) 12%,transparent);color:var(--danger);font-size:14px}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--elevated);padding:2px 6px;border-radius:6px}
 ol{padding-left:20px;color:var(--muted);font-size:14px}
 li{margin:6px 0}
 `;
+const LOGO = `<span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32" width="18" height="18"><path d="M7 16.5 13 22.5 25 9.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
 
 function shell(title: string, body: string): string {
   return `<!DOCTYPE html>
@@ -32,13 +37,14 @@ function shell(title: string, body: string): string {
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="${escapeHtml(APP_NAME)}">
-<meta name="theme-color" content="#e8e4db">
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#191a17" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="manifest" href="/__grok/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/__grok/icon-180.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=Newsreader:opsz,wght@6..72,600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>${STYLE}</style>
 </head>
 <body>
@@ -115,12 +121,12 @@ export function loginPage(options: { error?: string | null; next?: string | null
   const loginField = options.multiUser
     ? `<label for="login">Логин</label>
   <input id="login" name="login" type="text" value="${escapeHtml(login)}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required ${login ? "" : "autofocus"} enterkeyhint="next" placeholder="например, user1">
-  <p class="hint">Латиницей, как в файле .env на сервере. Запомним на этом устройстве.</p>`
+  <p class="hint">Латиницей, как в .env на сервере.</p>`
     : `<input type="text" name="username" value="${escapeHtml(login || "pora")}" autocomplete="username" hidden aria-hidden="true" tabindex="-1">`;
   return shell(
     `Вход — ${APP_TITLE}`,
     `<form class="card" method="post" action="/api/login" autocomplete="on">
-  <h1>${escapeHtml(APP_NAME)}</h1>
+  <div class="brand">${LOGO}<h1>${escapeHtml(APP_NAME)}</h1></div>
   ${APP_TAGLINE ? `<p class="tagline">${escapeHtml(APP_TAGLINE)}</p>` : ""}
   <p>Задачи, календарь и привычки${options.multiUser ? " — у каждого свои, общие видны обоим" : ""}.</p>
   <input type="hidden" name="next" value="${escapeHtml(next)}">
@@ -129,7 +135,7 @@ export function loginPage(options: { error?: string | null; next?: string | null
   <input id="password" name="password" type="password" autocomplete="current-password" required ${options.multiUser && !login ? "" : "autofocus"} enterkeyhint="go">
   ${message ? `<p class="error" role="alert">${escapeHtml(message)}</p>` : ""}
   <button type="submit">Войти</button>
-  <p class="hint">Забыли пароль? Его можно сбросить на сервере — см. docs/SYNOLOGY.md, «Сброс пароля».</p>
+  <p class="hint" style="margin-top:14px;text-align:center">Забыли пароль? Сброс — на сервере, docs/SYNOLOGY.md.</p>
 </form>`,
   );
 }
@@ -138,7 +144,7 @@ export function notConfiguredPage(reason: string): string {
   return shell(
     `${APP_NAME} — нужен пароль`,
     `<div class="card">
-  <h1>${escapeHtml(APP_NAME)}</h1>
+  <div class="brand">${LOGO}<h1>${escapeHtml(APP_NAME)}</h1></div>
   <p>Приложение закрыто: на сервере не задан пароль для входа.</p>
   <ol>
     <li>В папке проекта на NAS (рядом с <code>compose.yaml</code>) откройте файл <code>.env</code> — шаблон в <code>.env.example</code>.</li>
@@ -154,6 +160,6 @@ export function notConfiguredPage(reason: string): string {
 export function errorPage(): string {
   return shell(
     `${APP_NAME} — ошибка`,
-    `<div class="card"><h1>${escapeHtml(APP_NAME)}</h1><p>На сервере что-то сломалось. Обновите страницу через минуту. Подробности — в журнале контейнера.</p></div>`,
+    `<div class="card"><div class="brand">${LOGO}<h1>${escapeHtml(APP_NAME)}</h1></div><p>На сервере что-то сломалось. Обновите страницу через минуту. Подробности — в журнале контейнера.</p></div>`,
   );
 }
