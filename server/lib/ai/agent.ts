@@ -6,37 +6,65 @@
  */
 import type { Proposal } from "../../../src/lib/assistant/types.ts";
 import type { ToolsMode } from "./config.ts";
-import { TOOL_SPECS, WRITE_TOOLS, runTool, snapshot, type ToolContext } from "./tools.ts";
-import { ToolsUnsupportedError, type ChatFn, type WireMessage } from "./provider.ts";
+import { TOOL_SPECS, WRITE_TOOLS, runTool, type ToolContext } from "./tools.ts";
+import { ToolsUnsupportedError, type ChatFn, type ToolSpec, type WireMessage } from "./provider.ts";
+import { contextFor, intentOf, toolsFor, type Intent } from "./context.ts";
+import { ReplyStreamer, parseJsonReply } from "./json-reply.ts";
+import { log } from "../log.ts";
 
 const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 const MAX_ROUNDS = 5;
+/** JSON mode: rounds of read requests before the model must answer. */
+const MAX_JSON_READS = 4;
 
-export function systemPrompt(ctx: ToolContext): string {
-  const weekday = WEEKDAYS[new Date(`${ctx.today}T12:00:00Z`).getUTCDay()] ?? "";
-  const lists = ctx.data.lists
-    .map((l) => (typeof l.name === "string" ? l.name : ""))
-    .filter(Boolean)
-    .slice(0, 30);
+/*
+ * Prompt layout, cheapest first: a static prefix that is byte-identical in
+ * every request (providers cache it), then the JSON-mode rules, then the
+ * per-request part (date, the data this question needs).
+ */
+const CORE = [
+  "Ты — Помощник планировщика «Пора». Отвечай по-русски, кратко; можно **жирный** и списки, без таблиц и HTML.",
+  "Опирайся на данные ниже, не выдумывай задачи. Id задач — как в данных (t1, t2…). Даты YYYY-MM-DD, время HH:mm.",
+  "Изменения — только инструментами (создать, изменить, выполнить, шаги, план дня, привычки): они показывают карточку, пользователь подтверждает. Не пиши, что уже сделал.",
+].join("\n");
+
+/** Compact signatures for JSON mode (the full JSON schema would cost ~4× more). */
+const SIGNATURES: Record<string, string> = {
+  list_tasks: 'list_tasks {scope:"today|overdue|upcoming|no_date|all", list?} — чтение',
+  search_tasks: "search_tasks {query} — чтение",
+  free_slots: "free_slots {date} — чтение",
+  create_tasks: "create_tasks {tasks:[{title, due?, time?, end?, list?, priority?0-3, subtasks?[], notes?}]}",
+  update_tasks: "update_tasks {changes:[{id, due?, time?, end?, title?, list?, priority?}]}",
+  complete_tasks: "complete_tasks {ids:[]}",
+  break_down_task: "break_down_task {id, steps:[]}",
+  plan_day: "plan_day {date, items:[{id, time, end?}]}",
+  create_habits: 'create_habits {habits:[{name, goal?, unit?, section?"morning|afternoon|evening|other", days?[1-7], times_per_week?}]}',
+};
+
+function jsonRules(tools: ToolSpec[]): string {
   return [
-    "Ты — «Помощник» в планировщике «Пора». Отвечай по-русски, коротко и по делу. Можно простой markdown: **жирный**, *курсив*, списки «- » и «1. »; без таблиц и HTML.",
-    `Сегодня ${ctx.today} (${weekday}), сейчас ${ctx.now}. Списки: ${lists.length ? lists.join(", ") : "только «Входящие»"}.`,
-    snapshot(ctx),
-    "Отвечай по этим данным; подробности (задачи без даты, поиск, другой день) читай инструментами list_tasks, search_tasks, free_slots. Не выдумывай задачи и не говори, что у тебя нет доступа к данным.",
-    "Чтобы что-то создать или изменить, вызывай инструменты create_tasks, update_tasks, complete_tasks, break_down_task, plan_day, create_habits: они ничего не меняют сами, а показывают пользователю карточку для подтверждения. Не пиши, что изменения уже сделаны.",
-    "Для плана дня сначала узнай задачи на сегодня и просроченные и свободное время, потом предложи plan_day.",
-    "Даты — YYYY-MM-DD, время — HH:mm. «Завтра», «в пятницу» переводи в даты сам.",
+    'Ответ — ТОЛЬКО один JSON-объект, без ```, тегов и текста вокруг: {"reply":"текст","actions":[{"name":"…","arguments":{…}}]}',
+    'Пример: {"reply":"Предлагаю перенести на завтра.","actions":[{"name":"update_tasks","arguments":{"changes":[{"id":"t3","due":"2026-01-02"}]}}]}',
+    "Данных ниже обычно хватает — отвечай сразу. Чтение нужно редко: тогда reply пустой, actions с чтением, ответ — следующим сообщением.",
+    `Инструменты: ${tools.map((t) => SIGNATURES[t.function.name] ?? t.function.name).join("; ")}`,
   ].join("\n");
 }
 
-function jsonModePrompt(): string {
-  const tools = TOOL_SPECS.map((t) => `- ${t.function.name}: ${t.function.description} Параметры: ${JSON.stringify(t.function.parameters.properties)}`).join("\n");
-  return [
-    "Вызов функций здесь не работает: инструменты вызываются через JSON. Отвечай ТОЛЬКО одним JSON-объектом, без текста вокруг:",
-    '{"reply":"текст для пользователя","actions":[{"name":"имя инструмента","arguments":{...}}]}',
-    "Чтобы что-то создать или изменить, положи инструмент записи в actions — пользователь увидит карточку и подтвердит; в reply коротко скажи, что предлагаешь. Если хватает данных выше — отвечай сразу, actions пустой. Чтобы дочитать данные, верни actions с инструментом чтения и пустой reply — результат придёт следующим сообщением. Доступно:",
-    tools,
-  ].join("\n");
+function dynamicPart(ctx: ToolContext, intent: Intent, question: string): string {
+  const weekday = WEEKDAYS[new Date(`${ctx.today}T12:00:00Z`).getUTCDay()] ?? "";
+  const lists = ["create", "update", "general"].includes(intent.kind)
+    ? ctx.data.lists
+        .map((l) => (typeof l.name === "string" ? l.name : ""))
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
+  const data = contextFor(intent, question, ctx);
+  return [`Сегодня ${ctx.today} (${weekday}), ${ctx.now}.${lists.length ? ` Списки: ${lists.join(", ")}.` : ""}`, data].filter(Boolean).join("\n");
+}
+
+export function systemPrompt(ctx: ToolContext, options: { json?: boolean; intent?: Intent; question?: string; tools?: ToolSpec[] } = {}): string {
+  const intent = options.intent ?? { kind: "general" as const, dates: [], local: false };
+  return [CORE, options.json ? jsonRules(options.tools ?? TOOL_SPECS) : "", dynamicPart(ctx, intent, options.question ?? "")].filter(Boolean).join("\n");
 }
 
 export type AgentEvents = {
@@ -70,25 +98,7 @@ export function looksToolless(text: string): boolean {
 
 export type AgentResult = { text: string; proposals: Proposal[] };
 
-/** Pulls `{"reply":…, "actions":[…]}` out of a JSON-mode answer (tolerates ```json fences and prose around). */
-export function parseJsonReply(raw: string): { reply: string; actions: { name: string; arguments: unknown }[] } {
-  const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end <= start) return { reply: cleaned.trim(), actions: [] };
-  try {
-    const parsed = JSON.parse(cleaned.slice(start, end + 1)) as { reply?: unknown; actions?: unknown };
-    const actions = Array.isArray(parsed.actions)
-      ? parsed.actions.flatMap((a) => {
-          const row = (a ?? {}) as { name?: unknown; arguments?: unknown };
-          return typeof row.name === "string" ? [{ name: row.name, arguments: row.arguments ?? {} }] : [];
-        })
-      : [];
-    return { reply: typeof parsed.reply === "string" ? parsed.reply : "", actions };
-  } catch {
-    return { reply: cleaned.trim(), actions: [] };
-  }
-}
+export { parseJsonReply } from "./json-reply.ts";
 
 export async function runAgent(options: {
   chat: ChatFn;
@@ -100,14 +110,21 @@ export async function runAgent(options: {
   tools?: ToolsMode;
   /** @deprecated use tools: "json" */
   jsonMode?: boolean;
+  /** Decided by the caller (it may have answered locally); else from the last question. */
+  intent?: Intent;
   signal?: AbortSignal;
 }): Promise<AgentResult & { jsonMode: boolean }> {
   const { chat, ctx, events, signal } = options;
   const mode: ToolsMode = options.jsonMode ? "json" : (options.tools ?? "auto");
   let jsonMode = mode === "json";
   let calledTools = false;
+  let jsonReads = 0;
   const proposals: Proposal[] = [];
-  const base: WireMessage[] = [{ role: "system", content: systemPrompt(ctx) }, ...options.history.map((m) => ({ role: m.role, content: m.text }) as WireMessage)];
+  const question = [...options.history].reverse().find((m) => m.role === "user")?.text ?? "";
+  const intent = options.intent ?? intentOf(question, ctx.today);
+  const tools = toolsFor(intent);
+  const prompt = (json: boolean) => systemPrompt(ctx, { json, intent, question, tools });
+  const base: WireMessage[] = [{ role: "system", content: prompt(jsonMode) }, ...options.history.map((m) => ({ role: m.role, content: m.text }) as WireMessage)];
   let messages: WireMessage[] = [...base];
   let text = "";
 
@@ -121,7 +138,7 @@ export async function runAgent(options: {
     if (!jsonMode) {
       let reply;
       try {
-        reply = await chat({ messages, tools: TOOL_SPECS, onDelta: (d) => ((text += d), events.onDelta(d)), signal });
+        reply = await chat({ messages, tools, onDelta: (d) => ((text += d), events.onDelta(d)), signal });
       } catch (error) {
         if (!(error instanceof ToolsUnsupportedError)) throw error;
         if (text) {
@@ -129,7 +146,7 @@ export async function runAgent(options: {
           events.onReset?.();
         }
         jsonMode = true;
-        messages = [{ role: "system", content: `${systemPrompt(ctx)}\n${jsonModePrompt()}` }, ...base.slice(1)];
+        messages = [{ role: "system", content: prompt(true) }, ...base.slice(1)];
         round--;
         continue;
       }
@@ -139,7 +156,7 @@ export async function runAgent(options: {
           text = "";
           events.onReset?.();
           jsonMode = true;
-          messages = [{ role: "system", content: `${systemPrompt(ctx)}\n${jsonModePrompt()}` }, ...base.slice(1)];
+          messages = [{ role: "system", content: prompt(true) }, ...base.slice(1)];
           round--;
           continue;
         }
@@ -154,24 +171,37 @@ export async function runAgent(options: {
       }
       continue;
     }
-    // JSON mode: no streaming of raw JSON; the reply text is sent at once.
-    if (messages[0]?.role === "system" && !messages[0].content.includes('"actions"')) messages[0] = { role: "system", content: `${systemPrompt(ctx)}\n${jsonModePrompt()}` };
-    const reply = await chat({ messages, tools: null, signal });
+    // JSON mode: only the reply string is streamed, never the JSON around it.
+    if (messages[0]?.role === "system" && !messages[0].content.includes("ФОРМАТ ОТВЕТА")) messages[0] = { role: "system", content: prompt(true) };
+    const streamer = new ReplyStreamer();
+    const reply = await chat({ messages, tools: null, signal, onDelta: (d) => streamer.push(d, events.onDelta) });
     const parsed = parseJsonReply(reply.content);
-    const reads: string[] = [];
-    for (const action of parsed.actions) {
-      const result = runTool(action.name, (action.arguments ?? {}) as Record<string, unknown>, ctx);
-      take(result.proposal);
-      if (!WRITE_TOOLS.has(action.name)) reads.push(`${action.name}: ${result.content}`);
-    }
-    if (reads.length && !parsed.reply.trim()) {
-      messages.push({ role: "assistant", content: reply.content }, { role: "user", content: `Результаты:\n${reads.join("\n")}\nТеперь ответь пользователю тем же JSON.` });
+    if (!parsed.ok) log("warn", "assistant.json_unparsed", { count: 1 });
+    const writes = parsed.actions.filter((a) => WRITE_TOOLS.has(a.name));
+    const reads = parsed.actions.filter((a) => !WRITE_TOOLS.has(a.name));
+    // Only reads (with or without «сейчас посмотрю»): run them, feed the results back, ask again.
+    if (reads.length && !writes.length && jsonReads < MAX_JSON_READS) {
+      jsonReads++;
+      if (streamer.shown) events.onReset?.();
+      const results = reads.map((a) => `${a.name}(${JSON.stringify(a.arguments ?? {})}): ${runTool(a.name, (a.arguments ?? {}) as Record<string, unknown>, ctx).content}`);
+      messages.push(
+        { role: "assistant", content: JSON.stringify({ reply: "", actions: reads }) },
+        { role: "user", content: `Результаты чтения:\n${results.join("\n")}\nТеперь ответь пользователю одним JSON-объектом {"reply": "...", "actions": [...]}, без новых чтений, если данных хватает.` },
+      );
+      round--;
       continue;
     }
-    const answer = parsed.reply.trim() || (proposals.length ? "Вот что предлагаю:" : "");
+    const answer = parsed.reply.trim() || (writes.length ? "Вот что предлагаю:" : "");
+    if (!answer) {
+      if (streamer.shown) events.onReset?.();
+      break;
+    }
+    // What was streamed must equal the final text; otherwise show the final text afresh.
+    if (streamer.shown && streamer.shown.trim() !== answer) events.onReset?.();
+    for (const action of writes) take(runTool(action.name, (action.arguments ?? {}) as Record<string, unknown>, ctx).proposal);
     if (answer) {
-      text += answer;
-      events.onDelta(answer);
+      text = answer;
+      if (streamer.shown.trim() !== answer) events.onDelta(answer);
     }
     return { text, proposals, jsonMode };
   }

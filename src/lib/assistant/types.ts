@@ -7,6 +7,8 @@ import type { HabitFreq, HabitSection, Priority } from "../planner-types.ts";
 
 /** Which model answered: on the home PC or a cloud API. */
 export type AiWhich = "local" | "cloud";
+/** Who answered: a model at home, a cloud model, or the app itself (simple questions, no model, no tokens). */
+export type AnswerSource = AiWhich | "app";
 
 export type ProposalItem =
   | {
@@ -53,7 +55,7 @@ export type ChatMessage = {
   role: "user" | "assistant";
   text: string;
   at: number;
-  provider?: AiWhich;
+  provider?: AnswerSource;
   /** Which provider and model answered: «free · some-model». */
   source?: string;
   proposals?: Proposal[];
@@ -117,7 +119,7 @@ export type AssistantStatus = {
 
 /** One line of the POST /api/assistant/chat stream (NDJSON). */
 export type ChatEvent =
-  | { type: "start"; conversationId: string; provider: AiWhich; source: string; userMessageId: string }
+  | { type: "start"; conversationId: string; provider: AnswerSource; source: string; userMessageId: string }
   | { type: "delta"; text: string }
   | { type: "proposal"; proposal: Proposal }
   | { type: "done"; message: ChatMessage; title: string }

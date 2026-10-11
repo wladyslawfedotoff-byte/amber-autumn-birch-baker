@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, Check, Clock, Cloud, Cpu, Menu, Mic, MicOff, Plus, RotateCw, ShieldCheck, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowUp, Check, Zap, Clock, Cloud, Cpu, Menu, Mic, MicOff, Plus, RotateCw, ShieldCheck, Sparkles, Square, Trash2, X } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
 import { AssistMarkdown } from "@/components/planner/assist-markdown";
 import { cn } from "@/lib/cn";
@@ -7,7 +7,7 @@ import { formatShortDay, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { applyItems, itemTitle, withTitle } from "@/lib/assistant/apply";
 import { assistantApi, streamChat } from "@/lib/assistant/client";
-import type { AiWhich, AssistantStatus, ChatEvent, ChatMessage, ConversationSummary, Proposal, ProposalItem } from "@/lib/assistant/types";
+import type { AiWhich, AnswerSource, AssistantStatus, ChatEvent, ChatMessage, ConversationSummary, Proposal, ProposalItem } from "@/lib/assistant/types";
 
 const SUGGESTIONS = ["Спланируй мой день", "Разбей задачу на шаги", "Добавь дела из текста", "Что у меня просрочено?"];
 const PRIORITY = ["", "низкий", "средний", "высокий"];
@@ -22,8 +22,15 @@ function uid(): string {
 }
 
 /** «локально» / «облако» and which provider and model answered. */
-export function ProviderBadge({ which, source, className }: { which: AiWhich; source?: string; className?: string }) {
+export function ProviderBadge({ which, source, className }: { which: AnswerSource; source?: string; className?: string }) {
   const name = source?.split(" · ")[0];
+  if (which === "app")
+    return (
+      <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-ok/12 px-1.5 text-[0.6875rem] font-medium text-ok", className)} title="Ответ посчитан приложением по вашим задачам — без модели, токены не тратятся">
+        <Zap className="size-3 shrink-0" aria-hidden="true" />
+        <span className="truncate">без модели</span>
+      </span>
+    );
   return (
     <span
       className={cn("inline-flex h-5 max-w-[11rem] shrink-0 items-center gap-1 rounded-full px-1.5 text-[0.6875rem] font-medium", which === "local" ? "bg-accent/12 text-accent" : "bg-elevated text-muted", className)}
@@ -258,7 +265,7 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
   const [history, setHistory] = useState<ConversationSummary[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
-  const [lastProvider, setLastProvider] = useState<{ which: AiWhich; source?: string } | null>(null);
+  const [lastProvider, setLastProvider] = useState<{ which: AnswerSource; source?: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const recognition = useRef<Recognition | null>(null);
   const bottom = useRef<HTMLDivElement>(null);

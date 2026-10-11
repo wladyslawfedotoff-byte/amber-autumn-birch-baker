@@ -15,13 +15,38 @@ export type ToolContext = {
   /** HH:mm on the user's device. */
   now: string;
   newId: () => string;
+  /** Short task ids for the model (t1, t2…) ↔ real ids; built on first use, stable for one answer. */
+  aliases?: { short: Map<string, string>; real: Map<string, string> };
 };
+
+function aliases(ctx: ToolContext) {
+  if (!ctx.aliases) {
+    const short = new Map<string, string>();
+    const real = new Map<string, string>();
+    tasksOf(ctx.data).forEach((t, i) => {
+      short.set(t.id, `t${i + 1}`);
+      real.set(`t${i + 1}`, t.id);
+    });
+    ctx.aliases = { short, real };
+  }
+  return ctx.aliases;
+}
+
+/** A real task id as the model sees it (saves ~20 tokens per task). */
+export function shortId(ctx: ToolContext, id: string): string {
+  return aliases(ctx).short.get(id) ?? id;
+}
+
+/** The model's id back to the real one (a real id is accepted too). */
+export function realId(ctx: ToolContext, id: string): string {
+  return aliases(ctx).real.get(id.replace(/^\[|\]$/g, "")) ?? id;
+}
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_LIST = 40;
 
-type TaskLike = { id: string; title: string; done: boolean; due: string | null; startAt: string | null; endAt: string | null; listId: string | null; priority: number; notes: string; subtasks: { title: string; done: boolean }[] };
+export type TaskLike = { id: string; title: string; done: boolean; due: string | null; startAt: string | null; endAt: string | null; listId: string | null; priority: number; notes: string; subtasks: { title: string; done: boolean }[] };
 
 function asTask(entity: SyncEntity): TaskLike | null {
   if (typeof entity.title !== "string" || entity.deleted) return null;
@@ -46,16 +71,23 @@ export function tasksOf(data: SyncData): TaskLike[] {
   });
 }
 
-function listName(data: SyncData, id: string | null): string | null {
+export function listName(data: SyncData, id: string | null): string | null {
   if (!id) return null;
   const list = data.lists.find((l) => l.id === id);
   return typeof list?.name === "string" ? list.name : null;
 }
 
 /** Compact view of a task for the model (no owners, members, stamps). */
-function brief(data: SyncData, task: TaskLike) {
+/** brief() without empty and default fields: what tool results send to the model. */
+function compact(ctx: ToolContext, task: TaskLike) {
+  const b = brief(ctx, task);
+  return { id: b.id, title: b.title, ...(b.due ? { due: b.due } : {}), ...(b.time ? { time: b.time } : {}), ...(b.list !== "Входящие" ? { list: b.list } : {}), ...(b.priority ? { priority: b.priority } : {}), ...(b.steps ? { steps: b.steps } : {}) };
+}
+
+export function brief(ctx: ToolContext, task: TaskLike) {
+  const { data } = ctx;
   return {
-    id: task.id,
+    id: shortId(ctx, task.id),
     title: task.title,
     due: task.due,
     time: task.startAt ? `${task.startAt}${task.endAt ? `–${task.endAt}` : ""}` : null,
@@ -98,120 +130,32 @@ export function freeSlots(data: SyncData, date: string, today: string, now: stri
   return slots.filter((slot) => slot.minutes >= 15);
 }
 
-const WEEKDAY_SHORT = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
-
-function addDays(date: string, days: number): string {
-  const d = new Date(`${date}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function weekdayOf(date: string): string {
-  return WEEKDAY_SHORT[new Date(`${date}T12:00:00Z`).getUTCDay()] ?? "";
-}
-
-/**
- * Compact picture of the user's week for the system prompt, so a model
- * answers «what's today», «free windows tomorrow» even without tools:
- * overdue, today, the next 7 days, the count without a date, and free time
- * per day. Only the signed-in user's own view (ctx.data) is used.
- */
-export function snapshot(ctx: ToolContext): string {
-  const { data, today, now } = ctx;
-  const open = tasksOf(data).filter((t) => !t.done);
-  const weekEnd = addDays(today, 7);
-  const line = (t: TaskLike) => {
-    const b = brief(data, t);
-    return `- [${b.id}] ${b.title}${b.due && b.due !== today ? ` · ${b.due} (${weekdayOf(b.due)})` : ""}${b.time ? ` · ${b.time}` : ""} · ${b.list}${b.priority ? ` · приоритет ${b.priority}` : ""}${b.steps ? ` · шаги ${b.steps}` : ""}`;
-  };
-  const byDue = (a: TaskLike, b: TaskLike) => `${a.due}${a.startAt ?? "99"}`.localeCompare(`${b.due}${b.startAt ?? "99"}`);
-  const section = (title: string, rows: TaskLike[], max: number) => {
-    if (!rows.length) return [`${title}: нет`];
-    const more = rows.length > max ? [`  …и ещё ${rows.length - max} (list_tasks)`] : [];
-    return [`${title}:`, ...rows.slice(0, max).map(line), ...more];
-  };
-  const overdue = open.filter((t) => t.due !== null && t.due < today).sort(byDue);
-  const todays = open.filter((t) => t.due === today).sort(byDue);
-  const week = open.filter((t) => t.due !== null && t.due > today && t.due <= weekEnd).sort(byDue);
-  const noDate = open.filter((t) => !t.due).length;
-  const hours = `${data.settings?.workStart ?? "09:00"}–${data.settings?.workEnd ?? "18:00"}`;
-  const free = Array.from({ length: 8 }, (_, i) => addDays(today, i)).map((day) => {
-    const slots = freeSlots(data, day, today, now);
-    return `- ${day} (${weekdayOf(day)}): ${slots.length ? slots.map((s) => `${s.start}–${s.end}`).join(", ") : "свободного времени нет"}`;
-  });
-  return [
-    "Данные пользователя на сейчас (открытые задачи, в квадратных скобках id для изменений):",
-    ...section("Просрочено", overdue, 15),
-    ...section("Сегодня", todays, 25),
-    ...section(`Ближайшие 7 дней (до ${weekEnd})`, week, 30),
-    `Без даты: ${noDate}${noDate ? " (list_tasks со scope no_date)" : ""}`,
-    `Свободное время в рабочие часы ${hours} (с учётом задач со временем):`,
-    ...free,
-  ].join("\n");
-}
-
 /* ---- specs ------------------------------------------------------------- */
 
-const taskFields = {
-  title: { type: "string" },
-  due: { type: "string", description: "YYYY-MM-DD или пусто" },
-  time: { type: "string", description: "HH:mm начала или пусто" },
-  end: { type: "string", description: "HH:mm окончания или пусто" },
-  list: { type: "string", description: "название списка или пусто (Входящие)" },
-  priority: { type: "integer", description: "0 нет, 1 низкий, 2 средний, 3 высокий" },
-};
+// Kept terse: every byte here is sent with each request. Formats (YYYY-MM-DD, HH:mm) are in the system prompt.
+const str = { type: "string" };
+const strs = { type: "array", items: str };
+const taskFields = { title: str, due: str, time: str, end: str, list: str, priority: { type: "integer", description: "0-3" } };
 
 function spec(name: string, description: string, properties: Record<string, unknown>, required: string[] = []): ToolSpec {
   return { type: "function", function: { name, description, parameters: { type: "object", properties, required } } };
 }
 
+const objects = (properties: Record<string, unknown>, required: string[]) => ({ type: "array", items: { type: "object", properties, required } });
+
 export const TOOL_SPECS: ToolSpec[] = [
-  spec("list_tasks", "Открытые задачи пользователя: на сегодня, просроченные, на ближайшие дни, без даты или все; можно по списку.", {
-    scope: { type: "string", enum: ["today", "overdue", "upcoming", "no_date", "all"] },
-    list: { type: "string" },
-  }),
-  spec("search_tasks", "Найти открытые задачи по словам в названии или заметке.", { query: { type: "string" } }, ["query"]),
-  spec("free_slots", "Свободное время дня в рабочих часах с учётом задач со временем.", { date: { type: "string", description: "YYYY-MM-DD" } }),
-  spec(
-    "create_tasks",
-    "Предложить новые задачи (пользователь подтвердит).",
-    { tasks: { type: "array", items: { type: "object", properties: { ...taskFields, subtasks: { type: "array", items: { type: "string" } }, notes: { type: "string" } }, required: ["title"] } } },
-    ["tasks"],
-  ),
-  spec(
-    "update_tasks",
-    "Предложить изменения существующих задач: название, дата, время, список (перенос), приоритет.",
-    { changes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, ...taskFields }, required: ["id"] } } },
-    ["changes"],
-  ),
-  spec("complete_tasks", "Предложить отметить задачи выполненными.", { ids: { type: "array", items: { type: "string" } } }, ["ids"]),
-  spec("break_down_task", "Предложить разбить задачу на шаги (подзадачи).", { id: { type: "string" }, steps: { type: "array", items: { type: "string" } } }, ["id", "steps"]),
-  spec(
-    "plan_day",
-    "Предложить расписание дня: поставить задачам время в свободные окна.",
-    { date: { type: "string" }, items: { type: "array", items: { type: "object", properties: { id: { type: "string" }, time: { type: "string" }, end: { type: "string" } }, required: ["id", "time"] } } },
-    ["items"],
-  ),
+  spec("list_tasks", "Открытые задачи.", { scope: { type: "string", enum: ["today", "overdue", "upcoming", "no_date", "all"] }, list: str }),
+  spec("search_tasks", "Поиск задач по словам.", { query: str }, ["query"]),
+  spec("free_slots", "Свободное время дня.", { date: str }),
+  spec("create_tasks", "Новые задачи → карточка.", { tasks: objects({ ...taskFields, subtasks: strs, notes: str }, ["title"]) }, ["tasks"]),
+  spec("update_tasks", "Изменить задачи (перенос, время, список…) → карточка.", { changes: objects({ id: str, ...taskFields }, ["id"]) }, ["changes"]),
+  spec("complete_tasks", "Отметить выполненными → карточка.", { ids: strs }, ["ids"]),
+  spec("break_down_task", "Шаги к задаче → карточка.", { id: str, steps: strs }, ["id", "steps"]),
+  spec("plan_day", "Расставить задачи дня по времени → карточка.", { date: str, items: objects({ id: str, time: str, end: str }, ["id", "time"]) }, ["items"]),
   spec(
     "create_habits",
-    "Предложить новые привычки.",
-    {
-      habits: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            name: { type: "string" },
-            goal: { type: "integer", description: "сколько в день, если это количество" },
-            unit: { type: "string" },
-            section: { type: "string", enum: ["morning", "afternoon", "evening", "other"] },
-            days: { type: "array", items: { type: "integer" }, description: "дни недели 1=пн … 7=вс; пусто = каждый день" },
-            times_per_week: { type: "integer" },
-          },
-          required: ["name"],
-        },
-      },
-    },
+    "Новые привычки → карточка.",
+    { habits: objects({ name: str, goal: { type: "integer" }, unit: str, section: { type: "string", enum: ["morning", "afternoon", "evening", "other"] }, days: { type: "array", items: { type: "integer" }, description: "1=пн…7=вс" }, times_per_week: { type: "integer" } }, ["name"]) },
     ["habits"],
   ),
 ];
@@ -253,14 +197,14 @@ function steps(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function plural(n: number, forms: [string, string, string]): string {
+export function plural(n: number, forms: [string, string, string]): string {
   const mod10 = n % 10;
   const mod100 = n % 100;
   const form = mod10 === 1 && mod100 !== 11 ? forms[0] : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? forms[1] : forms[2];
   return `${n} ${form}`;
 }
 
-const TASKS: [string, string, string] = ["задачу", "задачи", "задач"];
+export const TASKS: [string, string, string] = ["задачу", "задачи", "задач"];
 const HABITS: [string, string, string] = ["привычку", "привычки", "привычек"];
 const STEPS: [string, string, string] = ["шаг", "шага", "шагов"];
 
@@ -297,16 +241,16 @@ export function runTool(name: string, rawArgs: string | Args, ctx: ToolContext):
       else if (scope === "overdue") rows = rows.filter((t) => t.due !== null && t.due < today);
       else if (scope === "upcoming") rows = rows.filter((t) => t.due !== null && t.due > today).sort((a, b) => (a.due! < b.due! ? -1 : 1));
       else if (scope === "no_date") rows = rows.filter((t) => !t.due);
-      return reply({ scope, count: rows.length, tasks: rows.slice(0, MAX_LIST).map((t) => brief(data, t)) });
+      return reply({ scope, count: rows.length, tasks: rows.slice(0, MAX_LIST).map((t) => compact(ctx, t)) });
     }
     case "search_tasks": {
       const words = text(args.query).toLowerCase().split(/\s+/).filter(Boolean);
       const rows = words.length ? open.filter((t) => words.every((w) => `${t.title} ${t.notes}`.toLowerCase().includes(w))) : [];
-      return reply({ count: rows.length, tasks: rows.slice(0, MAX_LIST).map((t) => brief(data, t)) });
+      return reply({ count: rows.length, tasks: rows.slice(0, MAX_LIST).map((t) => compact(ctx, t)) });
     }
     case "free_slots": {
       const day = date(args.date) ?? today;
-      return reply({ date: day, workHours: `${data.settings?.workStart ?? "09:00"}–${data.settings?.workEnd ?? "18:00"}`, free: freeSlots(data, day, today, ctx.now) });
+      return reply({ date: day, workHours: `${data.settings?.workStart ?? "09:00"}–${data.settings?.workEnd ?? "18:00"}`, free: freeSlots(data, day, today, ctx.now).map((f) => `${f.start}-${f.end}`) });
     }
     case "create_tasks": {
       const items: ProposalItem[] = array(args.tasks, 20).flatMap((raw) => {
@@ -333,7 +277,7 @@ export function runTool(name: string, rawArgs: string | Args, ctx: ToolContext):
     case "update_tasks": {
       const items: ProposalItem[] = array(args.changes, 30).flatMap((raw) => {
         const row = (raw ?? {}) as Args;
-        const task = byId.get(text(row.id, 200));
+        const task = byId.get(realId(ctx, text(row.id, 200)));
         if (!task) return [];
         const item: ProposalItem = { op: "update", key: ctx.newId(), taskId: task.id, taskTitle: task.title };
         if (text(row.title)) item.title = text(row.title);
@@ -348,13 +292,13 @@ export function runTool(name: string, rawArgs: string | Args, ctx: ToolContext):
     }
     case "complete_tasks": {
       const items: ProposalItem[] = array(args.ids, 30).flatMap((id) => {
-        const task = byId.get(text(id, 200));
+        const task = byId.get(realId(ctx, text(id, 200)));
         return task ? [{ op: "complete" as const, key: ctx.newId(), taskId: task.id, taskTitle: task.title }] : [];
       });
       return propose(`Отметить выполненными ${plural(items.length, TASKS)}?`, items, "Предложено отметить выполненными.");
     }
     case "break_down_task": {
-      const task = byId.get(text(args.id, 200));
+      const task = byId.get(realId(ctx, text(args.id, 200)));
       const list = steps(args.steps);
       if (!task || !list.length) return reply({ error: "Задача не найдена или нет шагов." });
       return propose(`Добавить ${plural(list.length, STEPS)} к «${task.title}»?`, [{ op: "subtasks", key: ctx.newId(), taskId: task.id, taskTitle: task.title, steps: list }], "Предложены шаги.");
@@ -363,7 +307,7 @@ export function runTool(name: string, rawArgs: string | Args, ctx: ToolContext):
       const day = date(args.date) ?? today;
       const items: ProposalItem[] = array(args.items, 30).flatMap((raw) => {
         const row = (raw ?? {}) as Args;
-        const task = byId.get(text(row.id, 200));
+        const task = byId.get(realId(ctx, text(row.id, 200)));
         const start = time(row.time);
         if (!task || !start) return [];
         return [{ op: "update" as const, key: ctx.newId(), taskId: task.id, taskTitle: task.title, due: day, start, end: time(row.end) }];

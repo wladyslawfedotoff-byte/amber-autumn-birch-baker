@@ -79,7 +79,8 @@ function makeAssistant(env: Record<string, string>, script: Script, data: SyncDa
   const { fn, calls } = fakeFetch(script);
   const store = new AssistantStore(dir);
   const usage = new UsageBook(join(dir, "usage.json"), now);
-  const assistant = new Assistant({ config: readAiConfig(env), fetchFn: fn, store, loadData: async () => data, now, usage, principal: (login) => (login === "user1" ? user1 : null) });
+  // Local answers are tested separately; here every question goes to a model.
+  const assistant = new Assistant({ config: readAiConfig({ AI_LOCAL_ANSWERS: "0", ...env }), fetchFn: fn, store, loadData: async () => data, now, usage, principal: (login) => (login === "user1" ? user1 : null) });
   return { assistant, store, calls, dir };
 }
 
@@ -281,7 +282,7 @@ test("agent: models without function calling fall back to JSON mode", async () =
   assert.equal(result.text, "Готово, вот предложение.");
   assert.equal(result.proposals[0]?.items[0]?.op, "create");
   assert.equal(calls[1]!.body!.tools, undefined);
-  assert.deepEqual(parseJsonReply('```json\n{"reply":"ок","actions":[]}\n```'), { reply: "ок", actions: [] });
+  assert.deepEqual(parseJsonReply('```json\n{"reply":"ок","actions":[]}\n```'), { reply: "ок", actions: [], ok: true });
 });
 
 /* ---- service: consent, switching, errors, access, keys ------------------ */
@@ -809,19 +810,87 @@ test("config: AI_<NAME>_TOOLS and AI_LOCAL_TOOLS (default auto)", () => {
   assert.equal(readAiConfig({ AI_PROVIDERS: "local", AI_LOCAL_URL: "http://pc:1234", AI_LOCAL_TOOLS: "json" }).providers[0]?.tools, "json");
 });
 
-test("the system prompt carries the user's week: overdue, today, next days, free time", async () => {
+test("token economy: only the data and tools the question needs; short ids; max_tokens; static prefix first", async () => {
   const data = seed();
+  data.tasks = data.tasks.filter((t) => t.owner === "user1");
   data.tasks.push({ id: "t3", title: "Встреча с командой", notes: "", listId: null, done: false, priority: 0, due: "2026-10-13", startAt: "10:00", endAt: "11:30", tags: [], subtasks: [], createdAt: 1, completedAt: null, owner: "user1", updatedAt: 1 } as never);
-  const { assistant, store, calls, dir } = makeAssistant({ ...PAID_GPT, AI_KIEAI_TOOLS: "json" }, { chat: [() => sse({ text: '{"reply":"Ок","actions":[]}' })] }, data);
+  const reply = () => sse({ text: '{"reply":"Ок","actions":[]}' });
+  const { assistant, store, calls, dir } = makeAssistant({ ...PAID_GPT, AI_KIEAI_TOOLS: "json", AI_KIEAI_REASONING_EFFORT: "low" }, { chat: [reply, reply, reply] }, data);
   try {
     await store.setSettings("user1", { consent: "cloud", allowPaid: true });
-    await ask(assistant, "Что сегодня?");
-    const system = String((calls[0]?.body?.messages as { content: string }[])[0]?.content);
-    assert.match(system, /Просрочено:\n- \[t2\] Позвонить в банк · 2026-10-10/);
-    assert.match(system, /Сегодня:\n- \[t1\] Отчёт за квартал · Работа · приоритет 2/);
-    assert.match(system, /Ближайшие 7 дней.*:\n- \[t3\] Встреча с командой · 2026-10-13 \(вт\) · 10:00–11:30/);
-    assert.match(system, /- 2026-10-13 \(вт\): 09:00–10:00, 11:30–18:00/);
-    assert.match(system, /- 2026-10-14 \(ср\): 09:00–18:00/);
+    await ask(assistant, "Что у меня просрочено и почему так вышло?");
+    await ask(assistant, "Спланируй мой день");
+    await ask(assistant, "Добавь купить молоко во вторник");
+    const systems = calls.map((c) => String((c.body?.messages as { content: string }[])[0]?.content));
+    // «просрочено» → only overdue
+    assert.match(systems[0]!, /Просрочено:\nt2 Позвонить в банк 10-10$/);
+    assert.doesNotMatch(systems[0]!, /Отчёт за квартал|Встреча/);
+    // plan → today, overdue, free time today; tools for planning only
+    assert.match(systems[1]!, /Задачи сегодня:\nt1 Отчёт за квартал \[Работа\] !2/);
+    assert.match(systems[1]!, /Свободно \(09:00-18:00\): 10-12 пн: 10:00-18:00/);
+    assert.match(systems[1]!, /Инструменты: list_tasks [^\n]*; update_tasks [^\n]*; plan_day [^\n]*$/m);
+    assert.doesNotMatch(systems[1]!, /create_habits/);
+    // create on a day → free time of that day, no task lists
+    assert.match(systems[2]!, /Свободно: 10-13 вт: 09:00-10:00, 11:30-18:00/);
+    assert.doesNotMatch(systems[2]!, /Позвонить в банк/);
+    // the static prefix is byte-identical
+    const prefix = (t: string) => t.slice(0, t.indexOf("Ответ — ТОЛЬКО"));
+    assert.equal(prefix(systems[0]!), prefix(systems[2]!));
+    assert.ok(systems.every((t) => !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(t)), "no long ids");
+    assert.equal(calls[0]?.body?.max_tokens, 600);
+    assert.equal(calls[0]?.body?.reasoning_effort, "low");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("token economy: history is the last 4 messages, long ones cut", async () => {
+  const replies = Array.from({ length: 4 }, (_, i) => () => sse({ text: `Ответ ${i} ${"х".repeat(900)}` }));
+  const { assistant, store, calls, dir } = makeAssistant(FREE_ONLY, { chat: replies });
+  try {
+    await store.setSettings("user1", { consent: "cloud" });
+    let id: string | null = null;
+    for (let i = 0; i < 4; i++) {
+      const events = await ask(assistant, `Вопрос ${i}`, id);
+      const start = events.find((e) => e.type === "start");
+      id = start?.type === "start" ? start.conversationId : id;
+    }
+    const last = calls.at(-1)?.body?.messages as { role: string; content: string }[];
+    assert.deepEqual(
+      last.slice(1).map((m) => m.content.slice(0, 9)),
+      ["Вопрос 1", "Ответ 1 х", "Вопрос 2", "Ответ 2 х", "Вопрос 3"].map((t) => t.slice(0, 9)),
+    );
+    assert.ok(last.every((m) => m.content.length < 1200 || m.role === "system"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("answers without a model: overdue, a day, free windows — zero requests, stored, marked «без модели»", async () => {
+  const data = seed();
+  data.tasks = data.tasks.filter((t) => t.owner === "user1");
+  data.tasks.push({ id: "t3", title: "Встреча с командой", notes: "", listId: null, done: false, priority: 0, due: "2026-10-13", startAt: "10:00", endAt: "11:30", tags: [], subtasks: [], createdAt: 1, completedAt: null, owner: "user1", updatedAt: 1 } as never);
+  const dir = tmp();
+  const { fn, calls } = fakeFetch({ chat: [] });
+  const store = new AssistantStore(dir);
+  const assistant = new Assistant({ config: readAiConfig(PAID_GPT), fetchFn: fn, store, loadData: async () => data, now: () => 1, usage: new UsageBook(null, () => 1), principal: () => user1 });
+  try {
+    const overdue = await ask(assistant, "Что у меня просрочено?");
+    assert.deepEqual(overdue.map((e) => e.type), ["start", "delta", "done"]);
+    assert.equal(overdue[0]?.type === "start" && overdue[0].provider, "app");
+    const text = overdue.at(-1)?.type === "done" ? (overdue.at(-1) as { message: { text: string; provider: string } }).message : null;
+    assert.equal(text?.provider, "app");
+    assert.match(text!.text, /^Просрочена 1 задача:\n\n- \*\*Позвонить в банк\*\* — 10\.10/);
+    const day = await ask(assistant, "Что на сегодня?");
+    assert.match((day.at(-1) as { message: { text: string } }).message.text, /На сегодня 1 задача:\n\n- \*\*Отчёт за квартал\*\* — Работа\n\nЕщё просрочено: 1/);
+    const free = await ask(assistant, "Найди свободные окна на завтра и послезавтра");
+    assert.match((free.at(-1) as { message: { text: string } }).message.text, /- \*\*Завтра:\*\* 09:00–10:00, 11:30–18:00\n- \*\*Послезавтра:\*\* 09:00–18:00/);
+    assert.equal(calls.length, 0, "no model, no consent needed");
+    assert.equal((await store.list("user1")).length, 3);
+    // Not simple → the model is asked.
+    const { intentOf } = await import("./context.ts");
+    for (const q of ["Перенеси просроченные на завтра", "Что у меня просрочено и что с этим делать?", "Спланируй мой день", "Добавь встречу завтра в 10", "Найди свободное окно завтра и поставь туда звонок"]) assert.equal(intentOf(q, TODAY).local, false, q);
+    for (const q of ["что просрочено", "Покажи задачи на завтра", "Когда я свободен в пятницу?", "что у меня сегодня?"]) assert.equal(intentOf(q, TODAY).local, true, q);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -869,7 +938,7 @@ test("auto: tools silently ignored («нет доступа к инструме�
     assert.equal(done?.type === "done" && done.message.text, "Завтра свободно 09:00–18:00.");
     assert.ok(Array.isArray(calls[0]?.body?.tools));
     assert.equal(calls[1]?.body?.tools, undefined);
-    assert.match(String((calls[1]?.body?.messages as { content: string }[])[0]?.content), /ТОЛЬКО одним JSON-объектом/);
+    assert.match(String((calls[1]?.body?.messages as { content: string }[])[0]?.content), /ТОЛЬКО один JSON/);
     const next = await ask(assistant, "Добавь задачу Тест");
     assert.equal(calls[2]?.body?.tools, undefined, "remembered: straight to JSON mode");
     const card = next.at(-1);
@@ -984,4 +1053,97 @@ test("looksToolless: the phrases that mean the tools never reached the model", a
   const { looksToolless } = await import("./agent.ts");
   for (const text of ["Сейчас у меня нет доступа к нужным инструментам планировщика.", "Не могу вызвать инструмент free_slots", "Я добавил задачу «Купить молоко».", "I don't have access to the tools"]) assert.ok(looksToolless(text), text);
   for (const text of ["Сегодня у вас 3 задачи.", "Вы добавили много дел — давайте разберём.", "Свободно с 9 до 12."]) assert.ok(!looksToolless(text), text);
+});
+
+/* ---- 1.6.2: JSON mode as seen from the paid service --------------------- */
+
+const SAMPLE_READS = '<escape>{"reply":"","actions":[{"name":"list_tasks","arguments":{"scope":"today"}},{"name":"list_tasks","arguments":{"scope":"overdue"}},{"name":"free_slots","arguments":{"date":"2026-10-12"}}]}</escape>';
+
+test("JSON mode: read requests are run on the server and fed back; the screen never shows JSON", async () => {
+  const final = '{"reply":"План на день:\\n\\n- 10:00 **Отчёт за квартал**","actions":[{"name":"plan_day","arguments":{"date":"2026-10-12","items":[{"id":"t1","time":"10:00","end":"11:00"}]}}]}</escape>';
+  const { assistant, store, calls, dir } = makeAssistant({ ...PAID_GPT, AI_KIEAI_TOOLS: "json" }, { chat: [() => sse({ text: SAMPLE_READS }), () => sse({ text: final })] });
+  try {
+    await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+    const events = await ask(assistant, "Спланируй мой день");
+    const shown = events.flatMap((e) => (e.type === "delta" ? [e.text] : [])).join("");
+    assert.equal(shown, "План на день:\n\n- 10:00 **Отчёт за квартал**");
+    assert.doesNotMatch(shown, /"name"|actions|<\/?escape>|[{}]/);
+    const second = calls[1]?.body?.messages as { role: string; content: string }[];
+    assert.match(second.at(-1)!.content, /^Результаты чтения:\nlist_tasks\(\{"scope":"today"\}\): \{"scope":"today","count":\d,"tasks":\[\{"id":"t1","title":"Отчёт за квартал","due":"2026-10-12","list":"Работа","priority":2\}/);
+    assert.match(second.at(-1)!.content, /free_slots\(\{"date":"2026-10-12"\}\): \{"date":"2026-10-12"/);
+    const done = events.at(-1);
+    assert.equal(done?.type === "done" && done.message.proposals?.[0]?.items[0]?.op, "update");
+    assert.equal(done?.type === "done" && done.message.proposals?.[0]?.items[0]?.op === "update" && done.message.proposals[0].items[0].taskId, "t1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("JSON mode: the two broken samples (start lost, </escape>) — readable text or another round, never raw keys", async () => {
+  const sample1 = 'reply":"У тебя просрочена 1 задача:\\n\\n- **Позвонить в банк** — срок 10 октября.","actions":[]}</escape>';
+  const sample2 = '":{"scope":"today"}},{"name":"list_tasks","arguments":{"scope":"overdue"}},{"name":"free_slots","arguments":{"date":"2026-10-12"}}]}</escape>';
+  const { assistant, store, calls, dir } = makeAssistant({ ...PAID_GPT, AI_KIEAI_TOOLS: "json" }, { chat: [() => sse({ text: sample1 }), () => sse({ text: sample2 }), () => sse({ text: '{"reply":"Готово: план ниже.","actions":[]}' })] });
+  try {
+    await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+    const first = await ask(assistant, "Что у меня просрочено и что с этим делать?");
+    assert.equal((first.at(-1) as { message: { text: string } }).message.text, "У тебя просрочена 1 задача:\n\n- **Позвонить в банк** — срок 10 октября.");
+    const second = await ask(assistant, "Спланируй мой день");
+    assert.equal(calls.length, 3, "the read requests got a second round");
+    assert.equal((second.at(-1) as { message: { text: string } }).message.text, "Готово: план ниже.");
+    for (const e of [...first, ...second]) if (e.type === "delta") assert.doesNotMatch(e.text, /reply"|"actions|"name"|escape/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("JSON mode: the model keeps asking to read → stops after a few rounds with a plain message", async () => {
+  const reads = () => sse({ text: SAMPLE_READS });
+  const { assistant, store, calls, dir } = makeAssistant({ ...PAID_GPT, AI_KIEAI_TOOLS: "json" }, { chat: [reads, reads, reads, reads, reads, reads] });
+  try {
+    await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+    const events = await ask(assistant, "Спланируй мой день");
+    assert.ok(calls.length <= 5);
+    assert.equal(events.at(-1)?.type, "done");
+    assert.doesNotMatch(JSON.stringify(events), /\\"name\\"/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("stream: an event with a raw control byte (leaked special token) keeps its text — the lost start", async () => {
+  const first = `data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"\u001b{\\"reply\\":\\"Привет"}}]}\n\n`;
+  const rest = `data: ${chunk({ content: ', мир","actions":[]}' })}\n\ndata: [DONE]\n\n`;
+  const reply = await endpointOf((async () => rawStream(first + rest, 5)) as typeof fetch)({ messages: [{ role: "user", content: "?" }], tools: null });
+  assert.equal(reply.content, '{"reply":"Привет, мир","actions":[]}');
+  const bom = await endpointOf((async () => rawStream(`\ufeff${`data: ${chunk({ content: "Начало" })}\n\n`}data: ${chunk({ content: " и конец" })}\n\n`, 3)) as typeof fetch)({ messages: [{ role: "user", content: "?" }], tools: null });
+  assert.equal(bom.content, "Начало и конец");
+});
+
+test("max_tokens: rejected parameter → asked again without it (and remembered); empty answer cut by the cap → once more uncapped", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  let turn = 0;
+  const answers = [
+    () => Response.json({ code: 422, msg: "Unrecognized request argument supplied: max_tokens" }),
+    () => sse({ text: "Ок" }),
+    () => sse({ text: "Снова ок" }),
+  ];
+  const fn = (async (_u: unknown, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return answers[turn++]!();
+  }) as typeof fetch;
+  const ep = { provider: "strict", which: "cloud" as const, baseUrl: "https://s/v1", apiKey: KEY, model: "m-strict", paid: true, maxTokens: 600 };
+  assert.equal((await chatClient(ep, 5000, fn)({ messages: [{ role: "user", content: "?" }], tools: null })).content, "Ок");
+  assert.equal((await chatClient(ep, 5000, fn)({ messages: [{ role: "user", content: "?" }], tools: null })).content, "Снова ок");
+  assert.deepEqual(
+    bodies.map((b) => b.max_tokens),
+    [600, undefined, undefined],
+  );
+  const cut: Record<string, unknown>[] = [];
+  let n = 0;
+  const fn2 = (async (_u: unknown, init?: RequestInit) => {
+    cut.push(JSON.parse(String(init?.body)));
+    return n++ === 0 ? rawStream(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "length" }], usage: { total_tokens: 700 } })}\n\ndata: [DONE]\n\n`) : sse({ text: "Полный ответ", usage: 900 });
+  }) as typeof fetch;
+  const reply = await chatClient({ ...ep, provider: "thinker", model: "m-think" }, 5000, fn2)({ messages: [{ role: "user", content: "?" }], tools: null });
+  assert.deepEqual([reply.content, reply.tokens, cut[0]?.max_tokens, cut[1]?.max_tokens], ["Полный ответ", 1600, 600, undefined]);
 });
