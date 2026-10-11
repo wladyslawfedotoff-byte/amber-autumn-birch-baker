@@ -15,6 +15,7 @@ import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
 import type { Task } from "@/lib/planner-types";
 import { colorStyle } from "@/lib/task-colors";
+import { PickerInput } from "@/components/planner/picker-input";
 
 const HOUR = 4;
 
@@ -44,6 +45,7 @@ export function ScheduleView({
   const setWorkHours = usePlanner((s) => s.setWorkHours);
   const addTask = usePlanner((s) => s.addTask);
   const updateTask = usePlanner((s) => s.updateTask);
+  const clearTaskTime = usePlanner((s) => s.clearTaskTime);
   const today = todayIso();
   const [day, setDay] = useState(today);
   const [title, setTitle] = useState("");
@@ -326,18 +328,18 @@ export function ScheduleView({
           className="h-11 rounded-md border border-line bg-elevated px-3 text-base outline-none placeholder:text-subtle sm:col-span-2"
         />
         <div className="grid grid-cols-2 gap-2">
-          <input
+          <PickerInput
             type="time"
             aria-label="Начало"
             value={from}
-            onChange={(event) => setFrom(event.target.value)}
+            onValue={setFrom}
             className="h-11 rounded-md border border-line bg-elevated px-2 text-base text-fg"
           />
-          <input
+          <PickerInput
             type="time"
             aria-label="Конец"
             value={to}
-            onChange={(event) => setTo(event.target.value)}
+            onValue={setTo}
             className="h-11 rounded-md border border-line bg-elevated px-2 text-base text-fg"
           />
         </div>
@@ -350,7 +352,7 @@ export function ScheduleView({
       <div>
         <p className="text-xs font-medium text-subtle">Карточки</p>
         <p className="mt-1 text-xs text-muted">
-          Потяните карточку за полоску и положите на доску или на свободное окно.
+          Потяните карточку за полоску и положите на доску или на свободное окно. «весь день» убирает время.
           {untimed.length > 0 ? ` Без времени: ${untimed.length}.` : ""}
         </p>
         {cards.length === 0 ? (
@@ -387,6 +389,17 @@ export function ScheduleView({
                       {span?.assumed ? " · час" : ""}
                     </span>
                   </button>
+                  {span ? (
+                    <button
+                      type="button"
+                      onClick={() => clearTaskTime(task.id)}
+                      aria-label={`Убрать время у «${task.title}» — на весь день`}
+                      title="Убрать время: задача останется на этот день, но без часов"
+                      className="shrink-0 px-3 text-xs text-muted hover:text-fg"
+                    >
+                      весь день
+                    </button>
+                  ) : null}
                 </li>
               );
             })}

@@ -103,7 +103,7 @@ function AgendaDays({ count, onOpen }: { count: number; onOpen: (id: string) => 
                 ))}
                 {closed.length > 0 ? <p className="mt-1 px-1 text-xs text-subtle">Готово: {closed.length}</p> : null}
               </div>
-              <AddTaskForm placeholder="Например: «в 18 тренировка»" onAdd={(title) => addTask({ title, due: day, listId: null })} />
+              <AddTaskForm placeholder="Например: «в 18 тренировка»" onAdd={(title, quick) => addTask({ title, ...quick, due: day, listId: null })} />
               {habits.length > 0 ? (
                 <div className="mt-3">
                   <p className="text-xs font-medium text-subtle">Привычки</p>

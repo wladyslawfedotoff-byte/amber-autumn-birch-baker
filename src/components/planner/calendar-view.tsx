@@ -330,7 +330,7 @@ export function CalendarView({
         <div className="mt-3">
           <AddTaskForm
             placeholder="Встреча в 15"
-            onAdd={(title) => addTask({ title, due: day, listId: null })}
+            onAdd={(title, quick) => addTask({ title, ...quick, due: day, listId: null })}
           />
         </div>
         {milestones.filter((item) => occursOnDay(item, day)).map((item) => {

@@ -85,3 +85,20 @@ export function notesPreview(notes: string | undefined, max = 90): string {
   const line = (notes ?? "").split(/\r?\n/).map((part) => part.trim()).find(Boolean) ?? "";
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
+
+/**
+ * «Без времени»: the task stays on its date but becomes all-day (no start,
+ * end or alarm). Fields are set to null, never deleted, so the sync stamps
+ * them like any other edit and the other devices clear them too.
+ */
+export function clearTime(task: Task): Task {
+  return { ...task, remindAt: null, startAt: null, endAt: null };
+}
+
+/**
+ * «Без даты»: no date and no time. A repeat needs a date, so it is switched
+ * off as well (the task becomes a plain undated one in «Входящие»/its list).
+ */
+export function clearDate(task: Task): Task {
+  return { ...clearTime(task), due: null, repeat: null, repeatDates: [], lastDue: null };
+}

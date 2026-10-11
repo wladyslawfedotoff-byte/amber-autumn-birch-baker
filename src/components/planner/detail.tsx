@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { DateMultiPicker } from "@/components/planner/date-multi-picker";
 import { TaskShareControls } from "@/components/planner/sharing";
 import { ColorPicker } from "@/components/planner/color-picker";
+import { PickerInput } from "@/components/planner/picker-input";
 import { DuplicateControls, NotesField, SubtasksBlock } from "@/components/planner/task-extras";
 import { cleanDates, dueLabel, repeatLabel, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
@@ -25,6 +26,8 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
   const lists = usePlanner((s) => s.lists);
   const projects = usePlanner((s) => s.projects ?? []);
   const updateTask = usePlanner((s) => s.updateTask);
+  const clearTaskTime = usePlanner((s) => s.clearTaskTime);
+  const clearTaskDate = usePlanner((s) => s.clearTaskDate);
   const addProject = usePlanner((s) => s.addProject);
   const sendTaskToProject = usePlanner((s) => s.sendTaskToProject);
   const deleteTask = usePlanner((s) => s.deleteTask);
@@ -128,10 +131,11 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
           ) : (
             <label className="block text-xs font-medium text-subtle">
               Дата
-              <input
+              <PickerInput
                 type="date"
                 value={task.due ?? ""}
-                onChange={(event) => updateTask(task.id, { due: event.target.value || null })}
+                clearLabel="Убрать дату"
+                onValue={(due) => (due ? updateTask(task.id, { due }) : clearTaskDate(task.id))}
                 className="mt-2 h-11 w-full rounded-md border border-line bg-elevated px-3 text-base font-normal text-fg"
               />
             </label>
@@ -174,11 +178,12 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
           ) : null}
           <label className="block text-xs font-medium text-subtle">
             Напомнить
-            <input
+            <PickerInput
               type="time"
               value={task.remindAt ?? ""}
-              onChange={(event) => {
-                const remindAt = event.target.value || null;
+              clearLabel="Убрать напоминание"
+              onValue={(raw) => {
+                const remindAt = raw || null;
                 updateTask(task.id, {
                   remindAt,
                   due: remindAt && !task.due ? todayIso() : task.due,
@@ -189,11 +194,12 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
           </label>
           <label className="block text-xs font-medium text-subtle">
             Начало
-            <input
+            <PickerInput
               type="time"
               value={task.startAt ?? ""}
-              onChange={(event) => {
-                const startAt = event.target.value || null;
+              clearLabel="Убрать начало"
+              onValue={(raw) => {
+                const startAt = raw || null;
                 updateTask(task.id, {
                   startAt,
                   due: startAt && !task.due ? todayIso() : task.due,
@@ -204,11 +210,12 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
           </label>
           <label className="block text-xs font-medium text-subtle">
             Конец
-            <input
+            <PickerInput
               type="time"
               value={task.endAt ?? ""}
-              onChange={(event) => {
-                const endAt = event.target.value || null;
+              clearLabel="Убрать конец"
+              onValue={(raw) => {
+                const endAt = raw || null;
                 updateTask(task.id, {
                   endAt,
                   due: endAt && !task.due ? todayIso() : task.due,
@@ -217,6 +224,31 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
               className="mt-2 h-11 w-full rounded-md border border-line bg-elevated px-3 text-base font-normal text-fg"
             />
           </label>
+          <div className="sm:col-span-2 lg:col-span-1">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="soft"
+                size="sm"
+                disabled={!task.remindAt && !task.startAt && !task.endAt}
+                onClick={() => clearTaskTime(task.id)}
+                title="Дата остаётся, время, начало, конец и напоминание убираются"
+              >
+                Без времени (весь день)
+              </Button>
+              <Button
+                variant="soft"
+                size="sm"
+                disabled={!task.due && !task.remindAt && !task.startAt && !task.endAt && !task.repeat}
+                onClick={() => clearTaskDate(task.id)}
+                title="Убрать дату, время и повтор"
+              >
+                Без даты
+              </Button>
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              «Без времени» — задача остаётся на свой день, но на весь день. «Без даты» — уходит из «Сегодня» и календаря, остаётся в списке.
+            </p>
+          </div>
           <label className="block text-xs font-medium text-subtle sm:col-span-2 lg:col-span-1">
             Список
             <select

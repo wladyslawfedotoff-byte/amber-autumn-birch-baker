@@ -6,7 +6,7 @@ import { cleanDates, firstChosenDate, shiftIso, todayIso } from "@/lib/dates";
 import { currentLogin } from "@/lib/use-capabilities";
 import { parseQuick } from "@/lib/quick-add";
 import { stageRange } from "@/lib/stage-range";
-import { duplicateTask as duplicateTaskData, listInNotes, splitLines } from "@/lib/task-tools";
+import { clearDate, clearTime, duplicateTask as duplicateTaskData, listInNotes, splitLines } from "@/lib/task-tools";
 import { isAccent, type AccentId } from "@/lib/accents";
 import { normalizeArchiveDays, restoreFromArchive, toggleTaskDone, undoRepeatTick } from "@/lib/task-done";
 import type {
@@ -36,6 +36,9 @@ type NewTask = {
   endAt?: string | null;
   remindAt?: string | null;
   tags?: string[];
+  /** Quick add: the user dropped the recognised date / time («без даты», «без времени»). */
+  noDate?: boolean;
+  noTime?: boolean;
 };
 
 export function breakFor(workLen: number): number {
@@ -94,6 +97,10 @@ type PlannerState = {
   addTask: (input: NewTask) => string;
   updateTask: (id: string, patch: Partial<Omit<Task, "id">>) => void;
   toggleTask: (id: string) => void;
+  /** «Без времени»: keep the date, drop start/end/alarm (all-day). */
+  clearTaskTime: (id: string) => void;
+  /** «Без даты»: drop date and time (and the repeat). */
+  clearTaskDate: (id: string) => void;
   /** «Выбранные даты»: replace the chosen dates (due follows the first one from today). */
   setRepeatDates: (id: string, dates: string[]) => void;
   /** «Совместная»: who else sees and edits the task (logins). */
@@ -533,7 +540,8 @@ export const usePlanner = create<PlannerState>()(
           startAt: timed ? parsed.startAt : (input.startAt ?? null),
           endAt: timed ? parsed.endAt : (input.endAt ?? null),
         };
-        set((s) => ({ tasks: [task, ...s.tasks] }));
+        const final = input.noDate ? clearDate(task) : input.noTime ? clearTime(task) : task;
+        set((s) => ({ tasks: [final, ...s.tasks] }));
         return id;
       },
       updateTask: (id, patch) =>
@@ -546,6 +554,8 @@ export const usePlanner = create<PlannerState>()(
             t.id === id ? toggleTaskDone(t, { me: currentLogin() || null, today: todayIso(), now: syncNow() }) : t,
           ),
         })),
+      clearTaskTime: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? clearTime(t) : t)) })),
+      clearTaskDate: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? clearDate(t) : t)) })),
       undoRepeat: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? undoRepeatTick(t) : t)) })),
       restoreTask: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? restoreFromArchive(t) : t)) })),
       deleteTasks: (ids) => {

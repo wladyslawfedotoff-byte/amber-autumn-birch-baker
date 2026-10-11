@@ -116,9 +116,10 @@ export function TaskViews({
       {canAdd && view !== "today" && view !== "shared" ? (
         <AddTaskForm
           placeholder="Созвон завтра в 10"
-          onAdd={(title) =>
+          onAdd={(title, quick) =>
             addTask({
               title,
+              ...quick,
               ...defaultsFor(view, today),
               tags: view.startsWith("tag:") ? [view.slice(4)] : undefined,
             })
@@ -172,7 +173,7 @@ export function TaskViews({
           <TodaySummary />
           <AddTaskForm
             placeholder="Созвон завтра в 10"
-            onAdd={(title) => addTask({ title, ...defaultsFor(view, today) })}
+            onAdd={(title, quick) => addTask({ title, ...quick, ...defaultsFor(view, today) })}
           />
           <TodayGroups tasks={open} today={today} selectedId={selectedId} onOpen={onOpen} />
           {doneBlock}
@@ -184,7 +185,7 @@ export function TaskViews({
           <div className="mt-3">
             <AddTaskForm
               placeholder="Задача на этот день"
-              onAdd={(title) => addTask({ title, due: view.slice(4), listId: null })}
+              onAdd={(title, quick) => addTask({ title, ...quick, due: view.slice(4), listId: null })}
             />
           </div>
           {open.length === 0 ? (

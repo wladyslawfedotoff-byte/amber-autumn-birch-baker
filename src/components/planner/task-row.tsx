@@ -236,24 +236,21 @@ export function TaskRow({
   );
 }
 
+export type QuickOptions = { noDate?: boolean; noTime?: boolean };
+
 export function AddTaskForm({
   placeholder,
   onAdd,
 }: {
   placeholder: string;
-  onAdd: (title: string) => void;
+  /** `options`: the user dropped the recognised date / time — pass them on to addTask. */
+  onAdd: (title: string, options: QuickOptions) => void;
 }) {
   const [value, setValue] = useState("");
+  const [noDate, setNoDate] = useState(false);
+  const [noTime, setNoTime] = useState(false);
   const parsed = parseQuick(value);
-  const hint =
-    parsed.due || parsed.startAt
-      ? [
-          parsed.due ? dueLabel(parsed.due, todayIso()) : null,
-          parsed.startAt ? (parsed.endAt ? `${parsed.startAt}–${parsed.endAt}` : parsed.startAt) : null,
-        ]
-          .filter(Boolean)
-          .join(" · ")
-      : "";
+  const timeText = parsed.startAt ? (parsed.endAt ? `${parsed.startAt}–${parsed.endAt}` : parsed.startAt) : "";
   return (
     <div>
       <form
@@ -262,15 +259,23 @@ export function AddTaskForm({
           event.preventDefault();
           const title = value.trim();
           if (!title || !parseQuick(title).title) return;
-          onAdd(title);
+          onAdd(title, { noDate, noTime: noTime || noDate });
           setValue("");
+          setNoDate(false);
+          setNoTime(false);
         }}
       >
         <span className="size-2 shrink-0 rounded-full border-2 border-subtle" aria-hidden="true" />
         <input
           name="title"
           value={value}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={(event) => {
+            setValue(event.target.value);
+            if (!event.target.value) {
+              setNoDate(false);
+              setNoTime(false);
+            }
+          }}
           aria-label={placeholder}
           placeholder={placeholder}
           autoComplete="off"
@@ -288,7 +293,35 @@ export function AddTaskForm({
           <Plus className="size-5" />
         </button>
       </form>
-      {hint ? <p className="mt-1 px-3 text-xs text-muted">{hint}</p> : null}
+      {parsed.due || parsed.startAt ? (
+        <p className="mt-1 flex flex-wrap items-center gap-1 px-2 text-xs text-muted">
+          <span className="text-subtle">Распознано:</span>
+          {parsed.due ? (
+            <QuickChip label={dueLabel(parsed.due, todayIso())} off={noDate} onToggle={() => setNoDate(!noDate)} what="дату" />
+          ) : null}
+          {timeText ? <QuickChip label={timeText} off={noTime || noDate} onToggle={() => setNoTime(!noTime)} what="время" /> : null}
+          {noDate ? <span>· без даты</span> : noTime && timeText ? <span>· на весь день</span> : null}
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+function QuickChip({ label, off, onToggle, what }: { label: string; off: boolean; onToggle: () => void; what: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={!off}
+      onClick={onToggle}
+      title={off ? `Вернуть ${what}` : `Сбросить ${what}`}
+      aria-label={off ? `Вернуть ${what} ${label}` : `Сбросить ${what} ${label}`}
+      className={cn(
+        "inline-flex h-8 items-center gap-1 rounded-full border px-2 tabular-nums",
+        off ? "border-dashed border-line text-subtle line-through" : "border-line bg-elevated text-fg",
+      )}
+    >
+      {label}
+      <span aria-hidden="true">{off ? "↺" : "×"}</span>
+    </button>
   );
 }
