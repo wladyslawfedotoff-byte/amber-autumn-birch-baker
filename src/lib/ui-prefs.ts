@@ -67,6 +67,17 @@ export function moveTab(tabs: TabId[], id: TabId, dir: -1 | 1): TabId[] {
   return next;
 }
 
+/** Drag-to-reorder in «Панель вкладок»: put `id` at position `to`. */
+export function placeTab(tabs: TabId[], id: TabId, to: number): TabId[] {
+  const from = tabs.indexOf(id);
+  if (from < 0) return tabs;
+  const index = Math.max(0, Math.min(tabs.length - 1, Math.round(to)));
+  if (index === from) return tabs;
+  const next = tabs.filter((tab) => tab !== id);
+  next.splice(index, 0, id);
+  return next;
+}
+
 export type CalendarMode = "list" | "month" | "week" | "three" | "day";
 
 export const CALENDAR_MODES: { id: CalendarMode; label: string; days: number }[] = [
@@ -83,4 +94,23 @@ export function normalizeCalendarMode(value: unknown): CalendarMode {
 
 export function modeDays(mode: CalendarMode): number {
   return CALENDAR_MODES.find((item) => item.id === mode)?.days ?? 0;
+}
+
+/**
+ * The phone drawer must not repeat the tab bar: today / calendar and tools
+ * that already sit in «Панель вкладок» are left out of the drawer. The core
+ * smart lists (Входящие, Завтра, 7 дней, Все, Общие) always stay. On a
+ * desktop (no tab bar) everything is shown.
+ */
+const ALWAYS_IN_DRAWER = new Set<string>(["inbox", "tomorrow", "week", "checklist", "shared"]);
+
+export function drawerItems<T extends { id: string }>(items: T[], tabBar: readonly string[], phone: boolean): T[] {
+  if (!phone) return items;
+  const inBar = new Set(tabBar);
+  return items.filter((item) => ALWAYS_IN_DRAWER.has(item.id) || !inBar.has(item.id));
+}
+
+/** Lists that can switch to the priority board (icon in the header). */
+export function canBoard(view: string): boolean {
+  return view === "inbox" || view === "tomorrow" || view === "week" || view.startsWith("list:") || view.startsWith("tag:");
 }

@@ -40,3 +40,11 @@ test("«Выбранные даты»: the task shows exactly on the pending cho
   assert.equal(occursOn(plain, "2026-11-03"), true);
   assert.equal(occursOn(plain, "2026-11-10"), false, "other repeats show the current date only (as before)");
 });
+
+test("short headers fit a phone: «Пн, 12 окт.», «11–17 окт.»", async () => {
+  const { formatShortDay, formatRange } = await import("./dates.ts");
+  assert.equal(formatShortDay("2026-10-12", true), "Пн, 12 окт.");
+  assert.equal(formatShortDay("2026-10-11"), "11 окт.");
+  assert.equal(formatRange("2026-10-11", "2026-10-17"), "11–17 окт.");
+  assert.equal(formatRange("2026-10-28", "2026-11-03"), "28 окт. – 3 нояб.");
+});

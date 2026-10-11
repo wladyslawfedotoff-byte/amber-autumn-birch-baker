@@ -3,6 +3,7 @@ import { useState, type PointerEvent, type Ref } from "react";
 import { cn } from "@/lib/cn";
 import { dueLabel, repeatLabel, shiftIso, todayIso } from "@/lib/dates";
 import { parseQuick } from "@/lib/quick-add";
+import { pastedLines } from "@/lib/paste-lines";
 import { usePlanner } from "@/lib/planner-store";
 import type { Priority, Task } from "@/lib/planner-types";
 import { listName } from "@/lib/queries";
@@ -70,11 +71,8 @@ export function TaskRow({
 
   return (
     <div
-      className={cn(
-        "card-lift mb-1.5 flex items-start overflow-hidden rounded-xl bg-elevated",
-        selected ? "ring-1 ring-accent" : "",
-        checked && "opacity-75",
-      )}
+      data-selected={selected ? "true" : undefined}
+      className={cn("task-row flex items-start overflow-hidden bg-elevated", checked && "opacity-75")}
       style={colorStyle(task.color, checked ? 5 : 10)}
     >
       <button
@@ -83,18 +81,18 @@ export function TaskRow({
         aria-pressed={checked}
         title={ticked ? "Отменить отметку — задача вернётся на прежнюю дату" : task.done ? "Вернуть в работу" : "Выполнить"}
         onClick={tick}
-        className="flex size-11 shrink-0 items-center justify-center"
+        className="flex h-10 w-10 shrink-0 items-center justify-center"
       >
         <span
           className={cn(
-            "flex size-5 items-center justify-center rounded-full border-2 transition-[background-color,border-color] duration-150",
+            "flex size-[1.125rem] items-center justify-center rounded-full border-2 transition-[background-color,border-color] duration-150",
             checked ? "border-accent bg-accent text-accent-fg" : ring(task.priority),
           )}
         >
           {checked ? <Check className="size-3" strokeWidth={3} /> : null}
         </span>
       </button>
-      <div className="min-w-0 flex-1 py-[0.6875rem] pr-1">
+      <div className="min-w-0 flex-1 py-2 pr-1">
         <div className="flex items-start">
           <button
             type="button"
@@ -103,19 +101,19 @@ export function TaskRow({
           >
             <span
               className={cn(
-                "block text-pretty text-base",
+                "block text-pretty text-[0.9375rem] leading-snug",
                 checked ? "text-subtle line-through decoration-subtle" : "text-fg",
               )}
             >
               {task.title}
             </span>
             {preview ? (
-              <span className="mt-0.5 flex items-center gap-1 text-xs text-muted">
+              <span className="mt-0.5 flex items-center gap-1 text-[0.75rem] text-muted">
                 <NotebookText className="size-3 shrink-0" aria-hidden="true" />
                 <span className="min-w-0 truncate">{preview}</span>
               </span>
             ) : null}
-            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.75rem] leading-4 text-muted empty:hidden">
               {ticked ? <span className="text-ok">отмечено · дальше {task.due ? dueLabel(task.due, today) : "—"}</span> : null}
               {showDue && task.due && !ticked ? (
                 <span className={overdue ? "text-danger" : undefined}>{dueLabel(task.due, today)}</span>
@@ -144,7 +142,7 @@ export function TaskRow({
               title={open ? "Свернуть подзадачи" : "Показать подзадачи"}
               onClick={() => setOpen(!open)}
               className={cn(
-                "flex h-11 shrink-0 items-center gap-1 rounded-full px-2 text-xs tabular-nums",
+                "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-1.5 text-[0.75rem] tabular-nums",
                 progress.done === progress.total ? "text-accent" : "text-muted",
               )}
             >
@@ -158,9 +156,9 @@ export function TaskRow({
               type="button"
               aria-label={`Перенести «${task.title}» на завтра`}
               onClick={() => updateTask(task.id, { due: tomorrow })}
-              className="-my-2 flex h-11 shrink-0 items-center px-0.5 text-xs"
+              className="-my-2 flex h-10 shrink-0 items-center px-0.5"
             >
-              <span className={cn("rounded-full px-2 py-0.5 leading-5", overdue ? "bg-bg text-danger" : "text-subtle")}>завтра</span>
+              <span className="rounded-full bg-bg px-1.5 text-[0.6875rem] leading-[1.125rem] text-danger">завтра</span>
             </button>
           ) : null}
         </div>
@@ -173,7 +171,7 @@ export function TaskRow({
                   aria-pressed={sub.done}
                   aria-label={`${sub.done ? "Снять отметку" : "Отметить"}: ${sub.title}`}
                   onClick={() => toggleSubtask(task.id, sub.id)}
-                  className="flex h-10 w-full items-center gap-2 text-left text-sm"
+                  className="flex h-9 w-full items-center gap-2 text-left text-sm"
                 >
                   <span
                     className={cn(
@@ -223,7 +221,7 @@ export function TaskRow({
         <button
           type="button"
           aria-label={`Перенести ${task.title}`}
-          className="drag-handle flex size-11 shrink-0 items-center justify-center text-subtle"
+          className="drag-handle flex size-10 shrink-0 items-center justify-center text-subtle"
           onPointerDown={onDragStart}
         >
           <GripVertical className="size-4" />
@@ -253,6 +251,7 @@ export function AddTaskForm({
   const [value, setValue] = useState("");
   const [noDate, setNoDate] = useState(false);
   const [noTime, setNoTime] = useState(false);
+  const [pasted, setPasted] = useState(0);
   const parsed = parseQuick(value);
   const timeText = parsed.startAt ? (parsed.endAt ? `${parsed.startAt}–${parsed.endAt}` : parsed.startAt) : "";
   return (
@@ -277,9 +276,21 @@ export function AddTaskForm({
           onKeyDown={(event) => {
             if (event.key === "Escape" && onEscape) onEscape();
           }}
+          onPaste={(event) => {
+            // Several lines pasted → one task per line (replaces the old «Все» textarea).
+            const text = event.clipboardData.getData("text");
+            if (!/\r?\n/.test(text.trim())) return;
+            const lines = pastedLines(text);
+            if (lines.length < 2) return;
+            event.preventDefault();
+            for (const line of lines) if (parseQuick(line).title) onAdd(line, {});
+            setValue("");
+            setPasted(lines.length);
+          }}
           value={value}
           onChange={(event) => {
             setValue(event.target.value);
+            setPasted(0);
             if (!event.target.value) {
               setNoDate(false);
               setNoTime(false);
@@ -302,6 +313,11 @@ export function AddTaskForm({
           <Plus className="size-5" />
         </button>
       </form>
+      {pasted > 0 ? (
+        <p role="status" className="mt-1 px-2 text-xs text-muted">
+          Добавлено задач: {pasted}
+        </p>
+      ) : null}
       {parsed.due || parsed.startAt ? (
         <p className="mt-1 flex flex-wrap items-center gap-1 px-2 text-xs text-muted">
           <span className="text-subtle">Распознано:</span>

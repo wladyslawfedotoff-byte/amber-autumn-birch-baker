@@ -1,23 +1,25 @@
-import { useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, GripVertical } from "lucide-react";
+import { HintButton } from "@/components/ui/hint";
+import { Sheet } from "@/components/ui/sheet";
 import {
   boardBounds,
+  focusMinute,
   freeWindows,
   fromMinutes,
   placeSpans,
+  slotAt,
   taskSpan,
   toMinutes,
   type Placed,
 } from "@/lib/day-board";
-import { formatLong, shiftIso, todayIso, occursOn } from "@/lib/dates";
+import { formatShortDay, shiftIso, todayIso, occursOn } from "@/lib/dates";
 import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
 import type { Task } from "@/lib/planner-types";
 import { colorStyle } from "@/lib/task-colors";
-import { PickerInput } from "@/components/planner/picker-input";
 
-const HOUR = 4;
+const HOUR = 3;
 
 type CardPreview = { id: string; title: string; start: number; end: number };
 
@@ -25,7 +27,7 @@ function blockStyle(span: Placed, from: number): { top: string; height: string; 
   const minutes = Math.max(span.end - span.start, 15);
   return {
     top: `${((span.start - from) / 60) * HOUR}rem`,
-    height: `${Math.max((minutes / 60) * HOUR, 2.75)}rem`,
+    height: `${Math.max((minutes / 60) * HOUR - 0.125, 1.75)}rem`,
     left: `calc(3rem + (100% - 3rem) * ${span.lane} / ${span.lanes})`,
     width: `calc((100% - 3rem) / ${span.lanes} - 0.25rem)`,
   };
@@ -34,23 +36,26 @@ function blockStyle(span: Placed, from: number): { top: string; height: string; 
 export function ScheduleView({
   onOpen,
   onOpenProjects,
+  onDayChange,
+  rangeControl,
 }: {
   onOpen: (id: string) => void;
   onOpenProjects: (id: string) => void;
+  /** The «+» button adds to the shown day. */
+  onDayChange?: (day: string) => void;
+  /** «1 · 2 · 3 · 5 · 7 дн.» control, sticks to the top together with the day header. */
+  rangeControl?: ReactNode;
 }) {
   const tasks = usePlanner((s) => s.tasks);
   const projects = usePlanner((s) => s.projects) ?? [];
   const workStart = usePlanner((s) => s.workStart) ?? "09:00";
   const workEnd = usePlanner((s) => s.workEnd) ?? "18:00";
-  const setWorkHours = usePlanner((s) => s.setWorkHours);
-  const addTask = usePlanner((s) => s.addTask);
   const updateTask = usePlanner((s) => s.updateTask);
-  const clearTaskTime = usePlanner((s) => s.clearTaskTime);
   const today = todayIso();
   const [day, setDay] = useState(today);
-  const [title, setTitle] = useState("");
-  const [from, setFrom] = useState("14:00");
-  const [to, setTo] = useState("15:00");
+  const [slot, setSlot] = useState<{ start: number; end: number } | null>(null);
+  const [hint, setHint] = useState(false);
+  const [trayOpen, setTrayOpen] = useState(true);
   const [draft, setDraft] = useState<{ id: string; start: number; end: number } | null>(null);
   const [preview, setPreview] = useState<CardPreview | null>(null);
   const [ghost, setGhost] = useState<{ title: string; x: number; y: number } | null>(null);
@@ -90,10 +95,8 @@ export function ScheduleView({
   const bounds = useMemo(() => boardBounds(spans, workFrom, workTo), [spans, workFrom, workTo]);
   const hours = Math.max(1, Math.round((bounds.to - bounds.from) / 60));
   const clashes = placed.filter((span) => span.clash && !span.done);
+  // The tray holds only tasks without a time; timed ones live on the board (no duplicates).
   const untimed = tasks.filter((task) => occursOn(task, day) && !task.done && !taskSpan(task));
-  const cards = tasks
-    .filter((task) => occursOn(task, day) && !task.done)
-    .sort((a, b) => (taskSpan(a)?.start ?? 24 * 60) - (taskSpan(b)?.start ?? 24 * 60));
   const running = projects.filter((project) => {
     if (!project.start || !project.end) return false;
     return project.start <= day && project.end >= day;
@@ -101,20 +104,31 @@ export function ScheduleView({
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const showNow = day === today && nowMin >= bounds.from && nowMin <= bounds.to;
-  const rangeOk = (toMinutes(to) ?? 0) > (toMinutes(from) ?? 0);
 
-  function addBlock(event: FormEvent) {
-    event.preventDefault();
-    if (!title.trim() || !rangeOk) return;
-    addTask({
-      title,
-      listId: null,
-      due: day,
-      startAt: from,
-      endAt: to,
-      remindAt: from,
-    });
-    setTitle("");
+  useEffect(() => {
+    onDayChange?.(day);
+  }, [day, onDayChange]);
+
+  // Open at «now» (today) or at the first block — not at the top of the board.
+  useEffect(() => {
+    const box = scrollBox();
+    const board = boardRef.current;
+    if (!box || !board) return;
+    const minute = focusMinute({ isToday: day === today, now: nowMin, spans, workStart: workFrom });
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const top = board.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+    box.scrollTop = Math.max(0, top + ((Math.max(minute, bounds.from) - bounds.from) / 60) * HOUR * rem - 48);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [day]);
+
+  function scrollBox(): HTMLElement | null {
+    let node = rootRef.current?.parentElement ?? null;
+    while (node) {
+      const overflow = getComputedStyle(node).overflowY;
+      if (overflow === "auto" || overflow === "scroll") return node;
+      node = node.parentElement;
+    }
+    return null;
   }
 
   function clock(total: number): string {
@@ -175,12 +189,7 @@ export function ScheduleView({
   }
 
   function nudgeScroll(y: number) {
-    let node = rootRef.current?.parentElement ?? null;
-    while (node) {
-      const overflow = getComputedStyle(node).overflowY;
-      if (overflow === "auto" || overflow === "scroll") break;
-      node = node.parentElement;
-    }
+    const node = scrollBox();
     if (!node) return;
     const rect = node.getBoundingClientRect();
     if (y < rect.top + 64) node.scrollTop -= 18;
@@ -252,193 +261,125 @@ export function ScheduleView({
     handle.addEventListener("pointercancel", finish);
   }
 
-  return (
-    <div ref={rootRef} className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-      <div className="flex items-center gap-2">
-        <Button size="icon" variant="soft" aria-label="Предыдущий день" onClick={() => setDay(shiftIso(day, -1))}>
-          <ChevronLeft className="size-5" />
-        </Button>
-        <div className="min-w-0 flex-1 text-center">
-          <p className="truncate font-display text-2xl tracking-tight">{formatLong(day)}</p>
-          {day !== today ? (
-            <button type="button" className="h-11 text-xs text-muted" onClick={() => setDay(today)}>
-              Вернуться к сегодня
-            </button>
-          ) : (
-            <p className="text-xs text-subtle">{clashes.length > 0 ? "Есть накладка" : "Накладок нет"}</p>
-          )}
-        </div>
-        <Button size="icon" variant="soft" aria-label="Следующий день" onClick={() => setDay(shiftIso(day, 1))}>
-          <ChevronRight className="size-5" />
-        </Button>
-      </div>
+  const offBefore = hoursOk ? Math.max(0, Math.min(workFrom, bounds.to) - bounds.from) : 0;
+  const offAfter = hoursOk ? Math.max(0, bounds.to - Math.max(workTo, bounds.from)) : 0;
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-xs font-medium text-subtle">
-          Работаю с
-          <input
-            type="time"
-            value={workStart}
-            onChange={(event) => setWorkHours(event.target.value || "09:00", workEnd)}
-            className="mt-2 h-11 w-full rounded-md border border-line bg-elevated px-3 text-base text-fg"
-          />
-        </label>
-        <label className="block text-xs font-medium text-subtle">
-          до
-          <input
-            type="time"
-            value={workEnd}
-            onChange={(event) => setWorkHours(workStart, event.target.value || "18:00")}
-            className="mt-2 h-11 w-full rounded-md border border-line bg-elevated px-3 text-base text-fg"
-          />
-        </label>
+  return (
+    <div ref={rootRef} className="mx-auto flex w-full max-w-3xl flex-col">
+      <div className="sticky -top-2 z-20 -mx-4 -mt-2 bg-surface px-3 pt-2 pb-1 md:static md:mx-0 md:px-0">
+      {rangeControl}
+      <div className="flex items-center gap-0.5">
+        <button type="button" aria-label="Предыдущий день" onClick={() => setDay(shiftIso(day, -1))} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted">
+          <ChevronLeft className="size-5" />
+        </button>
+        <div className="min-w-0 flex-1 text-center leading-tight">
+          <p className="truncate text-[0.9375rem] font-semibold">{day === today ? `Сегодня, ${formatShortDay(day)}` : formatShortDay(day, true)}</p>
+          <p className={cn("text-[0.6875rem]", clashes.length > 0 ? "text-danger" : "text-subtle")}>
+            {clashes.length > 0 ? `Накладка: ${clashes.length}` : day !== today ? (
+              <button type="button" className="text-accent" onClick={() => setDay(today)}>
+                к сегодня
+              </button>
+            ) : (
+              "накладок нет"
+            )}
+          </p>
+        </div>
+        <button type="button" aria-label="Следующий день" onClick={() => setDay(shiftIso(day, 1))} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted">
+          <ChevronRight className="size-5" />
+        </button>
+        <span className="flex size-9 shrink-0 items-center justify-center">
+          <HintButton open={hint} onToggle={() => setHint(!hint)} label="Как пользоваться расписанием" />
+        </span>
       </div>
-      {!hoursOk ? <p className="text-sm text-danger">Конец рабочего дня раньше начала.</p> : null}
+      </div>
+      {hint ? (
+        <p className="mb-2 px-1 text-xs text-muted">
+          Нажмите на пустое место доски — новая задача на это время. Потяните блок, чтобы сдвинуть время; нижний край меняет длину. Задачи без
+          времени лежат в «Без времени» — потяните за ⋮⋮ на доску или на свободное окно. Рабочие часы меняются в «Настройки» → «Дата и время».
+        </p>
+      ) : null}
+      {!hoursOk ? <p className="mb-2 px-1 text-xs text-danger">Конец рабочего дня раньше начала — поправьте в «Настройках».</p> : null}
 
       {gaps.length > 0 ? (
-        <div>
-          <p className="text-xs font-medium text-subtle">Свободно</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {gaps.map((gap) => (
-              <button
-                key={`${gap.start}-${gap.end}`}
-                type="button"
-                data-gap={`${gap.start}:${gap.end}`}
-                onClick={() => {
-                  setFrom(fromMinutes(gap.start));
-                  setTo(fromMinutes(gap.end));
-                }}
-                className="h-11 rounded-full border border-line bg-elevated px-3 text-sm tabular-nums text-fg"
-              >
-                {fromMinutes(gap.start)}–{fromMinutes(gap.end)}
-              </button>
-            ))}
-          </div>
+        <div className="no-scrollbar -mx-4 flex items-center gap-1.5 overflow-x-auto px-4 py-1">
+          <span className="shrink-0 text-[0.6875rem] text-subtle">Свободно</span>
+          {gaps.map((gap) => (
+            <button
+              key={`${gap.start}-${gap.end}`}
+              type="button"
+              data-gap={`${gap.start}:${gap.end}`}
+              aria-label={`Свободно ${fromMinutes(gap.start)}–${fromMinutes(gap.end)}: добавить задачу`}
+              onClick={() => setSlot({ start: gap.start, end: Math.min(gap.end, gap.start + 60) })}
+              className="h-7 shrink-0 rounded-full bg-elevated px-2.5 text-xs tabular-nums text-muted"
+            >
+              {fromMinutes(gap.start)}–{fromMinutes(gap.end)}
+            </button>
+          ))}
         </div>
-      ) : hoursOk ? (
-        <p className="text-sm text-muted">В рабочих часах свободных окон нет.</p>
       ) : null}
 
-      <form onSubmit={addBlock} className="grid gap-2 sm:grid-cols-4">
-        <input
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Задача на это время"
-          aria-label="Задача на это время"
-          className="h-11 rounded-md border border-line bg-elevated px-3 text-base outline-none placeholder:text-subtle sm:col-span-2"
-        />
-        <div className="grid grid-cols-2 gap-2">
-          <PickerInput
-            type="time"
-            aria-label="Начало"
-            value={from}
-            onValue={setFrom}
-            className="h-11 rounded-md border border-line bg-elevated px-2 text-base text-fg"
-          />
-          <PickerInput
-            type="time"
-            aria-label="Конец"
-            value={to}
-            onValue={setTo}
-            className="h-11 rounded-md border border-line bg-elevated px-2 text-base text-fg"
-          />
-        </div>
-        <Button type="submit" variant="primary" disabled={!title.trim() || !rangeOk}>
-          На доску
-        </Button>
-      </form>
-      {!rangeOk ? <p className="text-sm text-danger">Конец раньше начала.</p> : null}
-
-      <div>
-        <p className="text-xs font-medium text-subtle">Карточки</p>
-        <p className="mt-1 text-xs text-muted">
-          Потяните карточку за полоску и положите на доску или на свободное окно. «весь день» убирает время.
-          {untimed.length > 0 ? ` Без времени: ${untimed.length}.` : ""}
-        </p>
-        {cards.length === 0 ? (
-          <p className="mt-3 text-sm text-muted">На этот день открытых дел нет.</p>
-        ) : (
-          <ul className="mt-3 flex flex-col gap-2">
-            {cards.map((task) => {
-              const span = placed.find((item) => item.id === task.id);
-              const meta = span
-                ? `${fromMinutes(span.start)}–${fromMinutes(Math.min(span.end, 24 * 60 - 1))}`
-                : "без времени";
-              return (
-                <li
-                  key={task.id}
-                  className={cn(
-                    "flex items-stretch rounded-lg border bg-elevated",
-                    span?.clash ? "border-danger" : "border-line",
-                    holding === task.id && "opacity-40",
-                  )}
-                >
+      {untimed.length > 0 ? (
+        <section className="mt-1 overflow-hidden rounded-xl bg-elevated" aria-label="Без времени">
+          <button type="button" aria-expanded={trayOpen} onClick={() => setTrayOpen(!trayOpen)} className="flex h-9 w-full items-center gap-1.5 px-3 text-left text-xs font-medium text-muted">
+            <ChevronDown className={cn("size-3.5 transition-transform", !trayOpen && "-rotate-90")} aria-hidden="true" />
+            Без времени · {untimed.length}
+            <span className="ml-auto font-normal text-subtle">{trayOpen ? "потяните на доску" : ""}</span>
+          </button>
+          {trayOpen ? (
+            <ul className="divide-y divide-line border-t border-line">
+              {untimed.map((task) => (
+                <li key={task.id} className={cn("flex h-10 items-center", holding === task.id && "opacity-40")} style={colorStyle(task.color, 8)}>
                   <button
                     type="button"
                     aria-label={`Поставить ${task.title} на доску`}
-                    className="drag-handle flex w-11 shrink-0 items-center justify-center text-subtle"
+                    className="drag-handle flex h-10 w-9 shrink-0 items-center justify-center text-subtle"
                     onPointerDown={(event) => beginCard(event, task)}
                   >
                     <GripVertical className="size-4" />
                   </button>
-                  <button type="button" onClick={() => onOpen(task.id)} className="min-w-0 flex-1 px-2 py-3 text-left">
-                    <span className="block truncate text-sm text-fg">{task.title}</span>
-                    <span className={cn("mt-1 block text-xs tabular-nums", span?.clash ? "text-danger" : "text-muted")}>
-                      {meta}
-                      {span?.clash ? " · накладка" : ""}
-                      {span?.assumed ? " · час" : ""}
-                    </span>
+                  <button type="button" onClick={() => onOpen(task.id)} className="h-10 min-w-0 flex-1 truncate pr-3 text-left text-sm text-fg">
+                    {task.title}
                   </button>
-                  {span ? (
-                    <button
-                      type="button"
-                      onClick={() => clearTaskTime(task.id)}
-                      aria-label={`Убрать время у «${task.title}» — на весь день`}
-                      title="Убрать время: задача останется на этот день, но без часов"
-                      className="shrink-0 px-3 text-xs text-muted hover:text-fg"
-                    >
-                      весь день
-                    </button>
-                  ) : null}
                 </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
 
-      <p className="text-xs text-muted">На доске потяните блок, чтобы сдвинуть время. Нижний край меняет длину.</p>
-
-      <div ref={boardRef} data-board="" className="relative" style={{ height: `${hours * HOUR}rem` }}>
+      <div
+        ref={boardRef}
+        data-board=""
+        className="relative mt-3 mb-2"
+        style={{ height: `${hours * HOUR}rem` }}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget && !(event.target as HTMLElement).dataset.slot) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (event.clientX < rect.left + 48) return;
+          setSlot(slotAt((event.clientY - rect.top) / rect.height, bounds.from, bounds.to));
+        }}
+      >
+        {offBefore > 0 ? (
+          <div data-slot="1" className="off-band absolute right-0 left-12 top-0" style={{ height: `${(offBefore / 60) * HOUR}rem` }} />
+        ) : null}
+        {offAfter > 0 ? (
+          <div data-slot="1" className="off-band absolute right-0 bottom-0 left-12" style={{ height: `${(offAfter / 60) * HOUR}rem` }} />
+        ) : null}
         {Array.from({ length: hours + 1 }, (_, index) => {
           const minute = bounds.from + index * 60;
           if (minute > bounds.to) return null;
           return (
-            <div
-              key={minute}
-              className="absolute right-0 left-12 border-t border-line"
-              style={{ top: `${index * HOUR}rem` }}
-            >
-              <span className="absolute -top-2 left-0 w-12 -translate-x-full pr-2 text-right text-xs tabular-nums text-subtle">
+            <div key={minute} className="pointer-events-none absolute right-0 left-12 border-t border-line/70" style={{ top: `${index * HOUR}rem` }}>
+              <span className="absolute -top-2 left-0 w-12 -translate-x-full pr-2 text-right text-[0.6875rem] tabular-nums text-subtle">
                 {fromMinutes(minute)}
               </span>
             </div>
           );
         })}
-        {hoursOk ? (
-          <div
-            className="work-band pointer-events-none absolute right-0 left-12"
-            style={{
-              top: `${((Math.max(workFrom, bounds.from) - bounds.from) / 60) * HOUR}rem`,
-              height: `${((Math.min(workTo, bounds.to) - Math.max(workFrom, bounds.from)) / 60) * HOUR}rem`,
-            }}
-          />
-        ) : null}
         {showNow ? (
-          <div
-            className="pointer-events-none absolute right-0 left-12 z-10 h-px bg-danger"
-            style={{ top: `${((nowMin - bounds.from) / 60) * HOUR}rem` }}
-          />
+          <div className="pointer-events-none absolute right-0 left-12 z-20 h-px bg-danger" style={{ top: `${((nowMin - bounds.from) / 60) * HOUR}rem` }}>
+            <span className="absolute -top-[3px] -left-[3px] size-[7px] rounded-full bg-danger" />
+          </div>
         ) : null}
         {placed.map((span) => (
           <div
@@ -447,18 +388,19 @@ export function ScheduleView({
             tabIndex={0}
             aria-label={`${span.title}, ${fromMinutes(span.start)}–${fromMinutes(Math.min(span.end, 24 * 60 - 1))}`}
             onPointerDown={(event) => beginDrag(event, span, "move")}
+            onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") onOpen(span.id);
             }}
-            style={{ ...blockStyle(span, bounds.from), ...colorStyle(span.color, 14) }}
+            style={{ ...blockStyle(span, bounds.from), ...colorStyle(span.color, 16) }}
             className={cn(
-              "drag-handle absolute z-10 overflow-hidden rounded-lg border px-2 py-1 text-left",
-              span.clash ? "border-danger bg-elevated" : "border-line bg-elevated",
+              "drag-handle absolute z-10 overflow-hidden rounded-md border-l-2 bg-elevated px-1.5 py-0.5 text-left shadow-sm",
+              span.clash ? "border-danger" : "border-accent",
               span.done && "opacity-50",
             )}
           >
-            <span className={cn("block truncate text-sm", span.done && "line-through")}>{span.title}</span>
-            <span className={cn("block text-xs tabular-nums", span.clash ? "text-danger" : "text-muted")}>
+            <span className={cn("block truncate text-[0.8125rem] leading-tight font-medium", span.done && "line-through")}>{span.title}</span>
+            <span className={cn("block text-[0.6875rem] leading-tight tabular-nums", span.clash ? "text-danger" : "text-muted")}>
               {fromMinutes(span.start)}–{fromMinutes(Math.min(span.end, 24 * 60 - 1))}
               {span.clash ? " · накладка" : ""}
               {span.assumed ? " · час" : ""}
@@ -466,31 +408,27 @@ export function ScheduleView({
             <div
               aria-hidden="true"
               onPointerDown={(event) => beginDrag(event, span, "resize")}
-              className="absolute inset-x-0 bottom-0 flex h-6 items-end px-2 pb-1"
+              className="absolute inset-x-0 bottom-0 flex h-3 cursor-ns-resize items-end justify-center pb-0.5"
             >
-              <span className="h-1 w-full rounded-full bg-line" />
+              <span className="h-0.5 w-6 rounded-full bg-subtle/50" />
             </div>
           </div>
         ))}
       </div>
 
       {running.length > 0 ? (
-        <div>
-          <p className="text-xs font-medium text-subtle">Проекты в этот день</p>
-          <div className="mt-1 flex flex-col">
+        <div className="mt-2">
+          <p className="px-1 text-xs font-medium text-subtle">Проекты в этот день</p>
+          <div className="mt-1 divide-y divide-line overflow-hidden rounded-xl bg-elevated">
             {running.map((project) => (
-              <button
-                key={project.id}
-                type="button"
-                onClick={() => onOpenProjects(project.id)}
-                className="h-11 text-left text-sm text-fg"
-              >
+              <button key={project.id} type="button" onClick={() => onOpenProjects(project.id)} className="flex h-10 w-full items-center px-3 text-left text-sm text-fg">
                 {project.title}
               </button>
             ))}
           </div>
         </div>
       ) : null}
+      <SlotSheet slot={slot} day={day} onClose={() => setSlot(null)} />
       {ghost ? (
         <div
           className="pointer-events-none fixed z-50 max-w-48 truncate rounded-lg border border-line bg-elevated px-3 py-2 text-sm text-fg"
@@ -500,5 +438,59 @@ export function ScheduleView({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** «Новая задача на 14:00–15:00»: opened by a tap on an empty slot or a free window. */
+function SlotSheet({ slot, day, onClose }: { slot: { start: number; end: number } | null; day: string; onClose: () => void }) {
+  const addTask = usePlanner((s) => s.addTask);
+  const [title, setTitle] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [seen, setSeen] = useState<typeof slot>(null);
+  if (slot !== seen) {
+    setSeen(slot);
+    if (slot) {
+      setFrom(fromMinutes(slot.start));
+      setTo(fromMinutes(Math.min(slot.end, 24 * 60 - 1)));
+      setTitle("");
+    }
+  }
+  const ok = title.trim().length > 0 && (toMinutes(to) ?? 0) > (toMinutes(from) ?? 0);
+  const save = () => {
+    if (!ok) return;
+    addTask({ title, listId: null, due: day, startAt: from, endAt: to, remindAt: from });
+    onClose();
+  };
+  return (
+    <Sheet open={slot !== null} title="Новая задача" onClose={onClose} action={{ label: "Добавить", onClick: save, disabled: !ok }}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          save();
+        }}
+      >
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Например: созвон с командой"
+          aria-label="Задача на это время"
+          enterKeyHint="done"
+          className="h-11 w-full rounded-xl bg-elevated px-3 text-base outline-none placeholder:text-subtle"
+        />
+        <div className="mt-3 divide-y divide-line overflow-hidden rounded-xl bg-elevated text-[0.9375rem]">
+          <label className="flex min-h-11 items-center gap-3 px-3">
+            <span className="flex-1">Начало</span>
+            <input type="time" aria-label="Начало" value={from} onChange={(event) => setFrom(event.target.value)} className="h-9 w-24 rounded-lg bg-surface px-2 text-right tabular-nums outline-none" />
+          </label>
+          <label className="flex min-h-11 items-center gap-3 px-3">
+            <span className="flex-1">Конец</span>
+            <input type="time" aria-label="Конец" value={to} onChange={(event) => setTo(event.target.value)} className="h-9 w-24 rounded-lg bg-surface px-2 text-right tabular-nums outline-none" />
+          </label>
+        </div>
+        {(toMinutes(to) ?? 0) <= (toMinutes(from) ?? 0) ? <p className="mt-2 text-xs text-danger">Конец раньше начала.</p> : null}
+        <p className="mt-2 px-1 text-xs text-muted">Задача встанет на доску и напомнит в начале.</p>
+      </form>
+    </Sheet>
   );
 }

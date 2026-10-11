@@ -43,3 +43,19 @@ export function Hint({ children, label }: { children: ReactNode; label?: string 
     </span>
   );
 }
+
+/** A one-line «? label» that unfolds a short explanation (keeps screens compact). */
+export function InlineHint({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={cn("text-xs text-subtle", className)}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={cn("inline-flex h-8 items-center gap-1.5 px-1", open && "text-accent")}>
+        <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full border border-current text-[10px] font-semibold leading-none">
+          ?
+        </span>
+        {label}
+      </button>
+      {open ? <p className="px-1 pb-2 text-[0.8125rem] leading-snug text-muted">{children}</p> : null}
+    </div>
+  );
+}

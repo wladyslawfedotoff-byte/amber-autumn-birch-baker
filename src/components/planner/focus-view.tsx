@@ -37,36 +37,32 @@ export function FocusView() {
   const linked = tasks.find((task) => task.id === focus.taskId);
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col items-center py-4">
-      <div className="flex flex-wrap justify-center gap-2">
+    <div className="mx-auto flex w-full max-w-md flex-col items-center py-2">
+      <div className="grid w-full max-w-xs grid-cols-3 gap-0.5 rounded-lg bg-elevated p-0.5" role="radiogroup" aria-label="Длина сессии">
         {PRESETS.map((preset) => (
           <button
             key={preset.label}
             type="button"
-            aria-pressed={focus.workLen === preset.work && focus.mode === "work"}
+            role="radio"
+            aria-checked={focus.workLen === preset.work}
             onClick={() => setWorkLen(preset.work)}
-            className={cn(
-              "h-11 rounded-full border px-4 text-sm",
-              focus.workLen === preset.work
-                ? "border-accent bg-accent text-accent-fg"
-                : "border-line text-muted",
-            )}
+            className={cn("h-8 rounded-md text-sm", focus.workLen === preset.work ? "bg-surface font-semibold text-fg shadow-sm" : "text-muted")}
           >
             {preset.label}
           </button>
         ))}
       </div>
 
-      <div className="relative mt-8 size-64">
+      <div className="relative mt-6 size-56">
         <svg viewBox="0 0 200 200" className="size-full" aria-hidden="true">
-          <circle cx="100" cy="100" r={radius} fill="none" className="stroke-line" strokeWidth="8" />
+          <circle cx="100" cy="100" r={radius} fill="none" className="stroke-line" strokeWidth="6" />
           <circle
             cx="100"
             cy="100"
             r={radius}
             fill="none"
             className="stroke-accent"
-            strokeWidth="8"
+            strokeWidth="6"
             strokeLinecap="round"
             strokeDasharray={circ}
             strokeDashoffset={offset}
@@ -75,30 +71,31 @@ export function FocusView() {
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <p className="text-xs text-subtle">{focus.mode === "work" ? "Фокус" : "Перерыв"}</p>
-          <p className="font-display text-5xl tabular-nums tracking-tight">{formatClock(focus.seconds)}</p>
+          <p className="text-[2.75rem] font-light tabular-nums leading-none tracking-tight">{formatClock(focus.seconds)}</p>
         </div>
       </div>
 
-      <div className="mt-6 flex items-center gap-2">
-        <Button variant="primary" onClick={() => (focus.running ? pauseFocus() : startFocus())}>
+      <div className="mt-5 flex items-center gap-2">
+        <Button variant="primary" className="min-w-28 rounded-full" onClick={() => (focus.running ? pauseFocus() : startFocus())}>
           {label}
         </Button>
-        <Button variant="soft" onClick={resetFocus}>
+        <Button variant="soft" className="rounded-full" onClick={resetFocus}>
           Сброс
         </Button>
       </div>
 
-      <p className="mt-4 text-sm text-muted">
+      <p className="mt-3 text-xs text-muted">
         Сессии сегодня: <span className="tabular-nums text-fg">{sessions}</span>
       </p>
       {focus.note ? <p className="mt-2 text-center text-sm text-fg">{focus.note}</p> : null}
 
-      <label className="mt-8 block w-full text-xs font-medium text-subtle">
-        Задача сессии
+      <label className="mt-6 flex min-h-11 w-full items-center gap-3 rounded-xl bg-elevated pl-3 text-[0.9375rem]">
+        <span className="shrink-0">Задача</span>
         <select
           value={focus.taskId ?? ""}
           onChange={(event) => setFocusTask(event.target.value || null)}
-          className="mt-2 h-11 w-full rounded-md border border-line bg-elevated px-3 text-sm font-normal text-fg"
+          aria-label="Задача сессии"
+          className="h-11 min-w-0 flex-1 appearance-none truncate border-0 bg-transparent pr-3 text-right text-base text-muted shadow-none outline-none"
         >
           <option value="">Без задачи</option>
           {openTasks.map((task) => (
@@ -109,7 +106,7 @@ export function FocusView() {
         </select>
       </label>
       {linked && !linked.done ? (
-        <Button className="mt-3" variant="soft" onClick={() => toggleTask(linked.id)}>
+        <Button className="mt-2" variant="ghost" size="sm" onClick={() => toggleTask(linked.id)}>
           Отметить выполненной
         </Button>
       ) : null}

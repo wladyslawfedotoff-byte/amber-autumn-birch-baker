@@ -73,6 +73,12 @@ async function syncNow(page) {
 }
 
 async function openView(page, label) {
+  // On a phone the drawer leaves out what is already in the bottom tab bar.
+  const tab = page.locator('nav[aria-label="Основные разделы"] button').filter({ hasText: new RegExp(`^${label}$`) });
+  if ((await tab.count()) && (await tab.first().isVisible())) {
+    await tab.first().click();
+    return;
+  }
   const menu = page.locator('button[aria-label="Открыть меню"]');
   if (await menu.isVisible()) await menu.click();
   await page.locator(`text="${label}" >> visible=true`).first().click();
@@ -222,7 +228,7 @@ async function main() {
     await waitText(user1, dated, "user1 «7 дней» (chosen dates)");
     await user1.getByRole("button", { name: "Выполнить" }).first().waitFor();
     // tick the occurrence → moves to the next chosen date
-    await user1.locator(".card-lift", { hasText: dated }).first().getByRole("button", { name: "Выполнить" }).click();
+    await user1.locator(".task-row", { hasText: dated }).first().getByRole("button", { name: "Выполнить" }).click();
     await synced(user1);
     doc = await serverDoc(user1);
     t = doc.data.tasks.find((x) => x.title === dated);

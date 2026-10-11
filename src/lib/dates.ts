@@ -33,6 +33,19 @@ export function formatShort(iso: string): string {
   return format(parseISO(iso), "d MMM", { locale: ru });
 }
 
+/** «11 окт.» or, with the weekday, «Пн, 12 окт.» — for headers that must fit a phone. */
+export function formatShortDay(iso: string, weekday = false): string {
+  return cap(format(parseISO(iso), weekday ? "EEEEEE, d MMM" : "d MMM", { locale: ru }));
+}
+
+/** «11–17 окт.» or «28 окт. – 3 нояб.». */
+export function formatRange(from: string, to: string): string {
+  const a = parseISO(from);
+  const b = parseISO(to);
+  if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()) return `${a.getDate()}–${format(b, "d MMM", { locale: ru })}`;
+  return `${format(a, "d MMM", { locale: ru })} – ${format(b, "d MMM", { locale: ru })}`;
+}
+
 export function formatMonth(date: Date): string {
   return cap(format(date, "LLLL yyyy", { locale: ru }));
 }
