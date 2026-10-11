@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { beep } from "@/lib/beep";
 import { cn } from "@/lib/cn";
@@ -170,30 +170,45 @@ export function ReminderBanner({
   onOpen,
   onAck,
   onMore,
+  onHide,
 }: {
   due: ReminderHit[];
   onOpen: (hit: ReminderHit) => void;
   onAck: (hit: ReminderHit) => void;
   onMore: () => void;
+  /** «×»: hide the strip until the next reminder; the bell keeps the list. */
+  onHide: () => void;
 }) {
   const hit = due[0];
   if (!hit) return null;
   const extra = due.length - 1;
 
   return (
-    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-elevated px-4">
-      <button type="button" onClick={() => onOpen(hit)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-        <span className="w-12 shrink-0 text-xs tabular-nums text-danger">{hit.time}</span>
-        <span className="truncate text-sm text-fg">{hit.title}</span>
-      </button>
-      {extra > 0 ? (
-        <button type="button" onClick={onMore} className="h-11 shrink-0 px-1 text-xs text-muted">
-          ещё {extra}
+    <div className="shrink-0 px-3 pb-1 md:px-8" role="status">
+      <div className="card-lift flex h-9 items-center gap-1 rounded-full bg-elevated pr-0.5 pl-3 text-sm">
+        <Bell className="size-3.5 shrink-0 text-danger" aria-hidden="true" />
+        <button type="button" onClick={() => onOpen(hit)} className="flex h-9 min-w-0 flex-1 items-center gap-1.5 text-left">
+          <span className="shrink-0 text-xs tabular-nums text-danger">{hit.time}</span>
+          <span className="truncate text-fg">{hit.title}</span>
         </button>
-      ) : null}
-      <button type="button" onClick={() => onAck(hit)} className="h-11 shrink-0 px-1 text-xs text-muted">
-        Понятно
-      </button>
+        {extra > 0 ? (
+          <button type="button" onClick={onMore} className="h-9 shrink-0 px-1.5 text-xs text-muted" aria-label={`Ещё напоминаний: ${extra}`}>
+            +{extra}
+          </button>
+        ) : null}
+        <button type="button" onClick={() => onAck(hit)} className="h-9 shrink-0 px-1.5 text-xs font-medium text-accent">
+          Понятно
+        </button>
+        <button
+          type="button"
+          onClick={onHide}
+          aria-label="Скрыть полоску напоминаний"
+          title="Скрыть — список останется под колокольчиком"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full text-subtle"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }

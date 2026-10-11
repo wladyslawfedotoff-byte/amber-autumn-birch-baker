@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Archive, ArchiveRestore, ArrowDown, ArrowUp, Bell, ChevronLeft, ChevronRight, Minus, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PickerInput } from "@/components/planner/picker-input";
+import { Sheet } from "@/components/ui/sheet";
+import { Hint } from "@/components/ui/hint";
 import { cn } from "@/lib/cn";
 import { dayNumber, formatShort, shiftIso, todayIso, weekdayLetter, weekDays } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
@@ -336,7 +338,7 @@ function NumberField({ label, value, onValue, min, max, placeholder, hint }: { l
 }
 
 /** «Изменить привычку»: everything TickTick has in its habit editor. Every change saves (and syncs) at once. */
-function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) {
+function HabitEditor({ habit }: { habit: Habit }) {
   const updateHabit = usePlanner((s) => s.updateHabit);
   const moveHabit = usePlanner((s) => s.moveHabit);
   const deleteHabit = usePlanner((s) => s.deleteHabit);
@@ -350,7 +352,7 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) 
   const setFreq = (next: HabitFreq) => set({ freq: next });
 
   return (
-    <div className="mt-3 space-y-4 rounded-xl border border-line bg-elevated p-3">
+    <div className="space-y-4 pb-2">
       <label className="block text-xs font-medium text-subtle">
         Название
         <input
@@ -451,8 +453,9 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) 
             ))}
           </div>
         ) : null}
-        <p className="mt-1 text-[11px] text-subtle">
-          Сейчас: {freqLabel(freq)}. Дни вне плана не прерывают серию — например, выходные у привычки «по будням».
+        <p className="mt-1 text-xs text-subtle">
+          Сейчас: {freqLabel(freq)}
+          <Hint>Дни вне плана не прерывают серию — например, выходные у привычки «по будням».</Hint>
         </p>
       </div>
 
@@ -482,7 +485,10 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) 
             <NumberField label="За нажатие" value={habit.step ?? 1} min={1} max={10000} onValue={(n) => set({ step: n })} />
           </div>
         ) : null}
-        <p className="mt-1 text-[11px] text-subtle">Например: 8 стаканов воды, 10 страниц, 20 минут. Каждое нажатие добавляет «за нажатие»; день засчитан, когда цель набрана.</p>
+        <p className="mt-1 text-xs text-subtle">
+          Например: 8 стаканов воды
+          <Hint>Каждое нажатие добавляет «за нажатие»; день засчитан, когда цель набрана. Можно 10 страниц, 20 минут.</Hint>
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -556,7 +562,10 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) 
             </Button>
           </form>
         </div>
-        <p className="mt-1 text-[11px] text-subtle">Можно несколько, например для воды: 9:00, 13:00, 18:00. Напоминание не придёт, если день уже отмечен или не по плану.</p>
+        <p className="mt-1 text-xs text-subtle">
+          Можно несколько: 9:00, 13:00, 18:00
+          <Hint>Напоминание не придёт, если день уже отмечен или не по плану.</Hint>
+        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
@@ -579,11 +588,8 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) 
             <Trash2 className="size-4" />
           </Button>
         )}
-        <Button size="sm" variant="primary" className="ml-auto" onClick={onClose}>
-          Готово
-        </Button>
+        <Hint label="Архив или удаление">Архив прячет привычку, но хранит все отметки. Удаление стирает и отметки.</Hint>
       </div>
-      <p className="text-[11px] text-subtle">Архив прячет привычку, но хранит все отметки. Удаление стирает и отметки.</p>
     </div>
   );
 }
@@ -661,7 +667,7 @@ function HabitCard({ habit, days, today, editing, onEdit }: { habit: Habit; days
               aria-label={`${habit.name}, ${day}: ${STATE_LABEL[state]}`}
               onClick={() => toggleHabit(habit.id, day)}
               className={cn(
-                "flex h-12 flex-col items-center justify-center rounded-md text-xs tabular-nums",
+                "flex h-11 flex-col items-center justify-center rounded-md text-xs leading-tight tabular-nums",
                 STATE_CLASS[state],
                 day === today && state !== "done" && "ring-1 ring-accent",
               )}
@@ -672,10 +678,12 @@ function HabitCard({ habit, days, today, editing, onEdit }: { habit: Habit; days
           );
         })}
       </div>
-      <button type="button" aria-expanded={details} onClick={() => setDetails(!details)} className="mt-1 h-9 text-xs text-accent">
-        {details ? "Скрыть статистику" : "Статистика, дневник и прошлые дни"}
+      <button type="button" aria-expanded={details} onClick={() => setDetails(!details)} className="mt-0.5 h-8 text-xs text-accent">
+        {details ? "Скрыть статистику" : "Статистика и дневник"}
       </button>
-      {editing ? <HabitEditor habit={habit} onClose={() => onEdit(false)} /> : null}
+      <Sheet open={editing} title={habit.name} onClose={() => onEdit(false)} action={{ label: "Готово", onClick: () => onEdit(false) }}>
+        <HabitEditor habit={habit} />
+      </Sheet>
       {details ? <HabitDetails habit={habit} today={today} /> : null}
     </li>
   );
@@ -732,7 +740,7 @@ export function HabitsView() {
 
       {!showArchive && active.length === 0 ? (
         <div className="py-8 text-center">
-          <p className="font-display text-2xl tracking-tight">Привычек пока нет</p>
+          <p className="text-base font-semibold">Привычек пока нет</p>
           <p className="mt-2 text-sm text-muted">
             Начните с одной маленькой — такой, что не найдётся причины не сделать: «Стакан воды утром», «2 страницы книги», «5 минут зарядки». Выберите
             готовую ниже или придумайте свою.
@@ -743,7 +751,7 @@ export function HabitsView() {
       {groups.map(({ section, items }) => (
         <section key={section.id} className="mt-3">
           {groups.length > 1 || section.id !== "other" ? (
-            <h3 className="text-xs font-medium uppercase tracking-wide text-subtle">
+            <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-subtle">
               {section.label} <span className="font-normal normal-case">· {section.hint}</span>
             </h3>
           ) : null}
@@ -817,9 +825,12 @@ export function HabitsView() {
         </Button>
       ) : null}
       {!showArchive && active.length > 0 ? (
-        <p className="mt-2 text-[11px] text-subtle">
-          Нажатие на день недели — отметка (для количества: +шаг). Пунктир — день не по плану, он не прерывает серию. Прошлые дни, пропуски и заметки — в
-          «Статистика, дневник и прошлые дни».
+        <p className="mt-2 text-xs text-subtle">
+          Как отмечать
+          <Hint label="Как отмечать привычки">
+            Нажатие на день — отметка (для количества: +шаг). Пунктир — день не по плану, он не прерывает серию. Прошлые дни, пропуски и заметки — в
+            «Статистика и дневник».
+          </Hint>
         </p>
       ) : null}
     </div>

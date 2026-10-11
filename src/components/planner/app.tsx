@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { CalendarCheck, CalendarDays, Clock, Menu, Repeat, Search, Timer, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Menu, Search, X } from "lucide-react";
 import { AssistView } from "@/components/planner/assist-view";
 import { CalendarView } from "@/components/planner/calendar-view";
 import { ChecklistView } from "@/components/planner/checklist-view";
@@ -25,14 +25,10 @@ import { useProfile } from "@/lib/use-capabilities";
 import { bindServerSync } from "@/lib/server-sync";
 import { SyncIndicator } from "@/components/planner/sync-status";
 import { DoneToastBar } from "@/components/planner/done-toast";
-
-const MOBILE: { id: View; label: string; icon: typeof CalendarCheck }[] = [
-  { id: "today", label: "Сегодня", icon: CalendarCheck },
-  { id: "calendar", label: "Календарь", icon: CalendarDays },
-  { id: "schedule", label: "Расписание", icon: Clock },
-  { id: "habits", label: "Привычки", icon: Repeat },
-  { id: "focus", label: "Фокус", icon: Timer },
-];
+import { Fab, QuickComposer } from "@/components/planner/quick-composer";
+import { TAB_ICONS } from "@/components/planner/tab-icons";
+import { TAB_OPTIONS } from "@/lib/ui-prefs";
+import { useViewportFrame } from "@/lib/use-viewport-frame";
 
 function viewTitle(view: View, lists: { id: string; name: string }[]): string {
   if (view === "today") return "Сегодня";
@@ -81,6 +77,17 @@ export function PlannerApp() {
   const [drawer, setDrawer] = useState(false);
   const [bell, setBell] = useState(false);
   const [confirmList, setConfirmList] = useState(false);
+  const tabBar = usePlanner((s) => s.tabBar);
+  const addTask = usePlanner((s) => s.addTask);
+  const [composer, setComposer] = useState(false);
+  const composerRef = useRef<HTMLInputElement>(null);
+  const [calendarDay, setCalendarDay] = useState<string | null>(null);
+  /** «×» on the reminder strip hides it until a new reminder comes (no «Понятно» needed). */
+  const [bannerHidden, setBannerHidden] = useState("");
+  const closeComposer = useCallback(() => {
+    setComposer(false);
+    composerRef.current?.blur();
+  }, []);
   const today = todayIso();
   const task = tasks.find((item) => item.id === selectedId) ?? null;
   const listId = view.startsWith("list:") ? view.slice(5) : null;
@@ -116,22 +123,7 @@ export function PlannerApp() {
     document.documentElement.dataset.accent = accent;
   }, [theme, accent]);
 
-  useEffect(() => {
-    let last = 0;
-    const apply = () => {
-      const next = Math.round(window.visualViewport?.height ?? window.innerHeight);
-      if (Math.abs(next - last) < 2) return;
-      last = next;
-      document.documentElement.style.setProperty("--app-h", `${next}px`);
-    };
-    apply();
-    window.visualViewport?.addEventListener("resize", apply);
-    window.addEventListener("orientationchange", apply);
-    return () => {
-      window.visualViewport?.removeEventListener("resize", apply);
-      window.removeEventListener("orientationchange", apply);
-    };
-  }, []);
+  useViewportFrame();
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -154,6 +146,7 @@ export function PlannerApp() {
 
   function openView(next: View) {
     setView(next);
+    setComposer(false);
     if (next !== "projects") setProjectId(null);
     setDrawer(false);
     setBell(false);
@@ -180,16 +173,16 @@ export function PlannerApp() {
     if (view === "inbox") return "Без списка";
     if (view === "done") return "Недавно выполненные";
     if (view === "archive") return "Старые выполненные задачи";
-    if (view === "calendar") return "Перетащите задачу или этап на другой день";
-    if (view === "focus") return "Таймер остаётся на экране, пока идёт сессия";
-    if (view === "habits") return "Отметки за неделю";
+    if (view === "calendar") return "";
+    if (view === "focus") return "";
+    if (view === "habits") return "";
     if (view === "checklist") return "Все открытые задачи";
-    if (view === "matrix") return "Важно и срочно — по разные стороны";
-    if (view === "dates") return "Дни до дня рождения, годовщины и праздника";
-    if (view === "assist") return "Разложить мысли на задачи";
-    if (view === "schedule") return "День по часам или несколько дней подряд";
-    if (view === "projects") return "Длинные дела по этапам";
-    if (view === "settings") return "Профиль, подключение, оформление и копия";
+    if (view === "matrix") return "";
+    if (view === "dates") return "";
+    if (view === "assist") return "";
+    if (view === "schedule") return "";
+    if (view === "projects") return "";
+    if (view === "settings") return "";
     if (view === "shared") return "Совместные, назначенные и из общих списков";
     if (view.startsWith("tag:")) {
       const n = scopeTasks(tasks, view, today).length;
@@ -224,9 +217,33 @@ export function PlannerApp() {
     query.trim().length > 0;
 
   const showSearch = searchOpen || query.trim().length > 0;
+  const quick = (() => {
+    if (query.trim()) return null;
+    if (view === "calendar") {
+      const day = calendarDay ?? today;
+      return { title: `На ${formatLong(day).toLowerCase()}`, placeholder: "Встреча в 15", defaults: { due: day, listId: null } };
+    }
+    if (!showLists || view === "done" || view === "archive" || view === "shared") return null;
+    if (view === "today") return { title: "На сегодня", placeholder: "Созвон завтра в 10", defaults: { due: today, listId: null } };
+    if (view === "tomorrow") return { title: "На завтра", placeholder: "Созвон завтра в 10", defaults: { due: shiftIso(today, 1), listId: null } };
+    if (view === "week") return { title: "На сегодня", placeholder: "Созвон завтра в 10", defaults: { due: today, listId: null } };
+    if (view.startsWith("day:")) {
+      const day = view.slice(4);
+      return { title: `На ${formatLong(day).toLowerCase()}`, placeholder: "Задача на этот день", defaults: { due: day, listId: null } };
+    }
+    if (view.startsWith("list:")) {
+      const name = lists.find((list) => list.id === view.slice(5))?.name ?? "список";
+      return { title: `В список «${name}»`, placeholder: "Созвон завтра в 10", defaults: { due: null, listId: view.slice(5) } };
+    }
+    if (view.startsWith("tag:")) {
+      return { title: `С тегом #${view.slice(4)}`, placeholder: "Созвон завтра в 10", defaults: { due: null, listId: null, tags: [view.slice(4)] } };
+    }
+    return { title: "Во «Входящие»", placeholder: "Созвон завтра в 10", defaults: { due: null, listId: null } };
+  })();
+  const bannerKey = dueHits.map((hit) => `${hit.key}:${hit.stamp}`).join("|");
 
   return (
-    <div className="app-frame relative flex overflow-hidden bg-surface text-fg">
+    <div className="app-frame vv-frame flex overflow-hidden bg-surface text-fg">
       <aside className="hidden h-full w-64 shrink-0 border-r border-line md:flex">
         <Sidebar view={view} onView={openView} />
       </aside>
@@ -241,7 +258,7 @@ export function PlannerApp() {
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-20 shrink-0 px-4 py-3 md:px-8">
+        <header className="relative z-20 shrink-0 px-2 py-1.5 md:px-8 md:py-3">
           <div className="flex items-center gap-2">
             <Button size="icon" variant="ghost" className="md:hidden" aria-label="Открыть меню" onClick={() => setDrawer(true)}>
               <Menu className="size-5" />
@@ -256,10 +273,10 @@ export function PlannerApp() {
                     const current = lists.find((list) => list.id === listId)?.name ?? "";
                     if (!current.trim()) renameList(listId, "Без названия");
                   }}
-                  className="w-full bg-transparent font-display text-2xl tracking-tight outline-none md:text-4xl"
+                  className="w-full bg-transparent text-xl font-semibold tracking-tight outline-none md:font-display md:text-4xl md:font-normal"
                 />
               ) : (
-                <h1 className="truncate font-display text-2xl tracking-tight md:text-4xl">{viewTitle(view, lists)}</h1>
+                <h1 className="truncate text-xl font-semibold tracking-tight md:font-display md:text-4xl md:font-normal">{viewTitle(view, lists)}</h1>
               )}
               {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
             </div>
@@ -328,16 +345,18 @@ export function PlannerApp() {
           ) : null}
         </header>
 
-        {dueHits.length > 0 ? (
+        {dueHits.length > 0 && bannerHidden !== bannerKey ? (
           <ReminderBanner
             due={dueHits}
             onOpen={openHit}
             onAck={(hit) => ackReminder(hit.key, hit.stamp)}
             onMore={() => setBell(true)}
+            onHide={() => setBannerHidden(bannerKey)}
           />
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-2 md:px-8 md:py-6">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+        <div className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-2 md:px-8 md:py-6", quick && "pb-24 md:pb-6")}>
           {showLists ? (
             <TaskViews
               key={view}
@@ -348,7 +367,7 @@ export function PlannerApp() {
               onPickDay={(day) => openView(day === today ? "today" : `day:${day}`)}
             />
           ) : null}
-          {!query.trim() && view === "calendar" ? <CalendarView selectedId={selectedId} onOpen={setSelectedId} /> : null}
+          {!query.trim() && view === "calendar" ? <CalendarView selectedId={selectedId} onOpen={setSelectedId} onDayChange={setCalendarDay} /> : null}
           {!query.trim() && view === "checklist" ? <ChecklistView selectedId={selectedId} onOpen={setSelectedId} /> : null}
           {!query.trim() && view === "matrix" ? <MatrixView selectedId={selectedId} onOpen={setSelectedId} /> : null}
           {!query.trim() && view === "focus" ? <FocusView /> : null}
@@ -366,6 +385,17 @@ export function PlannerApp() {
           ) : null}
           {!query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} /> : null}
           {!query.trim() && view === "settings" ? <SettingsView /> : null}
+        </div>
+        {quick ? (
+          <Fab
+            label="Добавить задачу"
+            onClick={() => {
+              setComposer(true);
+              // Focus inside the tap: iOS opens the keyboard only for that.
+              composerRef.current?.focus({ preventScroll: true });
+            }}
+          />
+        ) : null}
         </div>
 
         <DoneToastBar />
@@ -387,26 +417,41 @@ export function PlannerApp() {
           </div>
         ) : null}
 
-        <nav className="grid shrink-0 grid-cols-5 bg-surface pb-safe md:hidden" aria-label="Основные разделы">
-          {MOBILE.map((item) => {
-            const Icon = item.icon;
-            const active = !query.trim() && (view === item.id || (item.id === "today" && view.startsWith("day:")));
+        <nav
+          className="grid shrink-0 border-t border-line bg-surface pb-safe md:hidden"
+          style={{ gridTemplateColumns: `repeat(${tabBar.length}, minmax(0, 1fr))` }}
+          aria-label="Основные разделы"
+        >
+          {tabBar.map((id) => {
+            const Icon = TAB_ICONS[id];
+            const label = TAB_OPTIONS.find((tab) => tab.id === id)?.label ?? id;
+            const active = !query.trim() && (view === id || (id === "today" && view.startsWith("day:")));
             return (
-              <button key={item.id} type="button" onClick={() => openView(item.id)} className="flex h-14 items-center justify-center">
-                <span
-                  className={cn(
-                    "flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1 text-xs",
-                    active ? "bg-elevated text-fg" : "text-subtle",
-                  )}
-                >
-                  <Icon className="size-5" strokeWidth={1.75} />
-                  {item.label}
-                </span>
+              <button
+                key={id}
+                type="button"
+                aria-current={active ? "page" : undefined}
+                onClick={() => openView(id)}
+                className={cn("flex h-[3.25rem] min-w-0 flex-col items-center justify-center gap-0.5 text-[0.6875rem]", active ? "text-accent" : "text-subtle")}
+              >
+                <Icon className="size-[1.375rem]" strokeWidth={active ? 2 : 1.75} />
+                <span className="max-w-full truncate px-0.5">{label}</span>
               </button>
             );
           })}
         </nav>
       </div>
+
+      {quick ? (
+        <QuickComposer
+          open={composer}
+          onClose={closeComposer}
+          inputRef={composerRef}
+          title={quick.title}
+          placeholder={quick.placeholder}
+          onAdd={(title, options) => addTask({ title, ...options, ...quick.defaults })}
+        />
+      ) : null}
 
       {task ? (
         <aside className="sheet sheet-safe absolute inset-x-0 bottom-0 z-50 flex w-full flex-col bg-surface lg:static lg:inset-auto lg:z-auto lg:w-96 lg:shrink-0 lg:border-l lg:border-line">

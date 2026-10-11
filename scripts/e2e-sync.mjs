@@ -16,7 +16,8 @@ import { chromium } from "playwright";
 const BASE = process.env.BASE_URL ?? "http://127.0.0.1:8090";
 const PASSWORD = process.env.APP_PASSWORD ?? "";
 const SHOTS = process.env.SHOTS_DIR ?? "";
-const ADD = 'input[placeholder="Созвон завтра в 10"]';
+// Desktop: the inline field; phone: the bottom composer opened with «+».
+const ADD = 'input[placeholder="Созвон завтра в 10"] >> visible=true';
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
@@ -61,8 +62,12 @@ async function syncedOnce(page) {
 }
 
 async function addTask(page, title) {
+  const fab = page.getByRole("button", { name: "Добавить задачу", exact: true });
+  const phone = await fab.isVisible();
+  if (phone) await fab.click();
   await page.fill(ADD, title);
   await page.press(ADD, "Enter");
+  if (phone) await page.keyboard.press("Escape");
 }
 
 async function waitForText(page, text, label) {
@@ -90,7 +95,7 @@ async function isoDay(page, daysAgo) {
 }
 
 async function habitButton(page, name, day) {
-  const button = page.locator(`button[aria-label="${name}, ${day}"]`);
+  const button = page.locator(`button[aria-label^="${name}, ${day}:"]`);
   if (!(await button.count())) await page.getByRole("button", { name: "Прошлая неделя" }).click();
   return button;
 }
@@ -102,8 +107,11 @@ async function habitButton(page, name, day) {
 async function habitTwoClients(phone, phoneCtx, computer, computerCtx) {
   const name = `Зарядка ${Date.now() % 100000}`;
   await openView(computer, "Привычки");
-  await computer.fill('input[name="name"][placeholder="Новая привычка"]', name);
-  await computer.press('input[name="name"][placeholder="Новая привычка"]', "Enter");
+  await computer.fill('input[name="name"][aria-label="Новая привычка"]', name);
+  await computer.press('input[name="name"][aria-label="Новая привычка"]', "Enter");
+  // A new habit opens its settings sheet: close it with «Готово».
+  const sheet = computer.getByRole("dialog");
+  if (await sheet.isVisible().catch(() => false)) await sheet.getByRole("button", { name: "Готово" }).click();
   await openView(phone, "Привычки");
   await waitForText(phone, name, "phone (new habit)");
   await syncedOnce(phone);
@@ -121,13 +129,13 @@ async function habitTwoClients(phone, phoneCtx, computer, computerCtx) {
     [computer, "computer"],
   ]) {
     for (const day of [today, yesterday]) {
-      if (!(await page.locator(`button[aria-label="${name}, ${day}"]`).count())) {
+      if (!(await page.locator(`button[aria-label^="${name}, ${day}:"]`).count())) {
         const thisWeek = page.getByRole("button", { name: "Эта неделя" });
         if (await thisWeek.isEnabled()) await thisWeek.click();
         else await page.getByRole("button", { name: "Прошлая неделя" }).click();
       }
       await page
-        .locator(`button[aria-label="${name}, ${day}"][aria-pressed="true"]`)
+        .locator(`button[aria-label^="${name}, ${day}:"][aria-pressed="true"]`)
         .waitFor({ timeout: 30_000 })
         .catch(() => fail(`${label}: habit check ${day} missing after reconnect`));
     }
@@ -195,19 +203,21 @@ async function main() {
     // Settings → «Подключение».
     await phone2.click('button[aria-label="Открыть меню"]');
     await phone2.locator('text="Настройки" >> visible=true').first().click();
-    await phone2.getByText("Подключение", { exact: true }).waitFor();
-    await phone2.getByText("Онлайн", { exact: true }).waitFor({ timeout: 20_000 });
+    await phone2.click('[data-row="connection"]');
+    await phone2.getByRole("dialog", { name: "Подключение" }).waitFor();
+    await phone2.getByRole("dialog").getByText("Онлайн", { exact: true }).waitFor({ timeout: 20_000 });
     await shot(phone2, "phone-settings");
     await shot(computer, "computer-today");
 
     // Logout from the phone.
-    await phone2.getByRole("button", { name: "Выйти", exact: true }).click();
+    await phone2.getByRole("dialog").getByRole("button", { name: "Выйти", exact: true }).click();
     await phone2.waitForURL(/\/login/);
     const status = await phone2.evaluate(async () => (await fetch("/api/sync")).status);
     if (status !== 401) fail(`after logout /api/sync answered ${status}`);
 
     // «Выйти на всех устройствах» on the computer: its session dies as well.
     await openView(computer, "Настройки");
+    await computer.click('[data-row="connection"]');
     await computer.getByRole("button", { name: "Выйти на всех устройствах" }).click();
     await computer.getByRole("button", { name: "Да, выйти везде" }).click();
     await computer.waitForURL(/\/login/);

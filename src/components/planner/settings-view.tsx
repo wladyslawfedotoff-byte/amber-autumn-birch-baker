@@ -1,5 +1,24 @@
 import { APP_NAME, APP_VERSION } from "@/lib/site";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Archive,
+  ArrowDown,
+  ArrowUp,
+  Bell,
+  CalendarClock,
+  ChevronRight,
+  Cloud,
+  HardDriveDownload,
+  Info,
+  MinusCircle,
+  Palette,
+  PanelBottom,
+  PlusCircle,
+} from "lucide-react";
+import { TAB_ICONS } from "@/components/planner/tab-icons";
+import { Sheet } from "@/components/ui/sheet";
+import { SwitchRow } from "@/components/ui/rows";
+import { CALENDAR_MODES, DEFAULT_TABS, MAX_TABS, MIN_TABS, TAB_OPTIONS, moveTab, toggleTab } from "@/lib/ui-prefs";
 import { ACCENTS } from "@/lib/accents";
 import { addFromBackup, saveBackup } from "@/lib/backup";
 import { cn } from "@/lib/cn";
@@ -13,11 +32,8 @@ function ArchiveSection() {
   const archiveDays = usePlanner((s) => s.archiveDays);
   const setArchiveDays = usePlanner((s) => s.setArchiveDays);
   return (
-    <section className="mt-8" aria-labelledby="archive-title">
-      <h2 id="archive-title" className="font-display text-lg tracking-tight">
-        Готово и архив
-      </h2>
-      <p className="mt-1 text-sm text-muted">
+    <section aria-label="Готово и архив">
+      <p className="text-sm text-muted">
         Выполненные задачи сначала видны внизу списка в группе «Готово», а потом уходят в «Архив», чтобы не мешать. Из архива задачу можно вернуть
         или удалить. Настройка общая для всех ваших устройств.
       </p>
@@ -64,17 +80,14 @@ function ProfileSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  if (!profile.login) return null;
+  if (!profile.login) return <p className="text-sm text-muted">Вход не настроен: данные хранятся только на этом устройстве и на сервере без профилей.</p>;
   const length = [...next].length;
   const mismatch = repeat.length > 0 && repeat !== next;
   const canSave = current.length > 0 && length >= MIN_PASSWORD && repeat === next && !busy;
   const field = "mt-1 h-11 w-full rounded-md border border-line bg-surface px-3 text-base text-fg outline-none";
   return (
-    <section aria-labelledby="profile-title">
-      <h2 id="profile-title" className="font-display text-lg tracking-tight">
-        Профиль
-      </h2>
-      <p className="mt-1 text-sm text-muted">
+    <section aria-label="Профиль">
+      <p className="text-sm text-muted">
         Вы вошли как <span className="font-medium text-fg">{profile.name || profile.login}</span>
         {profile.name && profile.name !== profile.login ? <span className="text-subtle"> ({profile.login})</span> : null}.
         {profile.multiUser
@@ -169,9 +182,8 @@ function ConnectionSection() {
   const [allError, setAllError] = useState("");
   const label = phaseLabel(status);
   return (
-    <section>
-      <h2 className="font-display text-lg tracking-tight">Подключение</h2>
-      <p className="mt-1 text-sm text-muted">
+    <section aria-label="Подключение">
+      <p className="text-sm text-muted">
         Задачи хранятся на вашем сервере и на этом устройстве. {APP_NAME} · версия {APP_VERSION}
       </p>
       <div className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm">
@@ -269,9 +281,8 @@ function BackupSection() {
   const [note, setNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   return (
-    <section className="mt-8">
-      <h2 className="font-display text-lg tracking-tight">Резервная копия</h2>
-      <p className="mt-1 text-sm text-muted">
+    <section aria-label="Резервная копия">
+      <p className="text-sm text-muted">
         Файл со всеми задачами, списками, привычками и проектами. Из копии добавляется только то, чего сейчас нет, — текущие задачи не
         перезаписываются.
       </p>
@@ -313,76 +324,337 @@ function BackupSection() {
   );
 }
 
-export function SettingsView() {
+type SheetId = "profile" | "look" | "tabs" | "notify" | "datetime" | "connection" | "archive" | "backup" | "about";
+
+const SHEET_TITLES: Record<SheetId, string> = {
+  profile: "Профиль",
+  look: "Вид",
+  tabs: "Панель вкладок",
+  notify: "Уведомления",
+  datetime: "Дата и время",
+  connection: "Подключение",
+  archive: "Готово и архив",
+  backup: "Резервная копия",
+  about: "О приложении",
+};
+
+/** iOS/TickTick-like row: coloured icon, label, value, «›». */
+function NavRow({
+  id,
+  icon: Icon,
+  color,
+  label,
+  value,
+  onOpen,
+}: {
+  id: SheetId;
+  icon: typeof Info;
+  color: string;
+  label: string;
+  value?: string;
+  onOpen: (id: SheetId) => void;
+}) {
+  return (
+    <button type="button" data-row={id} onClick={() => onOpen(id)} className="flex min-h-12 w-full items-center gap-3 px-3 text-left">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg text-white" style={{ background: color }} aria-hidden="true">
+        <Icon className="size-4" strokeWidth={2} />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[0.9375rem] text-fg">{label}</span>
+      {value ? <span className="max-w-[45%] shrink-0 truncate text-sm text-muted">{value}</span> : null}
+      <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
+    </button>
+  );
+}
+
+function Group({ children, title }: { children: ReactNode; title?: string }) {
+  return (
+    <div className="mt-4">
+      {title ? <p className="mb-1 px-3 text-xs font-medium text-subtle uppercase">{title}</p> : null}
+      <div className="card-lift divide-y divide-line overflow-hidden rounded-2xl bg-elevated">{children}</div>
+    </div>
+  );
+}
+
+function LookSection() {
   const theme = usePlanner((s) => s.theme);
   const accent = usePlanner((s) => s.accent);
   const setTheme = usePlanner((s) => s.setTheme);
   const setAccent = usePlanner((s) => s.setAccent);
+  return (
+    <div>
+      <p className="text-xs font-medium text-subtle">Тема</p>
+      <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-elevated p-1" role="radiogroup" aria-label="Тема">
+        {(["light", "dark"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            role="radio"
+            aria-checked={theme === mode}
+            onClick={() => setTheme(mode)}
+            className={cn("h-10 rounded-lg text-sm", theme === mode ? "bg-surface font-medium text-fg shadow-sm" : "text-muted")}
+          >
+            {mode === "light" ? "Светлая" : "Тёмная"}
+          </button>
+        ))}
+      </div>
+      <p className="mt-5 text-xs font-medium text-subtle">Цвет акцента</p>
+      <p className="mt-0.5 text-xs text-muted">Кнопки, выбранный день и отметки.</p>
+      <div className="mt-3 grid grid-cols-4 gap-3">
+        {ACCENTS.map((item) => {
+          const on = accent === item.id;
+          return (
+            <button key={item.id} type="button" aria-pressed={on} aria-label={item.name} onClick={() => setAccent(item.id)} className="flex flex-col items-center gap-1.5">
+              <span className={cn("size-10 rounded-full", item.swatch, on ? "ring-2 ring-fg ring-offset-2 ring-offset-surface" : "")} />
+              <span className={cn("text-xs", on ? "text-fg" : "text-muted")}>{item.name}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** «Панель вкладок»: which sections sit in the bottom bar on a phone, and in what order. */
+function TabsSection() {
+  const tabs = usePlanner((s) => s.tabBar) ?? DEFAULT_TABS;
+  const setTabs = usePlanner((s) => s.setTabBar);
+  const off = TAB_OPTIONS.filter((tab) => !tabs.includes(tab.id));
+  return (
+    <div>
+      <p className="text-sm text-muted">
+        От {MIN_TABS} до {MAX_TABS} вкладок внизу экрана на телефоне. Остальные разделы — в меню ☰. Например: Сегодня, Календарь, Привычки, Даты.
+      </p>
+      <p className="mt-4 mb-1 px-1 text-xs font-medium text-subtle uppercase">На панели · {tabs.length} из {MAX_TABS}</p>
+      <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+        {tabs.map((id, index) => {
+          const Icon = TAB_ICONS[id];
+          const label = TAB_OPTIONS.find((tab) => tab.id === id)?.label ?? id;
+          return (
+            <li key={id} className="flex min-h-11 items-center gap-2 pl-3">
+              <Icon className="size-5 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{label}</span>
+              <button
+                type="button"
+                aria-label={`${label}: левее`}
+                disabled={index === 0}
+                onClick={() => setTabs(moveTab(tabs, id, -1))}
+                className="flex size-10 items-center justify-center text-muted disabled:opacity-30"
+              >
+                <ArrowUp className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label={`${label}: правее`}
+                disabled={index === tabs.length - 1}
+                onClick={() => setTabs(moveTab(tabs, id, 1))}
+                className="flex size-10 items-center justify-center text-muted disabled:opacity-30"
+              >
+                <ArrowDown className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label={`Убрать «${label}» с панели`}
+                disabled={tabs.length <= MIN_TABS}
+                onClick={() => setTabs(toggleTab(tabs, id))}
+                className="flex size-11 items-center justify-center text-danger disabled:opacity-30"
+              >
+                <MinusCircle className="size-5" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-4 mb-1 px-1 text-xs font-medium text-subtle uppercase">Можно добавить</p>
+      <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+        {off.map((tab) => {
+          const Icon = TAB_ICONS[tab.id];
+          return (
+            <li key={tab.id}>
+              <button
+                type="button"
+                aria-label={`Добавить «${tab.label}» на панель`}
+                disabled={tabs.length >= MAX_TABS}
+                onClick={() => setTabs(toggleTab(tabs, tab.id))}
+                className="flex min-h-11 w-full items-center gap-2 pl-3 text-left disabled:opacity-40"
+              >
+                <Icon className="size-5 shrink-0 text-subtle" strokeWidth={1.75} aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{tab.label}</span>
+                <span className="flex size-11 items-center justify-center text-ok">
+                  <PlusCircle className="size-5" />
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {tabs.length >= MAX_TABS ? <p className="mt-2 px-1 text-xs text-muted">Панель заполнена — сначала уберите одну вкладку.</p> : null}
+      <button type="button" onClick={() => setTabs([...DEFAULT_TABS])} className="mt-3 h-11 px-1 text-sm text-accent">
+        Вернуть как было
+      </button>
+    </div>
+  );
+}
+
+function NotifySection() {
+  const [perm, setPerm] = useState<NotificationPermission | "off">("off");
+  useEffect(() => {
+    if (typeof Notification === "undefined") return;
+    setPerm(Notification.permission);
+  }, []);
+  return (
+    <div className="text-sm">
+      <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+        <div className="flex min-h-11 items-center gap-3 px-3">
+          <span className="min-w-0 flex-1">Уведомления браузера</span>
+          <span className={cn("text-sm", perm === "granted" ? "text-ok" : perm === "denied" ? "text-danger" : "text-muted")}>
+            {perm === "granted" ? "Включены" : perm === "denied" ? "Запрещены" : perm === "default" ? "Не включены" : "Недоступны"}
+          </span>
+        </div>
+      </div>
+      {perm === "default" ? (
+        <button
+          type="button"
+          onClick={() => {
+            void Notification.requestPermission().then((next) => setPerm(next));
+          }}
+          className="mt-3 h-11 w-full rounded-xl bg-accent text-sm text-accent-fg"
+        >
+          Включить уведомления
+        </button>
+      ) : null}
+      {perm === "denied" ? <p className="mt-2 text-xs text-muted">Разрешите уведомления для этого сайта в настройках браузера (на iPhone — «Настройки» → «Уведомления»).</p> : null}
+      <p className="mt-3 text-xs text-muted">
+        Время напоминания ставится в задаче («Напомнить»), привычке или дате. Звук играет, пока «Пора» открыта; на iPhone уведомления приходят, если
+        приложение добавлено на экран «Домой». Сработавшие напоминания — под колокольчиком вверху; полоску можно скрыть крестиком.
+      </p>
+    </div>
+  );
+}
+
+function DateTimeSection() {
+  const workStart = usePlanner((s) => s.workStart) ?? "09:00";
+  const workEnd = usePlanner((s) => s.workEnd) ?? "18:00";
+  const setWorkHours = usePlanner((s) => s.setWorkHours);
+  const weekNumbers = usePlanner((s) => s.weekNumbers) ?? false;
+  const setWeekNumbers = usePlanner((s) => s.setWeekNumbers);
+  const mode = usePlanner((s) => s.calendarMode) ?? "month";
+  const setMode = usePlanner((s) => s.setCalendarMode);
+  const field = "h-9 w-24 rounded-lg bg-surface px-2 text-right tabular-nums outline-none";
+  return (
+    <div className="text-[0.9375rem]">
+      <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+        <label className="flex min-h-11 items-center gap-3 px-3">
+          <span className="min-w-0 flex-1">Рабочий день с</span>
+          <input type="time" value={workStart} onChange={(event) => setWorkHours(event.target.value || "09:00", workEnd)} className={field} />
+        </label>
+        <label className="flex min-h-11 items-center gap-3 px-3">
+          <span className="min-w-0 flex-1">до</span>
+          <input type="time" value={workEnd} onChange={(event) => setWorkHours(workStart, event.target.value || "18:00")} className={field} />
+        </label>
+      </div>
+      <p className="mt-1 px-1 text-xs text-muted">Подсвечивается в «Расписании». Общая настройка для всех ваших устройств.</p>
+      <div className="mt-4 divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+        <SwitchRow label="Номера недель" hint="В календаре: «41» слева от строки месяца" checked={weekNumbers} onChange={setWeekNumbers} />
+        <label className="flex min-h-11 items-center gap-3 px-3">
+          <span className="min-w-0 flex-1">Календарь открывать как</span>
+          <select aria-label="Вид календаря" value={mode} onChange={(event) => setMode(event.target.value as typeof mode)} className="h-9 rounded-lg bg-surface px-2 outline-none">
+            {CALENDAR_MODES.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="mt-1 px-1 text-xs text-muted">Неделя начинается с понедельника. Эти две настройки — только для этого устройства.</p>
+    </div>
+  );
+}
+
+function AboutSection() {
+  return (
+    <div className="text-sm">
+      <div className="flex flex-col items-center py-4 text-center">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-accent text-2xl text-accent-fg" aria-hidden="true">
+          ✓
+        </span>
+        <p className="mt-2 text-lg font-semibold">{APP_NAME}</p>
+        <p className="text-muted">Версия {APP_VERSION}</p>
+      </div>
+      <p className="text-muted">
+        Задачи, календарь, привычки, даты и фокус — на вашем сервере. Работает и без сети: изменения отправятся, когда связь вернётся. Чтобы
+        поставить как приложение на iPhone: «Поделиться» → «На экран «Домой»».
+      </p>
+    </div>
+  );
+}
+
+export function SettingsView() {
+  const profile = useProfile();
+  const theme = usePlanner((s) => s.theme);
+  const accent = usePlanner((s) => s.accent);
+  const tabs = usePlanner((s) => s.tabBar) ?? DEFAULT_TABS;
+  const archiveDays = usePlanner((s) => s.archiveDays);
+  const status = useServerSyncStatus();
+  const [open, setOpen] = useState<SheetId | null>(null);
+  const accentName = ACCENTS.find((item) => item.id === accent)?.name ?? "";
+  const close = useCallback(() => setOpen(null), []);
 
   return (
     <div className="mx-auto max-w-md pb-8">
-      <ProfileSection />
-      <ConnectionSection />
+      <button
+        type="button"
+        data-row="profile"
+        onClick={() => setOpen("profile")}
+        className="card-lift flex w-full items-center gap-3 rounded-2xl bg-elevated px-3 py-3 text-left"
+      >
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-lg font-semibold text-accent-fg" aria-hidden="true">
+          {(profile.name || profile.login || "?").slice(0, 1).toUpperCase()}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-base font-semibold">{profile.name || profile.login || "Профиль"}</span>
+          <span className="block truncate text-xs text-muted">{profile.login ? "Профиль, пароль, выход" : "Без входа"}</span>
+        </span>
+        <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
+      </button>
 
-      <section className="mt-8">
-        <h2 className="font-display text-lg tracking-tight">Оформление</h2>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            aria-pressed={theme === "light"}
-            onClick={() => setTheme("light")}
-            className={cn(
-              "h-11 rounded-xl text-sm",
-              theme === "light" ? "bg-accent text-accent-fg" : "card-lift bg-elevated text-fg",
-            )}
-          >
-            Светлая
-          </button>
-          <button
-            type="button"
-            aria-pressed={theme === "dark"}
-            onClick={() => setTheme("dark")}
-            className={cn(
-              "h-11 rounded-xl text-sm",
-              theme === "dark" ? "bg-accent text-accent-fg" : "card-lift bg-elevated text-fg",
-            )}
-          >
-            Тёмная
-          </button>
+      <Group>
+        <NavRow id="look" icon={Palette} color="#8b5cf6" label="Вид" value={`${theme === "dark" ? "Тёмная" : "Светлая"} · ${accentName}`} onOpen={setOpen} />
+        <NavRow id="tabs" icon={PanelBottom} color="#3b82f6" label="Панель вкладок" value={`${tabs.length} ${tabs.length < 5 ? "вкладки" : "вкладок"}`} onOpen={setOpen} />
+        <NavRow id="notify" icon={Bell} color="#ef4444" label="Уведомления" onOpen={setOpen} />
+        <NavRow id="datetime" icon={CalendarClock} color="#f59e0b" label="Дата и время" onOpen={setOpen} />
+      </Group>
+
+      <Group>
+        <NavRow id="connection" icon={Cloud} color="#10b981" label="Подключение" value={phaseLabel(status).text} onOpen={setOpen} />
+        <NavRow
+          id="archive"
+          icon={Archive}
+          color="#a16207"
+          label="Архив"
+          value={archiveDays === 0 ? "Никогда" : `через ${archiveDays} ${archiveDays === 1 ? "день" : archiveDays < 5 ? "дня" : "дней"}`}
+          onOpen={setOpen}
+        />
+        <NavRow id="backup" icon={HardDriveDownload} color="#14b8a6" label="Резервная копия" onOpen={setOpen} />
+      </Group>
+
+      <Group>
+        <NavRow id="about" icon={Info} color="#6b7280" label="О приложении" value={APP_VERSION} onOpen={setOpen} />
+      </Group>
+
+      <Sheet open={open !== null} title={open ? SHEET_TITLES[open] : ""} onClose={close}>
+        <div className="pb-2">
+          {open === "profile" ? <ProfileSection /> : null}
+          {open === "look" ? <LookSection /> : null}
+          {open === "tabs" ? <TabsSection /> : null}
+          {open === "notify" ? <NotifySection /> : null}
+          {open === "datetime" ? <DateTimeSection /> : null}
+          {open === "connection" ? <ConnectionSection /> : null}
+          {open === "archive" ? <ArchiveSection /> : null}
+          {open === "backup" ? <BackupSection /> : null}
+          {open === "about" ? <AboutSection /> : null}
         </div>
-      </section>
-
-      <section className="mt-8">
-        <h2 className="font-display text-lg tracking-tight">Цвет</h2>
-        <p className="mt-1 text-sm text-muted">Кнопки, выбранный день и отметки.</p>
-        <div className="mt-4 grid grid-cols-4 gap-3">
-          {ACCENTS.map((item) => {
-            const on = accent === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                aria-pressed={on}
-                aria-label={item.name}
-                onClick={() => setAccent(item.id)}
-                className="flex flex-col items-center gap-2"
-              >
-                <span
-                  className={cn(
-                    "size-11 rounded-full",
-                    item.swatch,
-                    on ? "ring-2 ring-fg ring-offset-2 ring-offset-bg" : "",
-                  )}
-                />
-                <span className={cn("text-xs", on ? "text-fg" : "text-muted")}>{item.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <ArchiveSection />
-      <BackupSection />
+      </Sheet>
     </div>
   );
 }
