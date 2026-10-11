@@ -21,6 +21,7 @@
  *   412 user_mismatch. «Выйти» clears the local copy after uploading it.
  */
 import { usePlanner } from "@/lib/planner-store";
+import { DEFAULT_ARCHIVE_DAYS, normalizeArchiveDays } from "@/lib/task-done";
 import type { Habit, Milestone, Project, Task, TaskList } from "@/lib/planner-types";
 import { setClockOffset, syncNow } from "@/lib/sync/clock";
 import {
@@ -181,7 +182,7 @@ export function localData(): SyncData {
     habits: s.habits as unknown as SyncEntity[],
     milestones: s.milestones as unknown as SyncEntity[],
     projects: s.projects as unknown as SyncEntity[],
-    settings: { workStart: s.workStart, workEnd: s.workEnd, updatedAt: s.settingsUpdatedAt ?? 0 },
+    settings: { workStart: s.workStart, workEnd: s.workEnd, ...(s.archiveDays !== DEFAULT_ARCHIVE_DAYS ? { archiveDays: s.archiveDays } : {}), updatedAt: s.settingsUpdatedAt ?? 0 },
     tombstones: s.tombstones,
   };
 }
@@ -195,6 +196,10 @@ function fillProject(project: SyncEntity): SyncEntity {
   return Array.isArray(project.stages) ? project : { ...project, stages: [] };
 }
 
+function fillMilestone(item: SyncEntity): SyncEntity {
+  return Array.isArray(item.items) ? item : { ...item, items: [] };
+}
+
 function fillHabit(habit: SyncEntity): SyncEntity {
   return Array.isArray(habit.checks) ? habit : { ...habit, checks: [] };
 }
@@ -206,11 +211,12 @@ function applyData(data: SyncData): void {
       lists: data.lists as unknown as TaskList[],
       tasks: data.tasks.map(fillTask) as unknown as Task[],
       habits: data.habits.map(fillHabit) as unknown as Habit[],
-      milestones: data.milestones as unknown as Milestone[],
+      milestones: data.milestones.map(fillMilestone) as unknown as Milestone[],
       projects: data.projects.map(fillProject) as unknown as Project[],
       workStart: data.settings.workStart,
       workEnd: data.settings.workEnd,
       settingsUpdatedAt: data.settings.updatedAt,
+      archiveDays: normalizeArchiveDays(data.settings.archiveDays),
       tombstones: data.tombstones,
     });
   } finally {
@@ -609,7 +615,8 @@ function syncedChanged(a: ReturnType<typeof usePlanner.getState>, b: ReturnType<
     a.tombstones !== b.tombstones ||
     a.workStart !== b.workStart ||
     a.workEnd !== b.workEnd ||
-    a.settingsUpdatedAt !== b.settingsUpdatedAt
+    a.settingsUpdatedAt !== b.settingsUpdatedAt ||
+    a.archiveDays !== b.archiveDays
   );
 }
 

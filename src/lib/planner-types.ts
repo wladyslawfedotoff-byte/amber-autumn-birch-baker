@@ -1,3 +1,5 @@
+import type { TaskColor } from "./task-colors";
+
 export type Priority = 0 | 1 | 2 | 3;
 
 export type Repeat = "day" | "weekdays" | "week" | "month" | "dates";
@@ -52,6 +54,10 @@ export type Task = {
   assignee?: string | null;
   /** Who ticked it off last («выполнил(а) Пользователь 2»). */
   completedBy?: string | null;
+  /** Repeating task: the date it was last ticked for (shown in «Готово», «Отменить»). */
+  lastDue?: string | null;
+  /** Colour like in Google Calendar (see task-colors.ts). */
+  color?: TaskColor | null;
   /** Sync stamp (ms, server-corrected clock). Missing on old data = 0. */
   updatedAt?: number;
 } & Shared;
@@ -74,16 +80,38 @@ export type Habit = {
 
 export type MilestoneKind = "birthday" | "anniversary" | "holiday" | "other";
 
+/** Lists attached to a special date: gift ideas (wishlist), ideas, to-dos, purchases. */
+export type MilestoneItemKind = "gift" | "idea" | "todo" | "buy";
+
+export type MilestoneItem = {
+  id: string;
+  kind: MilestoneItemKind;
+  title: string;
+  done: boolean;
+  /** Optional link (a shop page for a gift idea). */
+  link?: string | null;
+  /** Optional price, free text («3 500 ₽»). */
+  price?: string | null;
+  updatedAt?: number;
+};
+
 export type Milestone = {
   id: string;
   title: string;
+  /** The ORIGINAL date (birth / wedding). With `noYear` only month and day count. */
   date: string;
   yearly: boolean;
   kind: MilestoneKind;
-  /** HH:mm on the occurrence day. Empty means no alarm. */
+  /** Year unknown: no age / «N лет» is shown. */
+  noYear?: boolean;
+  /** HH:mm on the reminder day. Empty means no alarm. */
   remindAt?: string | null;
+  /** Remind this many days before (0 = on the day). */
+  remindDays?: number;
+  items?: MilestoneItem[];
+  notes?: string;
   updatedAt?: number;
-};
+} & Shared;
 
 export type ProjectCard = {
   id: string;
@@ -127,6 +155,7 @@ export type View =
   | "checklist"
   | "matrix"
   | "done"
+  | "archive"
   | "calendar"
   | "focus"
   | "habits"

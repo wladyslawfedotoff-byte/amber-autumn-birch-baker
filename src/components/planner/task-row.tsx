@@ -9,6 +9,8 @@ import { listName } from "@/lib/queries";
 import { ShareBadges } from "@/components/planner/sharing";
 import { notesPreview, progressLabel, subtaskProgress } from "@/lib/task-tools";
 import { useSubtasksOpen } from "@/lib/use-subtasks-open";
+import { colorStyle } from "@/lib/task-colors";
+import { useDoneToast } from "@/lib/done-toast";
 
 function ring(priority: Priority): string {
   if (priority === 3) return "border-danger";
@@ -25,7 +27,10 @@ export function TaskRow({
   showList,
   onOpen,
   onDragStart,
+  ticked = false,
 }: {
+  /** A repeating task shown in «Готово» because it was ticked today: the check undoes the tick. */
+  ticked?: boolean;
   task: Task;
   today: string;
   selected: boolean;
@@ -36,6 +41,8 @@ export function TaskRow({
 }) {
   const lists = usePlanner((s) => s.lists);
   const toggleTask = usePlanner((s) => s.toggleTask);
+  const undoRepeat = usePlanner((s) => s.undoRepeat);
+  const showToast = useDoneToast((s) => s.show);
   const toggleSubtask = usePlanner((s) => s.toggleSubtask);
   const updateTask = usePlanner((s) => s.updateTask);
   const addSubtask = usePlanner((s) => s.addSubtask);
@@ -46,29 +53,45 @@ export function TaskRow({
   const preview = notesPreview(task.notes);
   const overdue = !task.done && task.due != null && task.due < today;
   const tomorrow = shiftIso(today, 1);
-  const canPostpone = !task.done && !onDragStart && overdue;
+  const canPostpone = !task.done && !onDragStart && overdue && !ticked;
+  const checked = task.done || ticked;
+
+  function tick() {
+    if (ticked) {
+      undoRepeat(task.id);
+      return;
+    }
+    const wasDone = task.done;
+    toggleTask(task.id);
+    if (wasDone) return;
+    const after = usePlanner.getState().tasks.find((t) => t.id === task.id);
+    showToast({ id: task.id, title: task.title, repeat: Boolean(after && !after.done), next: after && !after.done ? after.due : null, at: Date.now() });
+  }
 
   return (
     <div
       className={cn(
-        "card-lift mb-2 flex items-start rounded-xl bg-elevated",
+        "card-lift mb-2 flex items-start overflow-hidden rounded-xl bg-elevated",
         selected ? "ring-1 ring-accent" : "",
+        checked && "opacity-75",
       )}
+      style={colorStyle(task.color, checked ? 5 : 10)}
     >
       <button
         type="button"
-        aria-label={task.done ? "Вернуть в работу" : "Выполнить"}
-        aria-pressed={task.done}
-        onClick={() => toggleTask(task.id)}
+        aria-label={ticked ? "Отменить отметку" : task.done ? "Вернуть в работу" : "Выполнить"}
+        aria-pressed={checked}
+        title={ticked ? "Отменить отметку — задача вернётся на прежнюю дату" : task.done ? "Вернуть в работу" : "Выполнить"}
+        onClick={tick}
         className="flex size-11 shrink-0 items-center justify-center"
       >
         <span
           className={cn(
             "flex size-6 items-center justify-center rounded-full border-2 transition-[background-color,border-color] duration-150",
-            task.done ? "border-accent bg-accent text-accent-fg" : ring(task.priority),
+            checked ? "border-accent bg-accent text-accent-fg" : ring(task.priority),
           )}
         >
-          {task.done ? <Check className="size-3" strokeWidth={3} /> : null}
+          {checked ? <Check className="size-3" strokeWidth={3} /> : null}
         </span>
       </button>
       <div className="min-w-0 flex-1 py-2 pr-1">
@@ -81,7 +104,7 @@ export function TaskRow({
             <span
               className={cn(
                 "block text-pretty text-base",
-                task.done ? "text-subtle line-through decoration-subtle" : "text-fg",
+                checked ? "text-subtle line-through decoration-subtle" : "text-fg",
               )}
             >
               {task.title}
@@ -93,7 +116,8 @@ export function TaskRow({
               </span>
             ) : null}
             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-              {showDue && task.due ? (
+              {ticked ? <span className="text-ok">отмечено · дальше {task.due ? dueLabel(task.due, today) : "—"}</span> : null}
+              {showDue && task.due && !ticked ? (
                 <span className={overdue ? "text-danger" : undefined}>{dueLabel(task.due, today)}</span>
               ) : null}
               {task.startAt ? (

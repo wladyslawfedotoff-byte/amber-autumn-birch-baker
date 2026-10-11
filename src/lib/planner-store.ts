@@ -2,16 +2,19 @@ import { create, type StateCreator } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { syncNow } from "@/lib/sync/clock";
 import { COLLECTIONS, emptyTombstones, stampCollection, type Tombstones } from "@/lib/sync/merge";
-import { cleanDates, firstChosenDate, nextChosenDate, nextRepeat, shiftIso, todayIso } from "@/lib/dates";
+import { cleanDates, firstChosenDate, shiftIso, todayIso } from "@/lib/dates";
 import { currentLogin } from "@/lib/use-capabilities";
 import { parseQuick } from "@/lib/quick-add";
 import { stageRange } from "@/lib/stage-range";
 import { duplicateTask as duplicateTaskData, listInNotes, splitLines } from "@/lib/task-tools";
 import { isAccent, type AccentId } from "@/lib/accents";
+import { normalizeArchiveDays, restoreFromArchive, toggleTaskDone, undoRepeatTick } from "@/lib/task-done";
 import type {
   FocusClock,
   Habit,
   Milestone,
+  MilestoneItem,
+  MilestoneItemKind,
   MilestoneKind,
   Priority,
   Project,
@@ -67,8 +70,27 @@ type PlannerState = {
   remindAck: Record<string, string>;
   /** Deleted ids per collection (sync tombstones), pruned by the server after 30 days. */
   tombstones: Tombstones;
-  /** Sync stamp of workStart/workEnd. */
+  /** Sync stamp of workStart/workEnd/archiveDays. */
   settingsUpdatedAt: number;
+  /** «Убирать в архив через» N days (0 = never); synced with the settings. */
+  archiveDays: number;
+  /** «Расписание»: how many days to show (this device only). */
+  scheduleDays: number;
+  /** «Готово» group at the bottom of lists is folded (this device only). */
+  doneFolded: boolean;
+  setArchiveDays: (days: number) => void;
+  setScheduleDays: (days: number) => void;
+  setDoneFolded: (folded: boolean) => void;
+  /** «Отменить» on a ticked repeating task: back to the date it was ticked for. */
+  undoRepeat: (id: string) => void;
+  /** «Вернуть» from the archive. */
+  restoreTask: (id: string) => void;
+  /** «Очистить архив»: delete these tasks. */
+  deleteTasks: (ids: string[]) => void;
+  setMilestoneMembers: (id: string, members: string[]) => void;
+  addMilestoneItem: (id: string, kind: MilestoneItemKind, title: string, extra?: { link?: string | null; price?: string | null }) => void;
+  updateMilestoneItem: (id: string, itemId: string, patch: Partial<Omit<MilestoneItem, "id">>) => void;
+  deleteMilestoneItem: (id: string, itemId: string) => void;
   addTask: (input: NewTask) => string;
   updateTask: (id: string, patch: Partial<Omit<Task, "id">>) => void;
   toggleTask: (id: string) => void;
@@ -102,8 +124,13 @@ type PlannerState = {
     yearly: boolean;
     kind: MilestoneKind;
     remindAt?: string | null;
-  }) => void;
-  updateMilestone: (id: string, patch: { remindAt?: string | null }) => void;
+    noYear?: boolean;
+    remindDays?: number;
+  }) => string | null;
+  updateMilestone: (
+    id: string,
+    patch: Partial<Pick<Milestone, "title" | "date" | "yearly" | "kind" | "noYear" | "remindAt" | "remindDays" | "notes">>,
+  ) => void;
   deleteMilestone: (id: string) => void;
   addProject: (title: string) => string;
   updateProject: (id: string, patch: { title?: string; start?: string | null; end?: string | null }) => void;
@@ -153,6 +180,9 @@ function seed(): Pick<
   | "remindAck"
   | "tombstones"
   | "settingsUpdatedAt"
+  | "archiveDays"
+  | "scheduleDays"
+  | "doneFolded"
 > {
   const today = todayIso();
   const stamp = Date.now();
@@ -181,6 +211,9 @@ function seed(): Pick<
     remindAck: {},
     tombstones: emptyTombstones(),
     settingsUpdatedAt: 0,
+    archiveDays: 7,
+    scheduleDays: 1,
+    doneFolded: false,
     lists: [
       { id: "work", name: "Работа" },
       { id: "home", name: "Дом" },
@@ -210,8 +243,29 @@ function seed(): Pick<
       },
     ],
     milestones: [
-      { id: "m-bday", title: "День рождения", date: shiftIso(today, 4), yearly: true, kind: "birthday", remindAt: "09:00" },
-      { id: "m-ann", title: "Годовщина", date: shiftIso(today, 18), yearly: true, kind: "anniversary", remindAt: "09:00" },
+      {
+        id: "m-bday",
+        title: "День рождения друга",
+        date: `1991${shiftIso(today, 4).slice(4)}`,
+        yearly: true,
+        kind: "birthday",
+        remindAt: "09:00",
+        remindDays: 3,
+        items: [
+          { id: "mi-1", kind: "gift", title: "Книга по фотографии", done: false, link: null, price: "1 800 ₽" },
+          { id: "mi-2", kind: "todo", title: "Забронировать столик", done: false },
+        ],
+      },
+      {
+        id: "m-ann",
+        title: "Годовщина свадьбы",
+        date: `2016${shiftIso(today, 18).slice(4)}`,
+        yearly: true,
+        kind: "anniversary",
+        remindAt: "09:00",
+        remindDays: 7,
+        items: [{ id: "mi-3", kind: "idea", title: "Ужин там же, где было первое свидание", done: false }],
+      },
     ],
     focus: freshFocus(),
     workStart: "09:00",
@@ -431,7 +485,8 @@ export function stampPatch(prev: PlannerState, patch: Partial<PlannerState>, now
   }
   const hoursChanged =
     (patch.workStart !== undefined && patch.workStart !== prev.workStart) ||
-    (patch.workEnd !== undefined && patch.workEnd !== prev.workEnd);
+    (patch.workEnd !== undefined && patch.workEnd !== prev.workEnd) ||
+    (patch.archiveDays !== undefined && patch.archiveDays !== prev.archiveDays);
   if (hoursChanged) {
     if (out === patch) out = { ...patch };
     out.settingsUpdatedAt = Math.max(now, (prev.settingsUpdatedAt ?? 0) + 1);
@@ -487,22 +542,56 @@ export const usePlanner = create<PlannerState>()(
         })),
       toggleTask: (id) =>
         set((s) => ({
-          tasks: s.tasks.map((t) => {
-            if (t.id !== id) return t;
-            const me = currentLogin() || null;
-            const by = me ? { completedBy: me } : {};
-            if (!t.done && t.repeat === "dates") {
-              // «Выбранные даты»: move to the next chosen date; none left → done.
-              const next = nextChosenDate(t.repeatDates, t.due, todayIso());
-              if (next) return { ...t, done: false, completedAt: null, due: next, ...by };
-              return { ...t, done: true, completedAt: Date.now(), ...by };
-            }
-            if (!t.done && t.repeat && t.repeat !== "dates" && t.due) {
-              return { ...t, done: false, completedAt: null, due: nextRepeat(t.due, t.repeat, todayIso()), ...by };
-            }
-            const done = !t.done;
-            return { ...t, done, completedAt: done ? Date.now() : null, ...(done ? by : { completedBy: null }) };
-          }),
+          tasks: s.tasks.map((t) =>
+            t.id === id ? toggleTaskDone(t, { me: currentLogin() || null, today: todayIso(), now: syncNow() }) : t,
+          ),
+        })),
+      undoRepeat: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? undoRepeatTick(t) : t)) })),
+      restoreTask: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? restoreFromArchive(t) : t)) })),
+      deleteTasks: (ids) => {
+        const gone = new Set(ids);
+        set((s) => ({ tasks: s.tasks.filter((t) => !gone.has(t.id)) }));
+      },
+      setArchiveDays: (days) => set({ archiveDays: normalizeArchiveDays(days) }),
+      setScheduleDays: (days) => set({ scheduleDays: [1, 2, 3, 5, 7].includes(days) ? days : 1 }),
+      setDoneFolded: (folded) => set({ doneFolded: folded }),
+      setMilestoneMembers: (id, members) =>
+        set((s) => ({
+          milestones: s.milestones.map((m) => (m.id === id ? { ...m, members: [...new Set(members)] } : m)),
+        })),
+      addMilestoneItem: (id, kind, title, extra) => {
+        const titles = splitLines(title);
+        if (!titles.length) return;
+        set((s) => ({
+          milestones: s.milestones.map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  items: [
+                    ...(m.items ?? []),
+                    ...titles.map((clean) => ({
+                      id: uid(),
+                      kind,
+                      title: clean,
+                      done: false,
+                      link: extra?.link?.trim() || null,
+                      price: extra?.price?.trim() || null,
+                    })),
+                  ],
+                }
+              : m,
+          ),
+        }));
+      },
+      updateMilestoneItem: (id, itemId, patch) =>
+        set((s) => ({
+          milestones: s.milestones.map((m) =>
+            m.id === id ? { ...m, items: (m.items ?? []).map((item) => (item.id === itemId ? { ...item, ...patch } : item)) } : m,
+          ),
+        })),
+      deleteMilestoneItem: (id, itemId) =>
+        set((s) => ({
+          milestones: s.milestones.map((m) => (m.id === id ? { ...m, items: (m.items ?? []).filter((item) => item.id !== itemId) } : m)),
         })),
       setRepeatDates: (id, dates) =>
         set((s) => ({
@@ -636,20 +725,25 @@ renameList: (id, name) =>
       deleteHabit: (id) => set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
       addMilestone: (input) => {
         const title = input.title.trim();
-        if (!title || !input.date) return;
+        if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return null;
+        const id = uid();
         set((s) => ({
           milestones: [
             ...s.milestones,
             {
-              id: uid(),
+              id,
               title,
               date: input.date,
               yearly: input.yearly,
               kind: input.kind,
+              noYear: Boolean(input.noYear),
               remindAt: input.remindAt === undefined ? "09:00" : input.remindAt,
+              remindDays: input.remindDays ?? 0,
+              items: [],
             },
           ],
         }));
+        return id;
       },
       updateMilestone: (id, patch) =>
         set((s) => ({
@@ -873,7 +967,7 @@ renameList: (id, name) =>
         return {
           ...current,
           ...saved,
-          milestones: fillRemindAt(saved.milestones, current.milestones),
+          milestones: fillRemindAt(saved.milestones, current.milestones).map((m) => (Array.isArray(m.items) ? m : { ...m, items: [] })),
           projects: saved.projects ?? current.projects,
           workStart: saved.workStart ?? current.workStart,
           workEnd: saved.workEnd ?? current.workEnd,
@@ -884,6 +978,9 @@ renameList: (id, name) =>
           remindAck: saved.remindAck ?? {},
           tombstones: { ...emptyTombstones(), ...(saved.tombstones ?? {}) },
           settingsUpdatedAt: typeof saved.settingsUpdatedAt === "number" ? saved.settingsUpdatedAt : 0,
+          archiveDays: normalizeArchiveDays(saved.archiveDays),
+          scheduleDays: [1, 2, 3, 5, 7].includes(saved.scheduleDays as number) ? (saved.scheduleDays as number) : 1,
+          doneFolded: saved.doneFolded === true,
           theme: saved.theme === "dark" ? "dark" : "light",
           accent: isAccent(saved.accent) ? saved.accent : current.accent,
         };

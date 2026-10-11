@@ -14,6 +14,7 @@ import { formatLong, shiftIso, todayIso, occursOn } from "@/lib/dates";
 import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
 import type { Task } from "@/lib/planner-types";
+import { colorStyle } from "@/lib/task-colors";
 
 const HOUR = 4;
 
@@ -436,7 +437,7 @@ export function ScheduleView({
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") onOpen(span.id);
             }}
-            style={blockStyle(span, bounds.from)}
+            style={{ ...blockStyle(span, bounds.from), ...colorStyle(span.color, 14) }}
             className={cn(
               "drag-handle absolute z-10 overflow-hidden rounded-lg border px-2 py-1 text-left",
               span.clash ? "border-danger bg-elevated" : "border-line bg-elevated",

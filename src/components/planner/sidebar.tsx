@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Archive,
   CalendarCheck,
   CalendarDays,
   CalendarRange,
@@ -30,6 +31,8 @@ import { logout } from "@/lib/server-sync";
 import { APP_NAME, APP_TAGLINE } from "@/lib/site";
 import { useCapabilities } from "@/lib/use-capabilities";
 import { useShareScope } from "@/lib/use-share-scope";
+import { archivedTasks, recentDone } from "@/lib/task-done";
+import { syncNow } from "@/lib/sync/clock";
 
 const SMART: { id: View; label: string; icon: typeof Inbox }[] = [
   { id: "inbox", label: "Входящие", icon: Inbox },
@@ -66,6 +69,10 @@ export function Sidebar({
   const today = todayIso();
   const [draft, setDraft] = useState("");
   const [adding, setAdding] = useState(false);
+  const archiveDays = usePlanner((s) => s.archiveDays);
+  const now = syncNow();
+  const doneCount = recentDone(tasks, now, archiveDays).length;
+  const archiveCount = archivedTasks(tasks, now, archiveDays).length;
   const habitLeft = habits.filter((h) => !h.checks.includes(today)).length;
   // «Помощник» needs XAI_API_KEY on the server; hide it otherwise.
   const profile = useCapabilities();
@@ -241,18 +248,10 @@ export function Sidebar({
             />
           </form>
         ) : null}
-        <button
-          type="button"
-          aria-current={view === "done" ? "page" : undefined}
-          onClick={() => onView("done")}
-          className={cn(
-            "mt-1 flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors duration-150",
-            view === "done" ? "bg-elevated font-medium text-fg" : "text-muted hover:bg-elevated hover:text-fg",
-          )}
-        >
-          <CheckCheck className="size-4 shrink-0" strokeWidth={1.75} />
-          <span className="min-w-0 flex-1 truncate">Готово</span>
-        </button>
+        <ul className="mt-1 flex flex-col">
+          <NavRow item={{ id: "done", label: "Готово", icon: CheckCheck }} active={view === "done"} count={doneCount} alert={false} onView={onView} />
+          <NavRow item={{ id: "archive", label: "Архив", icon: Archive }} active={view === "archive"} count={archiveCount} alert={false} onView={onView} />
+        </ul>
       </nav>
 
       <div className="shrink-0 border-t border-line px-2 py-2">

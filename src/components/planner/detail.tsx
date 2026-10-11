@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { DateMultiPicker } from "@/components/planner/date-multi-picker";
 import { TaskShareControls } from "@/components/planner/sharing";
+import { ColorPicker } from "@/components/planner/color-picker";
 import { DuplicateControls, NotesField, SubtasksBlock } from "@/components/planner/task-extras";
 import { cleanDates, dueLabel, repeatLabel, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
@@ -88,6 +89,8 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
             })}
           </div>
         </fieldset>
+
+        <ColorPicker value={task.color} onChange={(color) => updateTask(task.id, { color })} />
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button

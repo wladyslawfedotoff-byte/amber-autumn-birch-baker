@@ -46,6 +46,7 @@ export function duplicateTask(
     remindAt: task.remindAt ?? null,
     startAt: task.startAt ?? null,
     endAt: task.endAt ?? null,
+    ...(task.color ? { color: task.color } : {}),
   };
 }
 

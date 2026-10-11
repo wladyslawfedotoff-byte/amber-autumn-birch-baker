@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { GripVertical } from "lucide-react";
+import { Archive, ChevronDown, ChevronRight, GripVertical, RotateCcw, Trash2 } from "lucide-react";
 import { TodayStrip, TodaySummary, WeekDays } from "@/components/planner/today-strip";
 import { AddTaskForm, TaskRow } from "@/components/planner/task-row";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { dueLabel, formatLong, shiftIso, todayIso, occursOn } from "@/lib/dates"
 import { usePlanner } from "@/lib/planner-store";
 import type { Priority, Task, View } from "@/lib/planner-types";
 import { byNewest, doneInScope, matchesQuery, scopeTasks } from "@/lib/queries";
+import { archiveOptionLabel, archivedTasks, recentDone, repeatTickedOn } from "@/lib/task-done";
+import { syncNow } from "@/lib/sync/clock";
 import { ListShareBar } from "@/components/planner/sharing";
 import { useShareScope } from "@/lib/use-share-scope";
 
@@ -50,7 +52,10 @@ export function TaskViews({
   const addTask = usePlanner((s) => s.addTask);
   const updateTask = usePlanner((s) => s.updateTask);
   const today = todayIso();
-  const [showDone, setShowDone] = useState(false);
+  const archiveDays = usePlanner((s) => s.archiveDays);
+  const doneFolded = usePlanner((s) => s.doneFolded);
+  const setDoneFolded = usePlanner((s) => s.setDoneFolded);
+  const now = syncNow();
   const [mode, setMode] = useState<"list" | "board">("list");
   const searching = query.trim().length > 0;
   const board = canBoard(view) && mode === "board" && !searching;
@@ -60,9 +65,44 @@ export function TaskViews({
     : [];
   const share = useShareScope();
   const open = scopeTasks(tasks, view, today, share).sort(byNewest);
-  const done = doneInScope(tasks, view, today, share);
+  const done = doneInScope(tasks, view, today, share, { now, archiveDays });
   const currentList = view.startsWith("list:") ? lists.find((list) => list.id === view.slice(5)) : undefined;
-  const canAdd = !searching && view !== "done" && view !== "calendar" && view !== "focus" && view !== "habits";
+  const doneBlock =
+    !searching && done.length > 0 && view !== "done" && view !== "archive" ? (
+      <section className="mt-6" aria-label="Готово">
+        <button
+          type="button"
+          aria-expanded={!doneFolded}
+          onClick={() => setDoneFolded(!doneFolded)}
+          className="flex h-11 items-center gap-1 rounded-md px-1 text-sm font-medium text-muted hover:text-fg"
+        >
+          {doneFolded ? <ChevronRight className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
+          Готово · <span className="tabular-nums">{done.length}</span>
+        </button>
+        {doneFolded ? null : (
+          <>
+            {done.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                today={today}
+                selected={selectedId === task.id}
+                showDue={view !== "today"}
+                showList={view === "today" || view === "inbox" || view === "week"}
+                onOpen={onOpen}
+                ticked={!task.done && repeatTickedOn(task, today)}
+              />
+            ))}
+            <p className="px-1 text-xs text-subtle">
+              {archiveDays > 0
+                ? `Выполненные задачи уходят в «Архив» ${archiveOptionLabel(archiveDays)} — срок меняется в «Настройках».`
+                : "Автоархив выключен — выполненные задачи остаются здесь. Включить можно в «Настройках»."}
+            </p>
+          </>
+        )}
+      </section>
+    ) : null;
+  const canAdd = !searching && view !== "done" && view !== "archive" && view !== "calendar" && view !== "focus" && view !== "habits";
 
   return (
     <div>
@@ -135,6 +175,7 @@ export function TaskViews({
             onAdd={(title) => addTask({ title, ...defaultsFor(view, today) })}
           />
           <TodayGroups tasks={open} today={today} selectedId={selectedId} onOpen={onOpen} />
+          {doneBlock}
           <TodayStrip onPick={onPickDay} />
         </>
       ) : view.startsWith("day:") ? (
@@ -171,6 +212,8 @@ export function TaskViews({
           title="Общих задач пока нет"
           hint="Откройте любую задачу и отметьте человека в «Совместная» — она появится здесь у обоих. Или «Назначить», чтобы поручить."
         />
+      ) : view === "archive" ? (
+        <ArchiveList tasks={archivedTasks(tasks, now, archiveDays)} archiveDays={archiveDays} today={today} selectedId={selectedId} onOpen={onOpen} />
       ) : open.length === 0 && view !== "done" ? (
         <Empty
           title={
@@ -179,7 +222,7 @@ export function TaskViews({
           hint={share ? "Добавьте задачу — она видна только вам, пока вы ею не поделитесь." : "Добавьте задачу — она останется на этом устройстве."}
         />
       ) : view === "done" ? (
-        doneAll(tasks, selectedId, today, onOpen)
+        doneAll(recentDone(tasks, now, archiveDays), selectedId, today, onOpen, archiveDays)
       ) : (
         <div className="mt-3">
           {open.map((task) => (
@@ -196,42 +239,34 @@ export function TaskViews({
         </div>
       )}
 
-      {!searching && done.length > 0 && view !== "done" ? (
-        <div className="mt-6">
-          <Button variant="ghost" className="text-muted" onClick={() => setShowDone((value) => !value)}>
-            Выполнено · <span className="tabular-nums">{done.length}</span>
-          </Button>
-          {showDone
-            ? done.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  today={today}
-                  selected={selectedId === task.id}
-                  showDue={view !== "today"}
-                  showList={view === "today" || view === "inbox"}
-                  onOpen={onOpen}
-                />
-              ))
-            : null}
-        </div>
-      ) : null}
+      {view === "today" ? null : doneBlock}
     </div>
   );
 }
 
 function doneAll(
-  tasks: Task[],
+  items: Task[],
   selectedId: string | null,
   today: string,
   onOpen: (id: string) => void,
+  archiveDays: number,
 ) {
-  const items = tasks.filter((task) => task.done).sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
   if (items.length === 0) {
-    return <Empty title="Пока пусто" hint="Выполненные задачи появятся здесь." />;
+    return (
+      <Empty
+        title="Пока пусто"
+        hint="Нажмите на кружок слева от задачи — она зачеркнётся и появится здесь. Старые выполненные лежат в «Архиве»."
+      />
+    );
   }
   return (
     <div>
+      <p className="mb-3 text-sm text-muted">
+        {archiveDays > 0
+          ? `Выполненные за последние дни. Через ${archiveOptionLabel(archiveDays).replace("через ", "")} после выполнения задача уходит в «Архив».`
+          : "Все выполненные задачи. Автоархив выключен в «Настройках»."}{" "}
+        Кружок слева — вернуть задачу в работу.
+      </p>
       {items.map((task) => (
         <TaskRow
           key={task.id}
@@ -457,6 +492,89 @@ function PriorityBoard({
           {ghost.title}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ArchiveList({
+  tasks,
+  archiveDays,
+  today,
+  selectedId,
+  onOpen,
+}: {
+  tasks: Task[];
+  archiveDays: number;
+  today: string;
+  selectedId: string | null;
+  onOpen: (id: string) => void;
+}) {
+  const restoreTask = usePlanner((s) => s.restoreTask);
+  const deleteTask = usePlanner((s) => s.deleteTask);
+  const deleteTasks = usePlanner((s) => s.deleteTasks);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  if (tasks.length === 0) {
+    return (
+      <Empty
+        title="Архив пуст"
+        hint={
+          archiveDays > 0
+            ? `Сюда попадают выполненные задачи ${archiveOptionLabel(archiveDays)} после выполнения. Их можно вернуть в работу или удалить насовсем.`
+            : "Автоархив выключен. Включите его в «Настройках» — например, «через 7 дней», — и старые выполненные задачи перестанут мешать."
+        }
+      />
+    );
+  }
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-sm text-muted">
+          <Archive className="mr-1 inline size-4 align-text-bottom" aria-hidden="true" />
+          {tasks.length} в архиве. «Вернуть» — снова в работу; общие задачи удаляются по тем же правилам, что и обычно.
+        </p>
+        {confirm === "all" ? (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              deleteTasks(tasks.map((task) => task.id));
+              setConfirm(null);
+            }}
+          >
+            Удалить все {tasks.length}
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" className="text-muted" onClick={() => setConfirm("all")}>
+            Очистить архив
+          </Button>
+        )}
+      </div>
+      {tasks.map((task) => (
+        <div key={task.id} className="flex items-start gap-1">
+          <div className="min-w-0 flex-1">
+            <TaskRow task={task} today={today} selected={selectedId === task.id} showDue showList onOpen={onOpen} />
+          </div>
+          <Button size="icon" variant="ghost" aria-label={`Вернуть «${task.title}» в работу`} title="Вернуть в работу" onClick={() => restoreTask(task.id)}>
+            <RotateCcw className="size-4" />
+          </Button>
+          {confirm === task.id ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                deleteTask(task.id);
+                setConfirm(null);
+              }}
+            >
+              Удалить
+            </Button>
+          ) : (
+            <Button size="icon" variant="ghost" aria-label={`Удалить «${task.title}»`} title="Удалить насовсем" onClick={() => setConfirm(task.id)}>
+              <Trash2 className="size-4" />
+            </Button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

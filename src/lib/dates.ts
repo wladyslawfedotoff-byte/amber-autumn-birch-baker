@@ -151,12 +151,14 @@ export function nextRepeat(due: string, repeat: Exclude<Repeat, "dates">, today:
   }
   return cursor;
 }
+/** Next yearly / one-off occurrence (29.02 → 28.02 in years without it). */
 export function nextOccurrence(date: string, yearly: boolean, today: string): string {
   if (!yearly) return date;
-  const monthDay = date.slice(5);
+  const leap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const at = (y: number) => (date.slice(5) === "02-29" && !leap(y) ? `${y}-02-28` : `${y}-${date.slice(5)}`);
   const year = Number(today.slice(0, 4));
-  const candidate = `${year}-${monthDay}`;
-  return candidate < today ? `${year + 1}-${monthDay}` : candidate;
+  const candidate = at(year);
+  return candidate < today ? at(year + 1) : candidate;
 }
 
 export function countdownLabel(days: number): string {

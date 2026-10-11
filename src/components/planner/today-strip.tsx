@@ -1,4 +1,5 @@
-import { countdownLabel, daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter, occursOn } from "@/lib/dates";
+import { ageLabel, daysLeftLabel } from "@/lib/special-dates";
+import { daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter, occursOn } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { cn } from "@/lib/cn";
 
@@ -31,7 +32,8 @@ export function TodaySummary() {
       <p className="font-display text-xl tracking-tight text-fg">{line}</p>
       {nextDate ? (
         <p className="text-xs text-muted">
-          {nextDate.item.title} — {countdownLabel(nextDate.days)}
+          {nextDate.item.title} — {daysLeftLabel(nextDate.days)}
+          {ageLabel(nextDate.item, shiftIso(today, nextDate.days), today) ? `, ${ageLabel(nextDate.item, shiftIso(today, nextDate.days), today)}` : ""}
         </p>
       ) : null}
     </div>
