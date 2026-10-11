@@ -10,7 +10,7 @@ import { HabitsView } from "@/components/planner/habits-view";
 import { MatrixView } from "@/components/planner/matrix-view";
 import { ProjectsView } from "@/components/planner/projects-view";
 import { ReminderBanner, ReminderBell, ReminderPanel, useReminderChime, useReminderHits } from "@/components/planner/reminder-ui";
-import { ScheduleView } from "@/components/planner/schedule-view";
+import { ScheduleScreen } from "@/components/planner/schedule-screen";
 import { SettingsView } from "@/components/planner/settings-view";
 import { Sidebar } from "@/components/planner/sidebar";
 import { TaskViews } from "@/components/planner/task-views";
@@ -24,6 +24,7 @@ import { scopeTasks } from "@/lib/queries";
 import { useProfile } from "@/lib/use-capabilities";
 import { bindServerSync } from "@/lib/server-sync";
 import { SyncIndicator } from "@/components/planner/sync-status";
+import { DoneToastBar } from "@/components/planner/done-toast";
 
 const MOBILE: { id: View; label: string; icon: typeof CalendarCheck }[] = [
   { id: "today", label: "Сегодня", icon: CalendarCheck },
@@ -41,6 +42,7 @@ function viewTitle(view: View, lists: { id: string; name: string }[]): string {
   if (view === "checklist") return "Все";
   if (view === "matrix") return "Матрица";
   if (view === "done") return "Готово";
+  if (view === "archive") return "Архив";
   if (view === "calendar") return "Календарь";
   if (view === "focus") return "Фокус";
   if (view === "habits") return "Привычки";
@@ -176,7 +178,8 @@ export function PlannerApp() {
     if (view === "week") return `${formatLong(today)} — ${formatLong(shiftIso(today, 6))}`;
     if (view === "tomorrow") return formatLong(shiftIso(today, 1));
     if (view === "inbox") return "Без списка";
-    if (view === "done") return "Всё, что уже закрыто";
+    if (view === "done") return "Недавно выполненные";
+    if (view === "archive") return "Старые выполненные задачи";
     if (view === "calendar") return "Перетащите задачу или этап на другой день";
     if (view === "focus") return "Таймер остаётся на экране, пока идёт сессия";
     if (view === "habits") return "Отметки за неделю";
@@ -184,7 +187,7 @@ export function PlannerApp() {
     if (view === "matrix") return "Важно и срочно — по разные стороны";
     if (view === "dates") return "Дни до дня рождения, годовщины и праздника";
     if (view === "assist") return "Разложить мысли на задачи";
-    if (view === "schedule") return "Рабочие часы, свободные окна и накладки";
+    if (view === "schedule") return "День по часам или несколько дней подряд";
     if (view === "projects") return "Длинные дела по этапам";
     if (view === "settings") return "Профиль, подключение, оформление и копия";
     if (view === "shared") return "Совместные, назначенные и из общих списков";
@@ -213,6 +216,7 @@ export function PlannerApp() {
     view === "week" ||
     view === "inbox" ||
     view === "done" ||
+    view === "archive" ||
     view === "shared" ||
     view.startsWith("list:") ||
     view.startsWith("tag:") ||
@@ -352,7 +356,7 @@ export function PlannerApp() {
           {!query.trim() && view === "dates" ? <DatesView /> : null}
           {!query.trim() && view === "assist" ? <AssistView onOpen={setSelectedId} /> : null}
           {!query.trim() && view === "schedule" ? (
-            <ScheduleView
+            <ScheduleScreen
               onOpen={setSelectedId}
               onOpenProjects={(id) => {
                 setProjectId(id);
@@ -363,6 +367,8 @@ export function PlannerApp() {
           {!query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} /> : null}
           {!query.trim() && view === "settings" ? <SettingsView /> : null}
         </div>
+
+        <DoneToastBar />
 
         {focus.running || focus.note ? (
           <div className="flex h-14 shrink-0 items-center gap-3 border-t border-line px-4">

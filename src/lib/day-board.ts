@@ -25,6 +25,8 @@ export type Span = {
   done: boolean;
   /** Drawn from the reminder, not a real range. */
   assumed: boolean;
+  /** Task colour id (see task-colors.ts). */
+  color?: string | null;
 };
 
 export function taskSpan(task: Task): Span | null {
@@ -34,7 +36,7 @@ export function taskSpan(task: Task): Span | null {
   const assumed = explicit == null || explicit <= start;
   const end = assumed ? Math.min(start + 60, 24 * 60) : explicit;
   if (end == null || end <= start) return null;
-  return { id: task.id, title: task.title, start, end, done: task.done, assumed };
+  return { id: task.id, title: task.title, start, end, done: task.done, assumed, color: task.color ?? null };
 }
 
 export type Placed = Span & { lane: number; lanes: number; clash: boolean };

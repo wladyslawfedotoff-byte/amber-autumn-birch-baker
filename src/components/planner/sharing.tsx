@@ -1,7 +1,7 @@
 import { Users, UserCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
-import type { Task, TaskList } from "@/lib/planner-types";
+import type { Milestone, Task, TaskList } from "@/lib/planner-types";
 import { isSharedTask, ownerOf } from "@/lib/queries";
 import { displayName, useProfile, type Capabilities } from "@/lib/use-capabilities";
 
@@ -140,6 +140,40 @@ export function ListShareBar({ list }: { list: TaskList }) {
               on={on}
               label={user.login === me ? "Я" : user.name}
               onClick={() => setListMembers(list.id, on ? members.filter((login) => login !== user.login) : [...members, user.login])}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** «Совместная» for a special date: the chosen people see it and its lists (gifts, to-dos). */
+export function MilestoneShareBar({ item }: { item: Milestone }) {
+  const profile = useProfile();
+  const setMilestoneMembers = usePlanner((s) => s.setMilestoneMembers);
+  if (!profile.multiUser || !profile.login) return null;
+  const me = profile.login;
+  const owner = ownerOf(item, profile.dataOwner || me);
+  const members = item.members ?? [];
+  const people = others(profile, [owner]);
+  if (!people.length) return null;
+  return (
+    <div className="mt-3">
+      <p className="flex items-center gap-1 text-xs font-medium text-subtle">
+        <Users className="size-3.5" aria-hidden="true" />
+        {owner === me ? "Совместная — кто ещё видит дату и списки" : `Дата ${displayName(owner, profile)} — с вами поделились`}
+      </p>
+      <p className="mt-1 text-xs text-muted">Без отметок дата видна только вам. Удобно для общего списка подарков.</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {people.map((user) => {
+          const on = members.includes(user.login);
+          return (
+            <Chip
+              key={user.login}
+              on={on}
+              label={user.login === me ? "Я" : user.name}
+              onClick={() => setMilestoneMembers(item.id, on ? members.filter((login) => login !== user.login) : [...members, user.login])}
             />
           );
         })}

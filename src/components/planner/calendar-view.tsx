@@ -16,6 +16,8 @@ import { cleanDates, daysBetween, formatLong, formatMonth, occursOn, shiftIso, t
 import { usePlanner } from "@/lib/planner-store";
 import { byNewest } from "@/lib/queries";
 import { stageRange } from "@/lib/stage-range";
+import { colorHex } from "@/lib/task-colors";
+import { ageLabel, occursOnDay } from "@/lib/special-dates";
 
 type Drag =
   | {
@@ -69,6 +71,7 @@ export function CalendarView({
   onOpen: (id: string) => void;
 }) {
   const tasks = usePlanner((s) => s.tasks);
+  const milestones = usePlanner((s) => s.milestones) ?? [];
   const projects = usePlanner((s) => s.projects) ?? [];
   const addTask = usePlanner((s) => s.addTask);
   const updateTask = usePlanner((s) => s.updateTask);
@@ -233,7 +236,10 @@ export function CalendarView({
                 {week.map((date) => {
                   const iso = todayIso(date);
                   const inMonth = isSameMonth(date, cursor);
-                  const count = tasks.filter((task) => !task.done && occursOn(task, iso)).length;
+                  const dayOpen = tasks.filter((task) => !task.done && occursOn(task, iso));
+                  const count = dayOpen.length;
+                  const dots = dayOpen.map((task) => colorHex(task.color)).filter((hex): hex is string => Boolean(hex)).slice(0, 3);
+                  const special = milestones.filter((item) => occursOnDay(item, iso));
                   const selected = iso === day;
                   const isToday = iso === today;
                   const over = drag?.active && drag.over === iso;
@@ -258,7 +264,19 @@ export function CalendarView({
                       >
                         {date.getDate()}
                       </span>
-                      {count > 0 ? <span className="text-xs tabular-nums text-muted">{count}</span> : null}
+                      {count > 0 || special.length > 0 ? (
+                        <span className="flex items-center gap-0.5 text-xs tabular-nums text-muted">
+                          {special.length > 0 ? (
+                            <span aria-label={special.map((item) => item.title).join(", ")} title={special.map((item) => item.title).join(", ")}>
+                              {special[0]?.kind === "birthday" ? "🎂" : "★"}
+                            </span>
+                          ) : null}
+                          {dots.map((hex, index) => (
+                            <span key={index} className="size-1.5 rounded-full" style={{ background: hex }} aria-hidden="true" />
+                          ))}
+                          {count > 0 ? <span>{count}</span> : null}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -312,9 +330,19 @@ export function CalendarView({
         <div className="mt-3">
           <AddTaskForm
             placeholder="Встреча в 15"
-            onAdd={(title) => addTask({ title, due: day, listId: null })}
+            onAdd={(title, quick) => addTask({ title, ...quick, due: day, listId: null })}
           />
         </div>
+        {milestones.filter((item) => occursOnDay(item, day)).map((item) => {
+          const age = ageLabel(item, day, today);
+          return (
+            <p key={item.id} className="mt-3 flex items-center gap-2 rounded-xl bg-elevated px-3 py-2 text-sm">
+              <span aria-hidden="true">{item.kind === "birthday" ? "🎂" : item.kind === "anniversary" ? "💍" : "★"}</span>
+              <span className="min-w-0 flex-1 truncate">{item.title}</span>
+              {age ? <span className="text-xs text-muted">{age}</span> : null}
+            </p>
+          );
+        })}
         <div className="mt-3">
           {dayTasks.length === 0 ? (
             <p className="py-8 text-sm text-muted">На этот день задач нет. Можно перетащить сюда задачу с другого дня.</p>
