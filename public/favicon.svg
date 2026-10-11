@@ -1,4 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#243e4a"/>
-  <path d="M8 17l5 5 11-12" fill="none" stroke="#f4f2eb" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Small sizes: rounded square, bolder strokes. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f4a6e"/>
+      <stop offset="1" stop-color="#4f9e86"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <g transform="translate(512 512) scale(0.96) translate(-512 -500)">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M237.9 594.0L82.6 524.8 M303.6 500.2L185.5 377.9 M399.6 437.8L335.9 280.2 M512.0 416.0L512.0 246.0 M624.4 437.8L688.1 280.2" stroke="#fbf1d9" stroke-width="40"/>
+    <path d="M292 716A220 220 0 0 1 732 716Z" fill="#eea43a" stroke="none"/>
+    <path d="M110 716H914" stroke="#fbf1d9" stroke-width="40"/>
+    <path d="M404 640 512 742 822 404" stroke="#fbf1d9" stroke-width="92"/>
+  </g>
+  </g>
 </svg>

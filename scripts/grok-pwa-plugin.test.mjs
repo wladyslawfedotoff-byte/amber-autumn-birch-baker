@@ -530,7 +530,18 @@ test("renders the manifest with the per-app name", () => {
   const manifest = JSON.parse(renderWebManifest("wild-race.grok.me"));
   assert.equal(manifest.name, "Wild Race");
   assert.equal(manifest.short_name, "Wild Race");
-  assert.equal(manifest.icons[0].src, "/__grok/icon-180.png");
+  assert.deepEqual(
+    manifest.icons.map((icon) => [icon.sizes, icon.purpose ?? ""]),
+    [
+      ["192x192", "any"],
+      ["512x512", "any"],
+      ["192x192", "maskable"],
+      ["512x512", "maskable"],
+      ["180x180", ""],
+    ],
+  );
+  assert.ok(manifest.icons.every((icon) => icon.src.endsWith("?v=1.6.0")));
+  assert.equal(manifest.background_color, "#0f4a6e");
 });
 
 test("manifest name override wins over the host slug", () => {

@@ -1,4 +1,5 @@
 /** Self-contained server-rendered pages (no JS needed — works in the iOS Home Screen app). */
+import { APPLE_TOUCH_ICONS, FAVICON_ICO, FAVICON_SVG, MANIFEST_URL } from "../../src/lib/app-icons.ts";
 import { APP_NAME, APP_TAGLINE, APP_TITLE } from "../../src/lib/site.ts";
 import { escapeHtml } from "./http.ts";
 
@@ -11,7 +12,7 @@ main{min-height:100vh;min-height:100dvh;display:flex;align-items:flex-start;just
 .card{width:100%;max-width:340px}
 @media (min-width:640px){html,body{background:var(--bg)}main{align-items:center;padding-top:24px}.card{background:var(--surface);border-radius:20px;padding:28px 24px;box-shadow:0 0 0 1px color-mix(in oklab,var(--fg) 8%,transparent),0 12px 32px -18px color-mix(in oklab,var(--fg) 30%,transparent)}}
 .brand{display:flex;align-items:center;gap:10px;margin:0 0 6px}
-.logo{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:var(--accent);color:var(--accent-fg);flex:none}
+.logo{display:block;width:36px;height:36px;flex:none}
 h1{font-weight:600;font-size:22px;letter-spacing:-0.01em;line-height:1.2;margin:0}
 p{margin:0;color:var(--muted);font-size:14px}
 label{display:block;margin:18px 0 6px;font-size:12px;font-weight:500;color:var(--subtle);text-transform:uppercase;letter-spacing:.03em}
@@ -26,7 +27,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;back
 ol{padding-left:20px;color:var(--muted);font-size:14px}
 li{margin:6px 0}
 `;
-const LOGO = `<span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32" width="18" height="18"><path d="M7 16.5 13 22.5 25 9.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+const LOGO = `<img class="logo" src="${FAVICON_SVG}" width="36" height="36" alt="">`;
 
 function shell(title: string, body: string): string {
   return `<!DOCTYPE html>
@@ -41,9 +42,10 @@ function shell(title: string, body: string): string {
 <meta name="theme-color" content="#191a17" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="manifest" href="/__grok/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/__grok/icon-180.png">
+<link rel="icon" type="image/svg+xml" href="${FAVICON_SVG}">
+<link rel="icon" sizes="16x16 32x32 48x48" href="${FAVICON_ICO}">
+<link rel="manifest" href="${MANIFEST_URL}">
+${APPLE_TOUCH_ICONS.map(({ size, href }) => `<link rel="apple-touch-icon" sizes="${size}x${size}" href="${href}">`).join("\n")}
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>${STYLE}</style>
 </head>

@@ -30,6 +30,8 @@ function isPublicAsset(path: string): boolean {
   return (
     path.startsWith("/assets/") ||
     path.startsWith("/__grok/") ||
+    path.startsWith("/icons/") ||
+    path === "/apple-touch-icon.png" ||
     path === "/favicon.svg" ||
     path === "/favicon.ico" ||
     path === "/robots.txt" ||

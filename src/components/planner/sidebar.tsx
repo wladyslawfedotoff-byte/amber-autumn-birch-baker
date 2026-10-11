@@ -29,6 +29,7 @@ import { habitsForDay } from "@/lib/habit-plan";
 import type { View } from "@/lib/planner-types";
 import { countInbox, countList, countOpen, countToday, countTomorrow, countWeek, ownerOf, scopeTasks } from "@/lib/queries";
 import { logout } from "@/lib/server-sync";
+import { FAVICON_SVG } from "@/lib/app-icons";
 import { APP_NAME, APP_TAGLINE } from "@/lib/site";
 import { useCapabilities } from "@/lib/use-capabilities";
 import { drawerItems } from "@/lib/ui-prefs";
@@ -108,18 +109,7 @@ export function Sidebar({
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-bg text-fg">
       <div className="flex items-center gap-2 px-3 py-2">
-        <span className="flex size-7 items-center justify-center rounded-md bg-accent text-accent-fg">
-          <svg viewBox="0 0 32 32" className="size-4" aria-hidden="true">
-            <path
-              d="M7 16.5 13 22.5 25 9.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
+        <img src={FAVICON_SVG} alt="" width={28} height={28} className="size-7 shrink-0 rounded-md" />
         <div className="min-w-0 flex-1">
           <p className="text-[0.9375rem] font-semibold leading-none">{APP_NAME}</p>
           {APP_TAGLINE ? <p className="mt-0.5 truncate text-xs leading-none text-subtle">{APP_TAGLINE}</p> : null}
