@@ -26,7 +26,19 @@ export type Collection = (typeof COLLECTIONS)[number];
 export type SyncEntity = { id: string; updatedAt?: number } & Record<string, unknown>;
 export type TombstoneMap = Record<string, number>;
 export type Tombstones = Record<Collection, TombstoneMap>;
-export type SyncSettings = { workStart: string; workEnd: string; updatedAt: number };
+export type SyncSettings = {
+  workStart: string;
+  workEnd: string;
+  /** «Убирать в архив через» (days, 0 = never). Missing = default (7). */
+  archiveDays?: number;
+  updatedAt: number;
+};
+
+const ARCHIVE_DAY_VALUES = [0, 1, 2, 3, 5, 7, 30];
+
+export function validArchiveDays(value: unknown): value is number {
+  return typeof value === "number" && ARCHIVE_DAY_VALUES.includes(value);
+}
 
 export type SyncData = {
   v: 1;
@@ -91,7 +103,8 @@ export function sameData(a: SyncData, b: SyncData): boolean {
  *   _f  { field: stamp } for fields edited after `_b`
  *   _s  { setField: { element: ±stamp } } for set-like arrays (habit checks,
  *       task tags): positive = present since, negative = removed at
- *   _d  { keyedField: { childId: deletedAt } } for child lists with ids (subtasks)
+ *   _d  { keyedField: { childId: deletedAt } } for child lists with ids (subtasks,
+ *       special-date items, habit log days)
  * Children of a keyed list (subtasks) carry their own `updatedAt` (and `_b`/
  * `_f` once edited); a child without a stamp has the parent field's stamp.
  * Elements/children a copy does not mention have the field's stamp: present
@@ -115,8 +128,8 @@ export const NO_SPECIAL: EntitySpecial = { sets: [], keyed: [] };
 export const ENTITY_SPECIAL: Record<Collection, EntitySpecial> = {
   lists: { sets: ["members"], keyed: [] },
   tasks: { sets: ["tags", "repeatDates", "members"], keyed: ["subtasks"] },
-  habits: { sets: ["checks", "members"], keyed: [] },
-  milestones: { sets: ["members"], keyed: [] },
+  habits: { sets: ["checks", "members"], keyed: ["log"] },
+  milestones: { sets: ["members"], keyed: ["items"] },
   projects: { sets: ["members"], keyed: [] },
 };
 
@@ -774,6 +787,7 @@ export function normalizeData(raw: unknown): NormalizeResult {
   out.settings = {
     workStart: isTime(settings.workStart) ? settings.workStart : "09:00",
     workEnd: isTime(settings.workEnd) ? settings.workEnd : "18:00",
+    ...(validArchiveDays(settings.archiveDays) ? { archiveDays: settings.archiveDays } : {}),
     updatedAt: isRecord(raw.settings) ? stampOf(raw.settings.updatedAt) : 0,
   };
   if (raw.tombstones !== undefined) {

@@ -9,12 +9,13 @@ import { collectReminders, kindLabel, notifyReminder, type ReminderHit } from "@
 export function useReminderHits(): ReminderHit[] {
   const tasks = usePlanner((s) => s.tasks);
   const milestones = usePlanner((s) => s.milestones);
+  const habits = usePlanner((s) => s.habits);
   const remindAck = usePlanner((s) => s.remindAck);
   const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
     setNow(Date.now());
-  }, [tasks, milestones, remindAck]);
+  }, [tasks, milestones, habits, remindAck]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 10_000);
@@ -25,6 +26,7 @@ export function useReminderHits(): ReminderHit[] {
   return collectReminders({
     tasks,
     milestones: milestones ?? [],
+    habits: habits ?? [],
     remindAck: remindAck ?? {},
     now,
   });

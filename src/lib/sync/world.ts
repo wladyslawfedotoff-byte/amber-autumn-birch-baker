@@ -42,6 +42,7 @@ import {
   type SyncSettings,
   type TombstoneMap,
   type Tombstones,
+  validArchiveDays,
 } from "./merge.ts";
 
 export type AclConfig = {
@@ -446,7 +447,12 @@ export function normalizeUserStates(raw: unknown): Record<string, UserState> {
     }
     out[login] = {
       revision: typeof v.revision === "number" && Number.isSafeInteger(v.revision) && v.revision >= 0 ? v.revision : 0,
-      settings: { workStart: time(settingsRaw.workStart, "09:00"), workEnd: time(settingsRaw.workEnd, "18:00"), updatedAt: stampOf(settingsRaw.updatedAt) },
+      settings: {
+        workStart: time(settingsRaw.workStart, "09:00"),
+        workEnd: time(settingsRaw.workEnd, "18:00"),
+        ...(validArchiveDays(settingsRaw.archiveDays) ? { archiveDays: settingsRaw.archiveDays } : {}),
+        updatedAt: stampOf(settingsRaw.updatedAt),
+      },
       tombs,
     };
   }

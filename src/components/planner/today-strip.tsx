@@ -1,6 +1,8 @@
-import { countdownLabel, daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter, occursOn } from "@/lib/dates";
+import { ageLabel, daysLeftLabel } from "@/lib/special-dates";
+import { daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter, occursOn } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { cn } from "@/lib/cn";
+import { habitChip, habitsForDay } from "@/lib/habit-plan";
 
 export function TodaySummary() {
   const tasks = usePlanner((s) => s.tasks);
@@ -16,12 +18,13 @@ export function TodaySummary() {
     .sort((a, b) => a.days - b.days);
   const todayN = tasks.filter((task) => !task.done && task.due === today).length;
   const overdueN = tasks.filter((task) => !task.done && task.due != null && task.due < today).length;
-  const habitLeft = habits.filter((habit) => !habit.checks.includes(today)).length;
+  const planned = habitsForDay(habits, today);
+  const habitLeft = planned.filter((habit) => !habit.checks.includes(today)).length;
   const nextDate = soon[0];
   const line = [
     todayN === 0 && overdueN === 0 ? "На сегодня задач нет" : `${todayN} на сегодня`,
     overdueN > 0 ? `${overdueN} просрочено` : "",
-    habits.length === 0 ? "" : habitLeft === 0 ? "привычки отмечены" : `привычки ${habitLeft}`,
+    planned.length === 0 ? "" : habitLeft === 0 ? "привычки отмечены" : `привычки ${habitLeft}`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -31,7 +34,8 @@ export function TodaySummary() {
       <p className="font-display text-xl tracking-tight text-fg">{line}</p>
       {nextDate ? (
         <p className="text-xs text-muted">
-          {nextDate.item.title} — {countdownLabel(nextDate.days)}
+          {nextDate.item.title} — {daysLeftLabel(nextDate.days)}
+          {ageLabel(nextDate.item, shiftIso(today, nextDate.days), today) ? `, ${ageLabel(nextDate.item, shiftIso(today, nextDate.days), today)}` : ""}
         </p>
       ) : null}
     </div>
@@ -54,7 +58,8 @@ export function WeekDays({
     <div className="grid grid-cols-7 gap-1">
       {days.map((day) => {
         const count = tasks.filter((task) => !task.done && occursOn(task, day)).length;
-        const habitsDone = habits.length > 0 && habits.every((habit) => habit.checks.includes(day));
+        const dayHabits = habitsForDay(habits, day);
+        const habitsDone = dayHabits.length > 0 && dayHabits.every((habit) => habit.checks.includes(day));
         const on = day === selected;
         return (
           <button
@@ -83,16 +88,17 @@ export function TodayStrip({ onPick }: { onPick: (day: string) => void }) {
   const habits = usePlanner((s) => s.habits);
   const toggleHabit = usePlanner((s) => s.toggleHabit);
   const today = todayIso();
+  const planned = habitsForDay(habits, today);
 
   return (
     <div className="mt-8 space-y-3">
       <WeekDays selected={today} onPick={onPick} />
 
-      {habits.length > 0 ? (
+      {planned.length > 0 ? (
         <div>
           <p className="text-xs font-medium text-subtle">Привычки сегодня</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            {habits.map((habit) => {
+            {planned.map((habit) => {
               const on = habit.checks.includes(today);
               return (
                 <button
@@ -105,7 +111,7 @@ export function TodayStrip({ onPick }: { onPick: (day: string) => void }) {
                     on ? "border-accent bg-accent text-accent-fg" : "border-line bg-elevated text-fg",
                   )}
                 >
-                  {habit.name}
+                  {habitChip(habit, today)}
                 </button>
               );
             })}

@@ -1,4 +1,5 @@
-import { occursOn, shiftIso, taskDates } from "@/lib/dates";
+import { isoFromTs, occursOn, shiftIso, taskDates } from "@/lib/dates";
+import { DEFAULT_ARCHIVE_DAYS, byCompleted, isArchived, repeatTickedOn } from "@/lib/task-done";
 import type { Task, TaskList, View } from "@/lib/planner-types";
 
 /** Who owns it: items from before profiles belong to the server's APP_OWNER. */
@@ -63,6 +64,7 @@ export function scopeTasks(tasks: Task[], view: View, today: string, share?: Sha
     if (view === "shared") return !t.done && Boolean(share && isSharedTask(t, share.lists, share.me, share.dataOwner));
     if (view === "inbox") return !t.done && t.listId == null;
     if (view === "done") return t.done;
+    if (view === "archive") return t.done;
     if (view.startsWith("list:")) return !t.done && t.listId === view.slice(5);
     if (view.startsWith("tag:")) return !t.done && t.tags.includes(view.slice(4));
     if (view.startsWith("day:")) return !t.done && occursOn(t, view.slice(4));
@@ -70,23 +72,37 @@ export function scopeTasks(tasks: Task[], view: View, today: string, share?: Sha
   });
 }
 
-export function doneInScope(tasks: Task[], view: View, today: string, share?: ShareScope): Task[] {
-  if (view === "done" || view === "week" || view === "calendar" || view === "focus" || view === "habits") {
+export type DoneOptions = { now: number; archiveDays: number };
+
+/**
+ * The «Готово» group at the bottom of a list: done tasks of that list that are
+ * not archived yet, plus repeating tasks ticked today (their date already
+ * moved on, so without this the tick left no trace). Newest first.
+ */
+export function doneInScope(tasks: Task[], view: View, today: string, share?: ShareScope, options?: DoneOptions): Task[] {
+  if (view === "done" || view === "archive" || view === "calendar" || view === "focus" || view === "habits") {
     return [];
   }
+  const now = options?.now ?? Date.now();
+  const days = options?.archiveDays ?? DEFAULT_ARCHIVE_DAYS;
+  const end = shiftIso(today, 6);
   return tasks
     .filter((t) => {
-      if (!t.done) return false;
-      if (view === "today") return t.due != null && t.due <= today;
-      if (view === "tomorrow") return t.due === shiftIso(today, 1);
+      const ticked = repeatTickedOn(t, today);
+      if (!t.done && !ticked) return false;
+      if (t.done && isArchived(t, now, days)) return false;
+      const doneToday = typeof t.completedAt === "number" && isoFromTs(t.completedAt) === today;
+      if (view === "today") return ticked || doneToday || (t.due != null && t.due <= today);
+      if (view === "week") return ticked || doneToday || inRange(t, today, end);
+      if (view === "tomorrow") return !ticked && t.due === shiftIso(today, 1);
+      if (view.startsWith("day:")) return !ticked && t.due === view.slice(4);
       if (view === "inbox") return t.listId == null;
       if (view === "shared") return Boolean(share && isSharedTask(t, share.lists, share.me, share.dataOwner));
       if (view.startsWith("list:")) return t.listId === view.slice(5);
       if (view.startsWith("tag:")) return t.tags.includes(view.slice(4));
-      if (view.startsWith("day:")) return t.due === view.slice(4);
       return false;
     })
-    .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
+    .sort(byCompleted);
 }
 
 export function matchesQuery(task: Task, query: string, lists: TaskList[]): boolean {

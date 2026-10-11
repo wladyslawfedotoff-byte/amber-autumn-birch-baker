@@ -7,6 +7,41 @@ import { usePlanner } from "@/lib/planner-store";
 import { changePassword, dismissLegacyNote, logout, logoutEverywhere, syncServerNow } from "@/lib/server-sync";
 import { reloadProfile, useProfile } from "@/lib/use-capabilities";
 import { phaseLabel, useServerSyncStatus } from "@/lib/use-server-sync";
+import { ARCHIVE_OPTIONS } from "@/lib/task-done";
+
+function ArchiveSection() {
+  const archiveDays = usePlanner((s) => s.archiveDays);
+  const setArchiveDays = usePlanner((s) => s.setArchiveDays);
+  return (
+    <section className="mt-8" aria-labelledby="archive-title">
+      <h2 id="archive-title" className="font-display text-lg tracking-tight">
+        Готово и архив
+      </h2>
+      <p className="mt-1 text-sm text-muted">
+        Выполненные задачи сначала видны внизу списка в группе «Готово», а потом уходят в «Архив», чтобы не мешать. Из архива задачу можно вернуть
+        или удалить. Настройка общая для всех ваших устройств.
+      </p>
+      <p className="mt-3 text-xs font-medium text-subtle">Убирать в архив</p>
+      <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Убирать в архив">
+        {ARCHIVE_OPTIONS.map((days) => {
+          const on = archiveDays === days;
+          return (
+            <button
+              key={days}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setArchiveDays(days)}
+              className={cn("h-11 rounded-xl px-3 text-sm", on ? "bg-accent text-accent-fg" : "card-lift bg-elevated text-fg")}
+            >
+              {days === 0 ? "Никогда" : `${days} ${days === 1 ? "день" : days < 5 ? "дня" : "дней"}`}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 function formatSyncTime(stamp: number | null): string {
   if (!stamp) return "ещё не было";
@@ -346,6 +381,7 @@ export function SettingsView() {
         </div>
       </section>
 
+      <ArchiveSection />
       <BackupSection />
     </div>
   );
