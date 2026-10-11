@@ -35,6 +35,8 @@ export type ProposalItem =
       end?: string | null;
       list?: string | null;
       priority?: Priority;
+      /** The values before the change (for «было → стало»); only the changed fields. */
+      was?: { title?: string; due?: string | null; start?: string | null; end?: string | null; list?: string | null; priority?: Priority };
     }
   | { op: "complete"; key: string; taskId: string; taskTitle: string }
   | { op: "subtasks"; key: string; taskId: string; taskTitle: string; steps: string[] }
@@ -48,7 +50,21 @@ export type Proposal = {
   title: string;
   items: ProposalItem[];
   status: ProposalStatus;
+  /** «plan»: a day plan, shown as a timeline. */
+  kind?: "plan";
 };
+
+/**
+ * A structured answer the app draws itself (task rows with quick actions,
+ * free time by day) instead of the plain text. Built by the server without a
+ * model; the text stays for history and older apps.
+ */
+export type AnswerView =
+  | { kind: "tasks"; mode: "overdue" | "day"; date: string; title: string; ids: string[]; more: number; note?: string }
+  | { kind: "free"; title: string; days: { date: string; label: string; slots: string[] }[] };
+
+/** A one-tap follow-up under an answer: ask a question, or show a ready card. Built without a model. */
+export type Chip = { label: string; ask?: string; proposal?: Proposal };
 
 export type ChatMessage = {
   id: string;
@@ -59,6 +75,8 @@ export type ChatMessage = {
   /** Which provider and model answered: «free · some-model». */
   source?: string;
   proposals?: Proposal[];
+  view?: AnswerView;
+  chips?: Chip[];
   /** The answer failed («Помощник сейчас недоступен»). */
   error?: boolean;
   /** Every model was unavailable: «Повторить» / «Отложить» are offered. */

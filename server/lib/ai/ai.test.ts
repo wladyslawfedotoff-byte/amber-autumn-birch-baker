@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import type { ChatEvent } from "../../../src/lib/assistant/types.ts";
+import type { ChatEvent, ChatMessage } from "../../../src/lib/assistant/types.ts";
 import { emptyData, type SyncData } from "../../../src/lib/sync/merge.ts";
 import type { Principal } from "../principal.ts";
 import { SyncStore } from "../sync-store.ts";
@@ -240,6 +240,42 @@ test("tools: reads see the given view only, writes become proposals", () => {
     { start: "10:15", end: "11:00", minutes: 45 },
     { start: "12:00", end: "18:00", minutes: 360 },
   ]);
+});
+
+test("executive style: terse rules in the prompt, clean titles, «было» on changes, plan as a timeline", async () => {
+  let n = 0;
+  const ctx = { data: seed(), today: TODAY, now: "10:00", newId: () => `id-${++n}` };
+  const { systemPrompt } = await import("./agent.ts");
+  const prompt = systemPrompt(ctx, { json: true });
+  for (const rule of [/1–3 короткие строки/, /Без вступлений, «конечно», пересказа вопроса/, /глагол в начале/, /«Позвонить в сервис — записаться на ТО»/, /детали — в notes\/subtasks/, /План дня — только строки «HH:mm — задача»/, /без таблиц, HTML и эмодзи/]) assert.match(prompt, rule);
+  // Titles and steps: no emoji, no trailing period.
+  const create = runTool("create_tasks", { tasks: [{ title: "📞 Позвонить в сервис  — записаться на ТО.", subtasks: ["✅ Найти номер.", "Позвонить 👍"] }] }, ctx);
+  const item = create.proposal?.items[0];
+  assert.equal(item?.op === "create" && item.title, "Позвонить в сервис — записаться на ТО");
+  assert.deepEqual(item?.op === "create" && item.subtasks, ["Найти номер", "Позвонить"]);
+  // Changes carry the old values («было → стало»).
+  const update = runTool("update_tasks", { changes: [{ id: "t2", due: "2026-10-13", priority: 3, title: "Позвонить в банк — уточнить лимит" }] }, ctx);
+  assert.deepEqual(update.proposal?.items[0], { op: "update", key: "id-3", taskId: "t2", taskTitle: "Позвонить в банк", title: "Позвонить в банк — уточнить лимит", due: "2026-10-13", priority: 3, was: { title: "Позвонить в банк", due: "2026-10-10", priority: 0 } });
+  // A day plan: marked for the timeline and sorted by time.
+  const plan = runTool("plan_day", { items: [{ id: "t1", time: "14:00" }, { id: "t2", time: "09:30", end: "10:00" }] }, ctx);
+  assert.equal(plan.proposal?.kind, "plan");
+  assert.deepEqual(plan.proposal?.items.map((i) => i.op === "update" && [i.taskTitle, i.start, i.was?.start]), [["Позвонить в банк", "09:30", null], ["Отчёт за квартал", "14:00", null]]);
+});
+
+test("follow-up chips after a model's answer are computed by the app", async () => {
+  const { assistant, store, dir } = makeAssistant(PAID_GPT, {
+    chat: [() => sse({ calls: [{ name: "plan_day", args: { items: [{ id: "t1", time: "09:00" }] } }] }), () => sse({ text: "09:00 — Отчёт за квартал" })],
+  });
+  try {
+    await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+    const events = await ask(assistant, "Спланируй мой день");
+    const done = events.at(-1) as { type: string; message: ChatMessage };
+    assert.equal(done.type, "done");
+    assert.equal(done.message.proposals?.[0]?.kind, "plan");
+    assert.deepEqual(done.message.chips, [{ label: "Свободные окна", ask: "Свободные окна сегодня" }]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("agent: tool round trip streams the answer and returns proposals", async () => {
@@ -880,11 +916,34 @@ test("answers without a model: overdue, a day, free windows — zero requests, s
     assert.equal(overdue[0]?.type === "start" && overdue[0].provider, "app");
     const text = overdue.at(-1)?.type === "done" ? (overdue.at(-1) as { message: { text: string; provider: string } }).message : null;
     assert.equal(text?.provider, "app");
-    assert.match(text!.text, /^Просрочена 1 задача:\n\n- \*\*Позвонить в банк\*\* — 10\.10/);
+    // Terse: the list and nothing else (no preamble, no offer at the end).
+    assert.equal(text!.text, "Просрочена 1 задача:\n\n- **10.10** — Позвонить в банк");
+    const done = (events: ChatEvent[]) => (events.at(-1) as { message: ChatMessage }).message;
+    // Drawn by the app as task rows, with one-tap follow-ups.
+    assert.deepEqual(done(overdue).view, { kind: "tasks", mode: "overdue", date: TODAY, title: "Просрочена 1 задача:", ids: [data.tasks.find((t) => t.title === "Позвонить в банк")!.id], more: 0 });
+    const move = done(overdue).chips?.[0];
+    assert.equal(move?.label, "Перенести на завтра");
+    assert.deepEqual(
+      move?.proposal?.items.map((i) => i.op === "update" && [i.taskTitle, i.due, i.was?.due]),
+      [["Позвонить в банк", "2026-10-13", "2026-10-10"]],
+    );
+    assert.deepEqual(done(overdue).chips?.[1], { label: "Спланировать день", ask: "Спланируй мой день" });
     const day = await ask(assistant, "Что на сегодня?");
-    assert.match((day.at(-1) as { message: { text: string } }).message.text, /На сегодня 1 задача:\n\n- \*\*Отчёт за квартал\*\* — Работа\n\nЕщё просрочено: 1/);
+    assert.equal(done(day).text, "На сегодня 1 задача:\n\n- Отчёт за квартал\n\nЕщё просрочено: 1.");
+    const dayView = done(day).view;
+    assert.equal(dayView?.kind === "tasks" && dayView.note, "Ещё просрочено: 1.");
+    assert.deepEqual(done(day).chips?.map((c) => c.label), ["Спланировать день", "Свободные окна", "Разбить на шаги"]);
+    assert.equal(done(day).chips?.[2]?.ask, "Разбей задачу «Отчёт за квартал» на шаги");
     const free = await ask(assistant, "Найди свободные окна на завтра и послезавтра");
-    assert.match((free.at(-1) as { message: { text: string } }).message.text, /- \*\*Завтра:\*\* 09:00–10:00, 11:30–18:00\n- \*\*Послезавтра:\*\* 09:00–18:00/);
+    assert.equal(done(free).text, "Свободно (09:00–18:00):\n\n- **Завтра:** 09:00–10:00, 11:30–18:00\n- **Послезавтра:** 09:00–18:00");
+    assert.deepEqual(done(free).view, { kind: "free", title: "Свободно (09:00–18:00):", days: [{ date: "2026-10-13", label: "Завтра", slots: ["09:00–10:00", "11:30–18:00"] }, { date: "2026-10-14", label: "Послезавтра", slots: ["09:00–18:00"] }] });
+    // The chip's card, once applied, becomes an ordinary card of that answer.
+    const conv = { id: (overdue[0] as { conversationId: string }).conversationId };
+    const saved = await store.setProposal("user1", conv.id, move!.proposal!.id, "applied");
+    assert.equal(saved?.status, "applied");
+    const after = (await store.get("user1", conv.id))!.messages.find((m) => m.id === done(overdue).id)!;
+    assert.equal(after.proposals?.[0]?.id, move!.proposal!.id);
+    assert.deepEqual(after.chips?.map((c) => c.label), ["Спланировать день"]);
     assert.equal(calls.length, 0, "no model, no consent needed");
     assert.equal((await store.list("user1")).length, 3);
     // Not simple → the model is asked.

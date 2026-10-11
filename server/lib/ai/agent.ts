@@ -23,9 +23,11 @@ const MAX_JSON_READS = 4;
  * per-request part (date, the data this question needs).
  */
 const CORE = [
-  "Ты — Помощник планировщика «Пора». Отвечай по-русски, кратко; можно **жирный** и списки, без таблиц и HTML.",
-  "Опирайся на данные ниже, не выдумывай задачи. Id задач — как в данных (t1, t2…). Даты YYYY-MM-DD, время HH:mm.",
-  "Изменения — только инструментами (создать, изменить, выполнить, шаги, план дня, привычки): они показывают карточку, пользователь подтверждает. Не пиши, что уже сделал.",
+  "Ты — деловой помощник планировщика «Пора». По-русски: 1–3 короткие строки или короткий список, без таблиц, HTML и эмодзи.",
+  "Без вступлений, «конечно», пересказа вопроса и предложений в конце, если не нужны.",
+  "Только данные ниже; id — как в них (t1…). Даты YYYY-MM-DD, время HH:mm.",
+  "Название задачи: глагол в начале, кратко и конкретно («Позвонить в сервис — записаться на ТО»), детали — в notes/subtasks. План дня — только строки «HH:mm — задача».",
+  "Изменения — только инструментами (карточка на подтверждение); не пиши, что уже сделал.",
 ].join("\n");
 
 /** Compact signatures for JSON mode (the full JSON schema would cost ~4× more). */
@@ -44,7 +46,7 @@ const SIGNATURES: Record<string, string> = {
 function jsonRules(tools: ToolSpec[]): string {
   return [
     'Ответ — ТОЛЬКО один JSON-объект, без ```, тегов и текста вокруг: {"reply":"текст","actions":[{"name":"…","arguments":{…}}]}',
-    'Пример: {"reply":"Предлагаю перенести на завтра.","actions":[{"name":"update_tasks","arguments":{"changes":[{"id":"t3","due":"2026-01-02"}]}}]}',
+    'Пример: {"reply":"Перенос на завтра.","actions":[{"name":"update_tasks","arguments":{"changes":[{"id":"t3","due":"2026-01-02"}]}}]}',
     "Данных ниже обычно хватает — отвечай сразу. Чтение нужно редко: тогда reply пустой, actions с чтением, ответ — следующим сообщением.",
     `Инструменты: ${tools.map((t) => SIGNATURES[t.function.name] ?? t.function.name).join("; ")}`,
   ].join("\n");
@@ -172,7 +174,7 @@ export async function runAgent(options: {
       continue;
     }
     // JSON mode: only the reply string is streamed, never the JSON around it.
-    if (messages[0]?.role === "system" && !messages[0].content.includes("ФОРМАТ ОТВЕТА")) messages[0] = { role: "system", content: prompt(true) };
+    if (messages[0]?.role === "system" && !messages[0].content.includes("ТОЛЬКО один JSON")) messages[0] = { role: "system", content: prompt(true) };
     const streamer = new ReplyStreamer();
     const reply = await chat({ messages, tools: null, signal, onDelta: (d) => streamer.push(d, events.onDelta) });
     const parsed = parseJsonReply(reply.content);
@@ -191,7 +193,7 @@ export async function runAgent(options: {
       round--;
       continue;
     }
-    const answer = parsed.reply.trim() || (writes.length ? "Вот что предлагаю:" : "");
+    const answer = parsed.reply.trim() || (writes.length ? "Проверьте карточку." : "");
     if (!answer) {
       if (streamer.shown) events.onReset?.();
       break;
@@ -206,7 +208,7 @@ export async function runAgent(options: {
     return { text, proposals, jsonMode };
   }
   if (!text.trim()) {
-    const fallback = proposals.length ? "Вот что предлагаю:" : "Не получилось ответить. Попробуйте сформулировать короче.";
+    const fallback = proposals.length ? "Проверьте карточку." : "Не получилось ответить. Попробуйте сформулировать короче.";
     text = fallback;
     events.onDelta(fallback);
   }

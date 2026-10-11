@@ -8,6 +8,7 @@
  */
 import { TOOL_SPECS, TASKS, brief, freeSlots, plural, tasksOf, type TaskLike, type ToolContext } from "./tools.ts";
 import type { ToolSpec } from "./provider.ts";
+import type { AnswerView, Chip, Proposal, ProposalItem } from "../../../src/lib/assistant/types.ts";
 
 export type IntentKind = "overdue" | "today" | "free" | "plan" | "create" | "update" | "complete" | "breakdown" | "habit" | "general";
 export type Intent = { kind: IntentKind; dates: string[]; local: boolean };
@@ -184,11 +185,11 @@ export function toolsFor(intent: Intent): ToolSpec[] {
 
 /* ---- answers without a model ------------------------------------------ */
 
+/** «- 10.10 — Title» for overdue, «- 10:00–11:00 — Title» or «- Title» for a day. */
 function humanLine(ctx: ToolContext, t: TaskLike, withDate: boolean): string {
   const b = brief(ctx, t);
-  const date = withDate && b.due ? `${Number(b.due.slice(8))}.${b.due.slice(5, 7)}` : "";
-  const extra = [date, b.time, b.list !== "Входящие" ? b.list : ""].filter(Boolean).join(", ");
-  return `- **${t.title}**${extra ? ` — ${extra}` : ""}`;
+  const lead = withDate && b.due ? `${Number(b.due.slice(8))}.${b.due.slice(5, 7)}` : b.time;
+  return `- ${lead ? `**${lead}** — ` : ""}${t.title}`;
 }
 
 function dayName(day: string, today: string): string {
@@ -198,37 +199,97 @@ function dayName(day: string, today: string): string {
   return `${Number(day.slice(8))}.${day.slice(5, 7)} (${weekdayOf(day)})`;
 }
 
+export type LocalAnswer = { text: string; view?: AnswerView; chips?: Chip[] };
+
+const MAX_ROWS = 20;
+
+/** «Перенести всё на завтра»: a ready card, no model. */
+function moveChip(ctx: ToolContext, rows: TaskLike[], to: string, label: string): Chip | null {
+  const items: ProposalItem[] = rows.slice(0, 30).map((t) => ({ op: "update", key: ctx.newId(), taskId: t.id, taskTitle: t.title, due: to, was: { due: t.due } }));
+  if (!items.length) return null;
+  return { label, proposal: { id: ctx.newId(), title: `Перенести ${plural(items.length, TASKS)} на завтра?`, items, status: "pending" } };
+}
+
+/** «Разбить на шаги» for the first task of the day that has none. */
+function stepsChip(rows: TaskLike[]): Chip | null {
+  const task = rows.find((t) => !t.subtasks.length);
+  return task ? { label: "Разбить на шаги", ask: `Разбей задачу «${task.title}» на шаги` } : null;
+}
+
+const ask = (label: string, question: string): Chip => ({ label, ask: question });
+
 /** A ready answer for a simple question, or null when a model is needed. */
-export function localAnswer(intent: Intent, ctx: ToolContext): string | null {
+export function localAnswer(intent: Intent, ctx: ToolContext): LocalAnswer | null {
   if (!intent.local) return null;
   const { today } = ctx;
+  const tomorrow = addDays(today, 1);
   const open = tasksOf(ctx.data).filter((t) => !t.done);
+  const overdueRows = open.filter((t) => t.due !== null && t.due < today).sort(byDue);
+  const chips = (list: (Chip | null)[]) => list.filter((c): c is Chip => c !== null);
   switch (intent.kind) {
     case "overdue": {
-      const rows = open.filter((t) => t.due !== null && t.due < today).sort(byDue);
-      if (!rows.length) return "Просроченных задач нет.";
-      const shown = rows.slice(0, 20).map((t) => humanLine(ctx, t, true));
+      const rows = overdueRows;
+      if (!rows.length) return { text: "Просроченных задач нет.", chips: chips([ask("Что на сегодня?", "Что на сегодня?")]) };
       const one = rows.length % 10 === 1 && rows.length % 100 !== 11;
-      return [`${one ? "Просрочена" : "Просрочено"} ${plural(rows.length, TASKS).replace("задачу", "задача")}:`, "", ...shown, ...(rows.length > 20 ? [`- …и ещё ${rows.length - 20}`] : []), "", `Могу перенести ${one ? "её" : "их"} — напишите, например, «перенеси просроченные на завтра».`].join("\n");
+      const title = `${one ? "Просрочена" : "Просрочено"} ${plural(rows.length, TASKS).replace("задачу", "задача")}:`;
+      const more = Math.max(0, rows.length - MAX_ROWS);
+      const text = [title, "", ...rows.slice(0, MAX_ROWS).map((t) => humanLine(ctx, t, true)), ...(more ? [`- …и ещё ${more}`] : [])].join("\n");
+      return {
+        text,
+        view: { kind: "tasks", mode: "overdue", date: today, title, ids: rows.slice(0, MAX_ROWS).map((t) => t.id), more },
+        chips: chips([moveChip(ctx, rows, tomorrow, rows.length > 1 ? "Перенести всё на завтра" : "Перенести на завтра"), ask("Спланировать день", "Спланируй мой день")]),
+      };
     }
     case "today": {
       const day = intent.dates[0] ?? today;
       const rows = open.filter((t) => t.due === day).sort(byDue);
-      const overdue = open.filter((t) => t.due !== null && t.due < today).length;
-      const tail = overdue ? [``, `Ещё просрочено: ${overdue} (спросите «что просрочено?»).`] : [];
+      const overdue = overdueRows.length;
+      const note = overdue ? `Ещё просрочено: ${overdue}.` : undefined;
       const name = day === today ? "сегодня" : dayName(day, today).toLowerCase();
-      if (!rows.length) return [`На ${name} задач нет.`, ...tail].join("\n");
-      return [`На ${name} ${plural(rows.length, TASKS).replace("задачу", "задача")}:`, "", ...rows.slice(0, 25).map((t) => humanLine(ctx, t, false)), ...tail].join("\n");
+      const follow = chips([
+        ask("Спланировать день", day === today ? "Спланируй мой день" : `Спланируй ${name}`),
+        ask("Свободные окна", `Свободные окна ${day === today ? "сегодня" : name}`),
+        rows.length ? stepsChip(rows) : null,
+        overdue ? ask("Что просрочено?", "Что просрочено?") : null,
+      ]).slice(0, 3);
+      if (!rows.length) return { text: [`На ${name} задач нет.`, ...(note ? ["", note] : [])].join("\n"), chips: follow };
+      const title = `На ${name} ${plural(rows.length, TASKS).replace("задачу", "задача")}:`;
+      const more = Math.max(0, rows.length - MAX_ROWS);
+      const text = [title, "", ...rows.slice(0, MAX_ROWS).map((t) => humanLine(ctx, t, false)), ...(more ? [`- …и ещё ${more}`] : []), ...(note ? ["", note] : [])].join("\n");
+      return { text, view: { kind: "tasks", mode: "day", date: day, title, ids: rows.slice(0, MAX_ROWS).map((t) => t.id), more, ...(note ? { note } : {}) }, chips: follow };
     }
     case "free": {
       const hours = `${ctx.data.settings?.workStart ?? "09:00"}–${ctx.data.settings?.workEnd ?? "18:00"}`;
-      const lines = intent.dates.slice(0, 7).map((d) => {
-        const slots = freeSlots(ctx.data, d, today, ctx.now);
-        return `- **${dayName(d, today)}:** ${slots.length ? slots.map((s) => `${s.start}–${s.end}`).join(", ") : "свободного времени нет"}`;
-      });
-      return [`Свободное время в рабочие часы (${hours}):`, "", ...lines, "", "Могу поставить туда дела — скажите какие."].join("\n");
+      const days = intent.dates.slice(0, 7).map((d) => ({ date: d, label: dayName(d, today), slots: freeSlots(ctx.data, d, today, ctx.now).map((s) => `${s.start}–${s.end}`) }));
+      const title = `Свободно (${hours}):`;
+      const text = [title, "", ...days.map((d) => `- **${d.label}:** ${d.slots.length ? d.slots.join(", ") : "свободного времени нет"}`)].join("\n");
+      const first = days[0]?.date ?? today;
+      const name = first === today ? "сегодня" : dayName(first, today).toLowerCase();
+      return {
+        text,
+        view: { kind: "free", title, days },
+        chips: [ask(`Что ${first === today ? "на сегодня" : `на ${name}`}?`, `Что у меня ${first === today ? "сегодня" : name}?`), ask("Спланировать день", first === today ? "Спланируй мой день" : `Спланируй ${name}`)],
+      };
     }
     default:
       return null;
   }
+}
+
+/** Follow-ups under a model's answer, from its question and cards (no model). */
+export function chipsAfter(intent: Intent, ctx: ToolContext, proposals: Proposal[]): Chip[] {
+  const out: Chip[] = [];
+  const open = tasksOf(ctx.data).filter((t) => !t.done);
+  const overdue = open.filter((t) => t.due !== null && t.due < ctx.today);
+  if (proposals.some((p) => p.kind === "plan")) out.push(ask("Свободные окна", "Свободные окна сегодня"));
+  else if (intent.kind === "overdue" && overdue.length && !proposals.length) {
+    const chip = moveChip(ctx, overdue.sort(byDue), addDays(ctx.today, 1), overdue.length > 1 ? "Перенести всё на завтра" : "Перенести на завтра");
+    if (chip) out.push(chip);
+  }
+  if (!proposals.length && intent.kind === "today") {
+    out.push(ask("Спланировать день", "Спланируй мой день"));
+    const chip = stepsChip(open.filter((t) => t.due === ctx.today).sort(byDue));
+    if (chip) out.push(chip);
+  }
+  return out.slice(0, 3);
 }

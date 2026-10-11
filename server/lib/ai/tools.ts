@@ -170,6 +170,28 @@ function text(value: unknown, max = 200): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+/** The current values of the fields an update changes («было»). */
+function before(ctx: ToolContext, task: TaskLike, item: Extract<ProposalItem, { op: "update" }>): NonNullable<Extract<ProposalItem, { op: "update" }>["was"]> {
+  const was: NonNullable<Extract<ProposalItem, { op: "update" }>["was"]> = {};
+  if (item.title !== undefined) was.title = task.title;
+  if (item.due !== undefined) was.due = task.due;
+  if (item.start !== undefined) was.start = task.startAt ?? null;
+  if (item.end !== undefined) was.end = task.endAt ?? null;
+  if (item.list !== undefined) was.list = listName(ctx.data, task.listId) ?? null;
+  if (item.priority !== undefined) was.priority = priority(task.priority);
+  return was;
+}
+
+/** A task title or step: no emoji, single spaces, no trailing period. */
+function label(value: unknown, max = 200): string {
+  return text(value, max * 2)
+    .replace(/\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}]|[\u{1F3FB}-\u{1F3FF}]|\uFE0F|\u200D|\u20E3/gu, "")
+    .replace(/\s+/g, " ")
+    .replace(/(?<!\.)\.$/, "")
+    .trim()
+    .slice(0, max);
+}
+
 function date(value: unknown): string | null {
   const s = text(value, 10);
   return DATE.test(s) ? s : null;
@@ -193,7 +215,7 @@ function array(value: unknown, max: number): unknown[] {
 
 function steps(value: unknown): string[] {
   return array(value, 15)
-    .map((s) => text(s, 140))
+    .map((s) => label(s, 140))
     .filter(Boolean);
 }
 
@@ -255,7 +277,7 @@ export function runTool(name: string, rawArgs: string | Args, ctx: ToolContext):
     case "create_tasks": {
       const items: ProposalItem[] = array(args.tasks, 20).flatMap((raw) => {
         const row = (raw ?? {}) as Args;
-        const title = text(row.title, 200);
+        const title = label(row.title, 200);
         if (!title) return [];
         return [
           {
@@ -280,13 +302,15 @@ export function runTool(name: string, rawArgs: string | Args, ctx: ToolContext):
         const task = byId.get(realId(ctx, text(row.id, 200)));
         if (!task) return [];
         const item: ProposalItem = { op: "update", key: ctx.newId(), taskId: task.id, taskTitle: task.title };
-        if (text(row.title)) item.title = text(row.title);
+        if (label(row.title)) item.title = label(row.title);
         if ("due" in row) item.due = date(row.due);
         if ("time" in row) item.start = time(row.time);
         if ("end" in row) item.end = time(row.end);
         if (text(row.list, 60)) item.list = text(row.list, 60);
         if ("priority" in row) item.priority = priority(row.priority);
-        return Object.keys(item).length > 4 ? [item] : [];
+        if (Object.keys(item).length <= 4) return [];
+        item.was = before(ctx, task, item);
+        return [item];
       });
       return propose(`Изменить ${plural(items.length, TASKS)}?`, items, "Предложены изменения.");
     }
@@ -310,9 +334,14 @@ export function runTool(name: string, rawArgs: string | Args, ctx: ToolContext):
         const task = byId.get(realId(ctx, text(row.id, 200)));
         const start = time(row.time);
         if (!task || !start) return [];
-        return [{ op: "update" as const, key: ctx.newId(), taskId: task.id, taskTitle: task.title, due: day, start, end: time(row.end) }];
+        const item: ProposalItem = { op: "update", key: ctx.newId(), taskId: task.id, taskTitle: task.title, due: day, start, end: time(row.end) };
+        item.was = before(ctx, task, item);
+        return [item];
       });
-      return propose(`Расставить ${plural(items.length, TASKS)} по времени?`, items, "Предложено расписание.");
+      items.sort((a, b) => ((a.op === "update" && a.start) || "").localeCompare((b.op === "update" && b.start) || ""));
+      const result = propose(`Расставить ${plural(items.length, TASKS)} по времени?`, items, "Предложено расписание.");
+      if (result.proposal) result.proposal.kind = "plan";
+      return result;
     }
     case "create_habits": {
       const items: ProposalItem[] = array(args.habits, 10).flatMap((raw) => {

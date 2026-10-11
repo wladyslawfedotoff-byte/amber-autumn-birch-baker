@@ -12,7 +12,7 @@ import { principalForLogin, type Principal } from "../principal.ts";
 import { aclFor } from "../sync-access.ts";
 import { dataDir, getStore, type SyncStore } from "../sync-store.ts";
 import { runAgent } from "./agent.ts";
-import { intentOf, localAnswer } from "./context.ts";
+import { chipsAfter, intentOf, localAnswer } from "./context.ts";
 import { aiEnabled, readAiConfig, type AiConfig } from "./config.ts";
 import { AssistantStore, titleFrom, type AssistantSettings } from "./conversations.ts";
 import { ProviderChain, ProviderError, UsageBook, chatClient, type Blocked, type ChatFn } from "./provider.ts";
@@ -218,6 +218,8 @@ export class Assistant {
           log("info", "assistant.json_mode", { provider: endpoint.provider, model: endpoint.model });
         }
         this.chain.report(endpoint, "ok", { tokens });
+        const question = [...args.history].reverse().find((m) => m.role === "user")?.text ?? "";
+        const chips = chipsAfter(intentOf(question, args.today), ctx, result.proposals);
         const message: ChatMessage = {
           id: randomUUID(),
           role: "assistant",
@@ -226,6 +228,7 @@ export class Assistant {
           provider: endpoint.which,
           source,
           ...(result.proposals.length ? { proposals: result.proposals } : {}),
+          ...(chips.length ? { chips } : {}),
         };
         return { type: "answer", message };
       } catch (error) {
@@ -256,15 +259,25 @@ export class Assistant {
     const intent = intentOf(input.text, input.today);
     if (!intent.local) return false;
     const ctx = { data: await this.deps.loadData(user), today: input.today, now: input.now, newId: () => randomUUID() };
-    const text = localAnswer(intent, ctx);
-    if (!text) return false;
+    const answer = localAnswer(intent, ctx);
+    if (!answer) return false;
+    const { text } = answer;
     const { store } = this.deps;
     const previous = input.conversationId ? await store.get(user.login, input.conversationId) : null;
     const conversationId = previous?.id ?? randomUUID();
     const userMessage: ChatMessage = { id: randomUUID(), role: "user", text: input.text, at: this.now() };
     emit({ type: "start", conversationId, provider: "app", source: APP_SOURCE, userMessageId: userMessage.id });
     emit({ type: "delta", text });
-    const message: ChatMessage = { id: randomUUID(), role: "assistant", text, at: this.now(), provider: "app", source: APP_SOURCE };
+    const message: ChatMessage = {
+      id: randomUUID(),
+      role: "assistant",
+      text,
+      at: this.now(),
+      provider: "app",
+      source: APP_SOURCE,
+      ...(answer.view ? { view: answer.view } : {}),
+      ...(answer.chips?.length ? { chips: answer.chips } : {}),
+    };
     const conv = await store.append(user.login, conversationId, [userMessage, message], titleFrom(input.text));
     log("info", "assistant.local_answer", { intent: intent.kind });
     emit({ type: "done", message, title: conv.title });
