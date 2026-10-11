@@ -12,6 +12,8 @@
  *                    AI_<NAME>_CHECK_URL (for «Проверить связь», default <base>/models),
  *                    AI_<NAME>_JSON_FORMAT=0 (no response_format in JSON mode),
  *                    AI_<NAME>_TOOLS=auto|native|json (function calling or JSON),
+ *                    AI_<NAME>_MAX_TOKENS (default AI_MAX_TOKENS=600, 0 = no cap),
+ *                    AI_<NAME>_REASONING_EFFORT=low|medium|high (reasoning models),
  *                    AI_<NAME>_KIND=local (+ AI_<NAME>_TYPE) makes it a home-network model too.
  *
  * Simple setups (no AI_PROVIDERS):
@@ -58,6 +60,10 @@ export type ProviderConfig = {
   monthlyTokens: number;
   /** AI_<NAME>_TOOLS (AI_LOCAL_TOOLS for the home PC). */
   tools: ToolsMode;
+  /** Answer length cap (max_tokens); 0 = not sent. AI_<NAME>_MAX_TOKENS, else AI_MAX_TOKENS. */
+  maxTokens: number;
+  /** AI_<NAME>_REASONING_EFFORT (low|medium|high) for reasoning models; null = not sent. */
+  reasoningEffort: string | null;
 };
 
 export type AiConfig = {
@@ -71,6 +77,8 @@ export type AiConfig = {
   tools: "auto" | "json";
   /** A failed provider/model is skipped for this long. */
   cooldownMs: number;
+  /** Simple questions answered by the app without a model (AI_LOCAL_ANSWERS=0 turns it off). */
+  localAnswers: boolean;
 };
 
 type Env = Record<string, string | undefined>;
@@ -112,10 +120,16 @@ function toolsMode(raw: string): ToolsMode {
 /** AI_<NAME>_TOOLS per provider; the home PC also reads AI_LOCAL_TOOLS. */
 function withTools(env: Env, providers: ProviderConfig[]): ProviderConfig[] {
   return providers.map((p) => {
-    const own = str(env, `AI_${envKey(p.name)}_TOOLS`) || (p.kind === "local" ? str(env, "AI_LOCAL_TOOLS") : "");
-    return { ...p, tools: toolsMode(own) };
+    const key = envKey(p.name);
+    const own = str(env, `AI_${key}_TOOLS`) || (p.kind === "local" ? str(env, "AI_LOCAL_TOOLS") : "");
+    const capRaw = str(env, `AI_${key}_MAX_TOKENS`) ? `AI_${key}_MAX_TOKENS` : "AI_MAX_TOKENS";
+    const effort = str(env, `AI_${key}_REASONING_EFFORT`).toLowerCase();
+    return { ...p, tools: toolsMode(own), maxTokens: int(env, capRaw, DEFAULT_MAX_TOKENS, 0, 100_000), reasoningEffort: /^(minimal|low|medium|high)$/.test(effort) ? effort : null };
   });
 }
+
+/** Enough for a reply with a list or a JSON answer with a few actions. */
+export const DEFAULT_MAX_TOKENS = 600;
 
 function localType(raw: string): LocalType {
   const t = raw.toLowerCase().replace(/[^a-z]/g, "");
@@ -129,7 +143,7 @@ function localType(raw: string): LocalType {
  */
 function localProvider(name: string, url: string, model: string, type: LocalType): ProviderConfig {
   const root = trimSlash(url).replace(/\/v1$/, "");
-  return { name, kind: "local", baseUrl: `${root}/v1`, localRoot: root, localType: type, checkUrl: null, jsonFormat: type !== "lmstudio", apiKey: null, models: models(model, type === "ollama" ? DEFAULT_LOCAL_MODEL : ""), paid: false, monthlyTokens: 0, tools: "auto" };
+  return { name, kind: "local", baseUrl: `${root}/v1`, localRoot: root, localType: type, checkUrl: null, jsonFormat: type !== "lmstudio", apiKey: null, models: models(model, type === "ollama" ? DEFAULT_LOCAL_MODEL : ""), paid: false, monthlyTokens: 0, tools: "auto", maxTokens: DEFAULT_MAX_TOKENS, reasoningEffort: null };
 }
 
 /** AI_LOCAL_* with the older AI_OLLAMA_* names as aliases. */
@@ -174,6 +188,8 @@ function chainFrom(env: Env, names: string[]): ProviderConfig[] {
       paid: flag(env, `AI_${key}_PAID`),
       monthlyTokens: int(env, `AI_${key}_MONTHLY_TOKENS`, 0, 0, 1_000_000_000),
       tools: "auto",
+      maxTokens: DEFAULT_MAX_TOKENS,
+      reasoningEffort: null,
     });
   }
   return out;
@@ -189,7 +205,7 @@ function simpleFrom(env: Env, mode: Exclude<AiMode, "off" | "chain">): ProviderC
     const key = str(env, "AI_API_KEY");
     const url = str(env, "AI_BASE_URL");
     const model = str(env, "AI_MODEL");
-    const base = { name: "cloud", kind: "cloud" as const, localRoot: null, localType: null, checkUrl: null, jsonFormat: true, tools: "auto" as const, paid: flag(env, "AI_PAID"), monthlyTokens: int(env, "AI_MONTHLY_TOKENS", 0, 0, 1_000_000_000) };
+    const base = { name: "cloud", kind: "cloud" as const, localRoot: null, localType: null, checkUrl: null, jsonFormat: true, tools: "auto" as const, maxTokens: DEFAULT_MAX_TOKENS, reasoningEffort: null, paid: flag(env, "AI_PAID"), monthlyTokens: int(env, "AI_MONTHLY_TOKENS", 0, 0, 1_000_000_000) };
     if (key && url && model) cloud = { ...base, baseUrl: trimSlash(url), apiKey: key, models: models(model) };
     else if (str(env, "XAI_API_KEY") && !key) cloud = { ...base, baseUrl: trimSlash(url || LEGACY_URL), apiKey: str(env, "XAI_API_KEY"), models: models(model, LEGACY_MODEL) };
   }
@@ -205,6 +221,7 @@ export function readAiConfig(env: Env = process.env): AiConfig {
     rateLimit: int(env, "AI_RATE_LIMIT", 60, 0, 10_000),
     tools: str(env, "AI_TOOLS").toLowerCase() === "json" ? ("json" as const) : ("auto" as const),
     cooldownMs: int(env, "AI_COOLDOWN_SEC", 300, 0, 86_400) * 1000,
+    localAnswers: !/^(0|false|no|нет|off)$/i.test(str(env, "AI_LOCAL_ANSWERS")),
   };
   if (raw === "off") return { mode: "off", providers: [], ...base };
   const chain = str(env, "AI_PROVIDERS");

@@ -22,6 +22,9 @@ export type Endpoint = {
   jsonFormat?: boolean;
   /** auto | native | json (see ToolsMode); json once the model was seen ignoring tools. */
   tools?: ToolsMode;
+  /** max_tokens; 0/undefined = not sent. */
+  maxTokens?: number;
+  reasoningEffort?: string | null;
 };
 
 /** Why nothing could be asked (for a clear message). */
@@ -225,7 +228,7 @@ export class ProviderChain {
           continue;
         }
         const tools = p.tools === "auto" && this.jsonOnly.has(`${p.name}|${model}`) ? "json" : p.tools;
-        endpoints.push({ provider: p.name, which: p.kind, baseUrl: modelUrl(p.baseUrl, model), apiKey: p.apiKey, model, paid: p.paid, jsonFormat, tools });
+        endpoints.push({ provider: p.name, which: p.kind, baseUrl: modelUrl(p.baseUrl, model), apiKey: p.apiKey, model, paid: p.paid, jsonFormat, tools, maxTokens: p.maxTokens, reasoningEffort: p.reasoningEffort });
       }
     }
     return { endpoints, blocked: [...blocked] };
@@ -311,7 +314,7 @@ export type ChatRequest = {
   signal?: AbortSignal;
 };
 
-export type ChatReply = { content: string; toolCalls: WireToolCall[]; tokens: number };
+export type ChatReply = { content: string; toolCalls: WireToolCall[]; tokens: number; finish?: string };
 
 export type ChatFn = (request: ChatRequest) => Promise<ChatReply>;
 
@@ -337,8 +340,16 @@ export function isLimit(status: number, body: string): boolean {
 }
 
 /** Streams a chat completion; collects text deltas and tool calls. */
+/** Endpoints that rejected max_tokens / reasoning_effort: asked without them from now on. */
+const plainEndpoints = new Set<string>();
+const PARAM_WORDS = /max_tokens|max_completion_tokens|reasoning_effort|unsupported (parameter|value)|unrecognized|unknown (field|param|argument)|additional properties|not permitted/i;
+
+/** The endpoint refused one of the optional parameters (max_tokens, reasoning_effort). */
+class ParamsRejectedError extends Error {}
+
 export function chatClient(endpoint: Endpoint, timeoutMs: number, fetchFn: FetchFn = fetch): ChatFn {
-  return async ({ messages, tools, onDelta, signal }) => {
+  const key = `${endpoint.provider}|${endpoint.model}`;
+  const attempt = async ({ messages, tools, onDelta, signal }: ChatRequest, extras: boolean): Promise<ChatReply> => {
     const timeout = AbortSignal.timeout(timeoutMs);
     const merged = signal ? AbortSignal.any([signal, timeout]) : timeout;
     let res: Response;
@@ -355,6 +366,8 @@ export function chatClient(endpoint: Endpoint, timeoutMs: number, fetchFn: Fetch
           stream: true,
           // Some cloud models only accept their own default temperature.
           ...(endpoint.which === "local" ? { temperature: 0.2 } : {}),
+          ...(extras && endpoint.maxTokens ? { max_tokens: endpoint.maxTokens } : {}),
+          ...(extras && endpoint.reasoningEffort ? { reasoning_effort: endpoint.reasoningEffort } : {}),
           ...(tools ? { tools, tool_choice: "auto" } : endpoint.jsonFormat === false ? {} : { response_format: { type: "json_object" } }),
         }),
         signal: merged,
@@ -365,12 +378,18 @@ export function chatClient(endpoint: Endpoint, timeoutMs: number, fetchFn: Fetch
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       if (isLimit(res.status, text)) throw new ProviderError(`limit ${res.status}`, false, true);
+      if (extras && (res.status === 400 || res.status === 422) && PARAM_WORDS.test(text)) throw new ParamsRejectedError();
       if (tools && res.status >= 400 && res.status < 500 && /tool|function/i.test(text)) throw new ToolsUnsupportedError("tools unsupported");
       throw new ProviderError(`http ${res.status}`, false);
     }
     if (!res.body) throw new ProviderError("empty body", false);
     // Not a stream: an error reported with HTTP 200, or a plain (non-streamed) completion.
-    if (/application\/json/i.test(res.headers.get("content-type") ?? "")) return plainReply(await res.text(), Boolean(tools), onDelta);
+    if (/application\/json/i.test(res.headers.get("content-type") ?? "")) {
+      const text = await res.text();
+      const status = embeddedStatus(tryJson(text));
+      if (extras && (status === 400 || status === 422) && PARAM_WORDS.test(text)) throw new ParamsRejectedError();
+      return plainReply(text, Boolean(tools), onDelta);
+    }
     try {
       return await readStream(res.body, onDelta);
     } catch (error) {
@@ -378,6 +397,33 @@ export function chatClient(endpoint: Endpoint, timeoutMs: number, fetchFn: Fetch
       throw new ProviderError(timeout.aborted ? "timeout" : "stream broken", true);
     }
   };
+  return async (request) => {
+    const extras = Boolean(endpoint.maxTokens || endpoint.reasoningEffort) && !plainEndpoints.has(key);
+    let reply: ChatReply;
+    try {
+      reply = await attempt(request, extras);
+    } catch (error) {
+      if (!(error instanceof ParamsRejectedError)) throw error;
+      plainEndpoints.add(key);
+      log("info", "assistant.params_rejected", { provider: endpoint.provider, model: endpoint.model });
+      return attempt(request, false);
+    }
+    // The cap ate the whole answer (a reasoning model thinks inside it): once more without the cap.
+    if (extras && reply.finish === "length" && !reply.content.trim() && !reply.toolCalls.length) {
+      log("info", "assistant.cap_too_small", { provider: endpoint.provider, model: endpoint.model, cap: endpoint.maxTokens ?? 0 });
+      const again = await attempt(request, false);
+      return { ...again, tokens: again.tokens + reply.tokens };
+    }
+    return reply;
+  };
+}
+
+function tryJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 /** A JSON (non-streamed) answer: {"code":…,"msg":…} errors or a regular completion. */
@@ -409,6 +455,7 @@ type StreamChunk = {
   error?: { message?: string; code?: number | string };
   msg?: string;
   choices?: {
+    finish_reason?: string | null;
     delta?: { content?: unknown; tool_calls?: StreamCall[]; function_call?: { name?: string; arguments?: string } };
     message?: { content?: unknown; tool_calls?: StreamCall[] };
     text?: string;
@@ -427,6 +474,37 @@ function textOf(content: unknown): string {
  * objects glued together («{…}data: {…}»), an object spread over several
  * lines, or raw line breaks inside strings. Anything between objects is skipped.
  */
+/**
+ * Makes control characters JSON-safe: inside strings they become \u00XX,
+ * outside strings they are dropped. Some services pass a model's special
+ * tokens (e.g. an «escape» token) through as raw control bytes, which makes
+ * the whole event invalid JSON — and its text, often the start of the
+ * answer, used to be lost.
+ */
+export function escapeControls(text: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      out += code < 0x20 ? `\\u${code.toString(16).padStart(4, "0")}` : ch;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    if (code < 0x20 && ch !== "\n" && ch !== "\t" && ch !== "\r") continue;
+    out += ch;
+  }
+  return out;
+}
+
+/** Control characters that are not text (special tokens leaked as bytes). */
+// eslint-disable-next-line no-control-regex -- matching control bytes is the point
+const JUNK_CONTROLS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufeff]/g;
+
 export function scanObjects(text: string): unknown[] {
   const out: unknown[] = [];
   let depth = 0;
@@ -445,7 +523,8 @@ export function scanObjects(text: string): unknown[] {
       if (escaped) escaped = false;
       else if (ch === "\\") escaped = true;
       else if (ch === '"') inString = false;
-      current += ch === "\n" ? "\\n" : ch === "\r" ? "" : ch;
+      const code = ch.charCodeAt(0);
+      current += ch === "\n" ? "\\n" : ch === "\r" ? "" : code < 0x20 ? `\\u${code.toString(16).padStart(4, "0")}` : ch;
       continue;
     }
     current += ch;
@@ -479,6 +558,9 @@ export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (te
   let usage = 0;
   let streamError = "";
   let unparsed = 0;
+  let recovered = 0;
+  let finish: string | undefined;
+  let debugLines = process.env.AI_DEBUG_STREAM === "1" ? 8 : 0;
   let pending: string | null = null;
   const calls: { id: string; name: string; args: string }[] = [];
 
@@ -506,10 +588,11 @@ export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (te
     if (typeof chunk.usage?.total_tokens === "number") usage = chunk.usage.total_tokens;
     const choice = chunk.choices?.[0];
     if (!choice) return;
+    if (typeof choice.finish_reason === "string") finish = choice.finish_reason;
     const delta = choice.delta;
     // A whole message (some services end the stream with it): only if nothing came as deltas.
     const whole = !delta && choice.message ? textOf(choice.message.content) : "";
-    const text = delta ? textOf(delta.content) : whole && !content ? whole : !delta ? (choice.text ?? "") : "";
+    const text = (delta ? textOf(delta.content) || (typeof choice.text === "string" ? choice.text : "") : whole && !content ? whole : (choice.text ?? "")).replace(JUNK_CONTROLS, "");
     if (text) {
       content += text;
       onDelta?.(text);
@@ -520,22 +603,28 @@ export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (te
   };
 
   const tryParse = (payload: string): boolean => {
-    try {
-      onChunk(JSON.parse(payload));
-      return true;
-    } catch {
-      return false;
+    for (const candidate of [payload, escapeControls(payload)]) {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (candidate !== payload) recovered++;
+        onChunk(parsed);
+        return true;
+      } catch {
+        // try the next form
+      }
     }
+    return false;
   };
   const flushPending = () => {
     if (pending === null) return;
     const found = scanObjects(pending);
     if (!found.length && pending.trim()) unparsed++;
+    else recovered += found.length;
     found.forEach(onChunk);
     pending = null;
   };
   const handle = (line: string) => {
-    const text = line.replace(/\r$/, "");
+    const text = line.replace(/\r$/, "").replace(/^\ufeff/, "");
     if (!text.trim()) return flushPending();
     if (text.startsWith("data:")) {
       flushPending();
@@ -561,6 +650,11 @@ export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (te
     buffer += decoder.decode(value, { stream: true });
     let newline: number;
     while ((newline = buffer.indexOf("\n")) >= 0) {
+      if (debugLines > 0) {
+        debugLines--;
+        // AI_DEBUG_STREAM=1: the first raw lines, escaped (they contain the answer text).
+        log("info", "assistant.stream_debug", { line: JSON.stringify(buffer.slice(0, Math.min(newline, 400))) });
+      }
       handle(buffer.slice(0, newline));
       buffer = buffer.slice(newline + 1);
     }
@@ -569,6 +663,7 @@ export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (te
   if (buffer) handle(buffer);
   flushPending();
   if (unparsed) log("warn", "assistant.stream_unparsed", { events: unparsed });
+  else if (recovered) log("info", "assistant.stream_repaired", { events: recovered });
   if (streamError && !content) {
     if (/^\s*40[13]\b/.test(streamError)) throw new ProviderError(`http ${streamError.trim().slice(0, 3)}`, false);
     throw new ProviderError("stream error", false, /rate.?limit|quota|credit|insufficient|exceeded|too many|429|402/i.test(streamError));
@@ -576,6 +671,7 @@ export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (te
   return {
     content,
     tokens: usage,
+    ...(finish ? { finish } : {}),
     toolCalls: calls.filter((call) => call?.name).map((call, i) => ({ id: call.id || `call_${i}`, type: "function" as const, function: { name: call.name, arguments: call.args || "{}" } })),
   };
 }

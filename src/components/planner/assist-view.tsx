@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, Check, Clock, Cloud, Cpu, Menu, Mic, MicOff, Plus, RotateCw, ShieldCheck, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowUp, Check, Zap, Clock, Cloud, Cpu, Menu, Mic, MicOff, Plus, RotateCw, ShieldCheck, Sparkles, Square, Trash2, X } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
 import { AssistMarkdown } from "@/components/planner/assist-markdown";
+import { AnswerViewCard, ChipRow, DiffRows, PlanTimeline } from "@/components/planner/assist-cards";
+import { diffLines, withoutPlanLines } from "@/lib/assistant/view";
 import { cn } from "@/lib/cn";
-import { formatShortDay, todayIso } from "@/lib/dates";
+import { dueLabel, formatShortDay, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { applyItems, itemTitle, withTitle } from "@/lib/assistant/apply";
 import { assistantApi, streamChat } from "@/lib/assistant/client";
-import type { AiWhich, AssistantStatus, ChatEvent, ChatMessage, ConversationSummary, Proposal, ProposalItem } from "@/lib/assistant/types";
+import type { AiWhich, AnswerSource, AssistantStatus, ChatEvent, ChatMessage, Chip, ConversationSummary, Proposal, ProposalItem } from "@/lib/assistant/types";
 
 const SUGGESTIONS = ["Спланируй мой день", "Разбей задачу на шаги", "Добавь дела из текста", "Что у меня просрочено?"];
 const PRIORITY = ["", "низкий", "средний", "высокий"];
@@ -22,8 +24,15 @@ function uid(): string {
 }
 
 /** «локально» / «облако» and which provider and model answered. */
-export function ProviderBadge({ which, source, className }: { which: AiWhich; source?: string; className?: string }) {
+export function ProviderBadge({ which, source, className }: { which: AnswerSource; source?: string; className?: string }) {
   const name = source?.split(" · ")[0];
+  if (which === "app")
+    return (
+      <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-ok/12 px-1.5 text-[0.6875rem] font-medium text-ok", className)} title="Ответ посчитан приложением по вашим задачам — без модели, токены не тратятся">
+        <Zap className="size-3 shrink-0" aria-hidden="true" />
+        <span className="truncate">без модели</span>
+      </span>
+    );
   return (
     <span
       className={cn("inline-flex h-5 max-w-[11rem] shrink-0 items-center gap-1 rounded-full px-1.5 text-[0.6875rem] font-medium", which === "local" ? "bg-accent/12 text-accent" : "bg-elevated text-muted", className)}
@@ -101,7 +110,7 @@ function ConsentLine({ title, children }: { title: string; children: ReactNode }
 function itemMeta(item: ProposalItem): string {
   const parts: string[] = [];
   const when = (due: string | null | undefined, start: string | null | undefined, end: string | null | undefined) => {
-    if (due) parts.push(due === todayIso() ? "сегодня" : formatShortDay(due));
+    if (due) parts.push(dueLabel(due, todayIso()));
     if (start) parts.push(end ? `${start}–${end}` : start);
   };
   switch (item.op) {
@@ -109,7 +118,6 @@ function itemMeta(item: ProposalItem): string {
       when(item.due, item.start, item.end);
       if (item.list) parts.push(item.list);
       if (item.priority) parts.push(`приоритет ${PRIORITY[item.priority]}`);
-      if (item.subtasks.length) parts.push(`${item.subtasks.length} шаг.`);
       break;
     case "update":
       if (item.due !== undefined && !item.due) parts.push("без даты");
@@ -136,30 +144,51 @@ function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; on
   const [items, setItems] = useState(proposal.items);
   const pending = proposal.status === "pending";
   const editable = (item: ProposalItem) => item.op === "create" || item.op === "habit";
+  const updates = items.filter((item): item is Extract<ProposalItem, { op: "update" }> => item.op === "update");
+  const timeline = proposal.kind === "plan" && updates.length === items.length && items.length > 0;
+  const remove = (key: string) => setItems(items.filter((it) => it.key !== key));
   return (
     <div className="mt-2 overflow-hidden rounded-2xl bg-elevated" data-proposal={proposal.id}>
       <p className="flex items-center gap-2 px-3 pt-2.5 pb-1 text-[0.9375rem] font-semibold">
         <Sparkles className="size-4 text-accent" aria-hidden="true" />
         <span className="flex-1">{pending ? proposal.title.replace(/\d+/, String(items.length)) : proposal.title.replace(/\?$/, "")}</span>
       </p>
-      <ul className="divide-y divide-line/70">
+      {timeline ? <PlanTimeline items={updates} pending={pending} onRemove={remove} /> : null}
+      <ul className={cn("divide-y divide-line/70", timeline && "hidden")}>
         {items.map((item) => (
           <li key={item.key} className="flex items-start gap-2 px-3 py-2">
             <span className="min-w-0 flex-1">
               {pending && editable(item) ? (
-                <input
+                <textarea
                   value={itemTitle(item)}
+                  // Browsers without field-sizing: about 34 characters fit a phone line.
+                  rows={Math.min(3, Math.max(1, Math.ceil(itemTitle(item).length / 34)))}
                   aria-label="Название"
-                  onChange={(event) => setItems(items.map((it) => (it.key === item.key ? withTitle(it, event.target.value) : it)))}
-                  className="w-full bg-transparent text-[0.9375rem] outline-none"
+                  onChange={(event) => setItems(items.map((it) => (it.key === item.key ? withTitle(it, event.target.value.replace(/\n/g, " ")) : it)))}
+                  className="block w-full resize-none bg-transparent text-[0.9375rem] leading-snug outline-none [field-sizing:content]"
                 />
               ) : (
                 <span className={cn("block text-[0.9375rem]", proposal.status === "dismissed" && "text-muted line-through")}>{itemTitle(item)}</span>
               )}
-              {itemMeta(item) ? <span className="block text-xs text-muted">{itemMeta(item)}</span> : null}
+              {item.op === "update" && diffLines(item).length ? (
+                <DiffRows item={item} done={!pending} />
+              ) : itemMeta(item) ? (
+                <span className="block text-xs text-muted">{itemMeta(item)}</span>
+              ) : null}
+              {item.op === "create" && item.notes ? <span className="mt-0.5 line-clamp-2 block text-xs text-subtle">{item.notes}</span> : null}
+              {item.op === "create" && item.subtasks.length ? (
+                <ul className="mt-1 space-y-0.5">
+                  {item.subtasks.map((step) => (
+                    <li key={step} className="flex items-center gap-1.5 text-[0.8125rem] text-muted">
+                      <span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] border border-line" />
+                      {step}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </span>
             {pending ? (
-              <button type="button" aria-label={`Убрать «${itemTitle(item)}»`} onClick={() => setItems(items.filter((it) => it.key !== item.key))} className="-mr-2 flex size-9 shrink-0 items-center justify-center text-subtle">
+              <button type="button" aria-label={`Убрать «${itemTitle(item)}»`} onClick={() => remove(item.key)} className="-mr-2 flex size-9 shrink-0 items-center justify-center text-subtle">
                 <X className="size-4" />
               </button>
             ) : null}
@@ -258,7 +287,7 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
   const [history, setHistory] = useState<ConversationSummary[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
-  const [lastProvider, setLastProvider] = useState<{ which: AiWhich; source?: string } | null>(null);
+  const [lastProvider, setLastProvider] = useState<{ which: AnswerSource; source?: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const recognition = useRef<Recognition | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -427,6 +456,16 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
     if (conversationId) void assistantApi.setProposal(conversationId, proposal.id, "dismissed").catch(() => undefined);
   }
 
+  /** A follow-up chip: ask the next question, or show its ready card (built without a model). */
+  function takeChip(message: ChatMessage, chip: Chip) {
+    if (chip.ask) return void send(chip.ask);
+    const card = chip.proposal;
+    if (!card) return;
+    setMessages((list) =>
+      list.map((m) => (m.id === message.id ? { ...m, proposals: m.proposals?.some((p) => p.id === card.id) ? m.proposals : [...(m.proposals ?? []), card], chips: m.chips?.filter((c) => c !== chip) } : m)),
+    );
+  }
+
   /** «Повторить»: the failed answer and its question go away and are asked again. */
   function retry(message: ChatMessage) {
     const index = messages.findIndex((m) => m.id === message.id);
@@ -533,9 +572,13 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
                 </li>
               ) : (
                 <li key={m.id} className="max-w-[95%]">
-                  {m.text ? (
+                  {m.view && !m.error ? (
+                    <AnswerViewCard view={m.view} onOpen={onOpen} />
+                  ) : m.text ? (
                     m.error ? (
                       <p className="text-[0.9375rem] whitespace-pre-wrap text-danger">{m.text}</p>
+                    ) : m.proposals?.some((p) => p.kind === "plan") ? (
+                      withoutPlanLines(m.text) ? <AssistMarkdown text={withoutPlanLines(m.text)} /> : null
                     ) : (
                       <AssistMarkdown text={m.text} />
                     )
@@ -549,6 +592,7 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
                   {m.proposals?.map((p) => (
                     <ProposalCard key={p.id} proposal={p} onApply={(items) => apply(m, p, items)} onDismiss={() => dismiss(m, p)} />
                   ))}
+                  {m.chips?.length && !m.error && m.id === messages.at(-1)?.id ? <ChipRow chips={m.chips} disabled={busy} onChip={(chip) => takeChip(m, chip)} /> : null}
                   {m.source && !m.error && (m.text || m.proposals?.length) ? <p className="mt-1 truncate text-[0.6875rem] text-muted/80">{m.source}</p> : null}
                   {m.error && !busy && m.id === messages.at(-1)?.id ? (
                     <FailedActions message={m} canQueue={Boolean(m.retryable && conversationId)} onRetry={() => retry(m)} onPostpone={() => void postpone(m)} onCancel={() => void cancelQueued(m)} />
