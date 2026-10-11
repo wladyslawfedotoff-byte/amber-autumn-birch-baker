@@ -15,7 +15,9 @@ import {
   Palette,
   PanelBottom,
   PlusCircle,
+  Sparkles,
 } from "lucide-react";
+import { AssistantSection } from "@/components/planner/assist-settings";
 import { TAB_ICONS } from "@/components/planner/tab-icons";
 import { Sheet } from "@/components/ui/sheet";
 import { SwitchRow } from "@/components/ui/rows";
@@ -325,7 +327,7 @@ function BackupSection() {
   );
 }
 
-type SheetId = "profile" | "look" | "tabs" | "notify" | "datetime" | "connection" | "archive" | "backup" | "about";
+type SheetId = "profile" | "look" | "tabs" | "notify" | "datetime" | "connection" | "archive" | "backup" | "assistant" | "about";
 
 const SHEET_TITLES: Record<SheetId, string> = {
   profile: "Профиль",
@@ -336,6 +338,7 @@ const SHEET_TITLES: Record<SheetId, string> = {
   connection: "Подключение",
   archive: "Готово и архив",
   backup: "Резервная копия",
+  assistant: "Помощник",
   about: "О приложении",
 };
 
@@ -671,6 +674,7 @@ export function SettingsView() {
           onOpen={setOpen}
         />
         <NavRow id="backup" icon={HardDriveDownload} color="#14b8a6" label="Резервная копия" onOpen={setOpen} />
+        {profile.assistant ? <NavRow id="assistant" icon={Sparkles} color="#0ea5e9" label="Помощник" onOpen={setOpen} /> : null}
       </Group>
 
       <Group>
@@ -687,6 +691,7 @@ export function SettingsView() {
           {open === "connection" ? <ConnectionSection /> : null}
           {open === "archive" ? <ArchiveSection /> : null}
           {open === "backup" ? <BackupSection /> : null}
+          {open === "assistant" ? <AssistantSection /> : null}
           {open === "about" ? <AboutSection /> : null}
         </div>
       </Sheet>

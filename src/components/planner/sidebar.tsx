@@ -83,7 +83,7 @@ export function Sidebar({
   const doneCount = recentDone(tasks, now, archiveDays).length;
   const archiveCount = archivedTasks(tasks, now, archiveDays).length;
   const habitLeft = habitsForDay(habits, today).filter((h) => !h.checks.includes(today)).length;
-  // «Помощник» needs XAI_API_KEY on the server; hide it otherwise.
+  // «Помощник» needs AI_* settings on the server; hide it otherwise.
   const profile = useCapabilities();
   const { assistant } = profile;
   const tools = drawerItems(assistant ? TOOLS : TOOLS.filter((item) => item.id !== "assist"), tabBar, phone);

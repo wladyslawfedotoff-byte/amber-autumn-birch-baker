@@ -27,6 +27,13 @@ export function principalOf(event: ServerEvent): Principal | null {
   const config = getAuthConfig();
   if (!isActive(config) && config.mode !== "disabled") return null;
   const login = typeof event.context[KEY] === "string" ? (event.context[KEY] as string) : config.mode === "disabled" ? config.owner : "";
+  return principalForLogin(login);
+}
+
+/** The profile of a configured login (background work such as queued assistant answers). */
+export function principalForLogin(login: string): Principal | null {
+  const config = getAuthConfig();
+  if (!isActive(config) && config.mode !== "disabled") return null;
   const account = config.accounts.get(login);
   if (!account) return null;
   return {
