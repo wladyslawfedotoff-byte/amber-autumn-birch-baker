@@ -146,7 +146,15 @@ export class AssistantStore {
     return this.update(login, (data) => {
       const conv = data.conversations.find((c) => c.id === conversationId);
       for (const message of conv?.messages ?? []) {
-        const proposal = message.proposals?.find((p) => p.id === proposalId);
+        let proposal = message.proposals?.find((p) => p.id === proposalId);
+        // A card opened from a chip («Перенести всё на завтра») becomes a normal card of that answer.
+        const chip = proposal ? undefined : message.chips?.find((c) => c.proposal?.id === proposalId);
+        if (chip?.proposal) {
+          proposal = chip.proposal;
+          message.proposals = [...(message.proposals ?? []), proposal];
+          message.chips = message.chips?.filter((c) => c !== chip);
+          if (!message.chips?.length) delete message.chips;
+        }
         if (proposal) {
           proposal.status = status;
           if (items) proposal.items = items;

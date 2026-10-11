@@ -12,6 +12,7 @@ import { principalForLogin, type Principal } from "../principal.ts";
 import { aclFor } from "../sync-access.ts";
 import { dataDir, getStore, type SyncStore } from "../sync-store.ts";
 import { runAgent } from "./agent.ts";
+import { chipsAfter, intentOf, localAnswer } from "./context.ts";
 import { aiEnabled, readAiConfig, type AiConfig } from "./config.ts";
 import { AssistantStore, titleFrom, type AssistantSettings } from "./conversations.ts";
 import { ProviderChain, ProviderError, UsageBook, chatClient, type Blocked, type ChatFn } from "./provider.ts";
@@ -22,7 +23,10 @@ const CLOUD_OFF = "Помощник сейчас недоступен: комп�
 const PAID_OFF = "Помощник сейчас недоступен: бесплатные модели не отвечают, а платные выключены в «Настройках → Помощник».";
 const BUSY = "Помощник сейчас недоступен: все модели заняты или исчерпали лимит. Попробуйте через несколько минут.";
 const GAVE_UP = "Не удалось получить ответ за сутки: модели так и не ответили. Можно повторить.";
-const HISTORY = 12;
+/** Earlier messages sent with a question (tokens!); long ones are cut. */
+const HISTORY = 4;
+const APP_SOURCE = "Пора · без модели";
+const HISTORY_CHARS = 600;
 /** «Отложить» keeps trying for a day at most. */
 export const QUEUE_MAX_AGE_MS = 24 * 3_600_000;
 
@@ -38,7 +42,7 @@ function historyOf(messages: ChatMessage[]): { role: "user" | "assistant"; text:
   return messages
     .filter((m) => !m.error && m.text)
     .slice(-HISTORY)
-    .map((m) => ({ role: m.role, text: m.text }));
+    .map((m) => ({ role: m.role, text: m.text.length > HISTORY_CHARS ? `${m.text.slice(0, HISTORY_CHARS)}…` : m.text }));
 }
 
 /** Server-local date and time (TZ of the container) for background answers. */
@@ -214,6 +218,8 @@ export class Assistant {
           log("info", "assistant.json_mode", { provider: endpoint.provider, model: endpoint.model });
         }
         this.chain.report(endpoint, "ok", { tokens });
+        const question = [...args.history].reverse().find((m) => m.role === "user")?.text ?? "";
+        const chips = chipsAfter(intentOf(question, args.today), ctx, result.proposals);
         const message: ChatMessage = {
           id: randomUUID(),
           role: "assistant",
@@ -222,6 +228,7 @@ export class Assistant {
           provider: endpoint.which,
           source,
           ...(result.proposals.length ? { proposals: result.proposals } : {}),
+          ...(chips.length ? { chips } : {}),
         };
         return { type: "answer", message };
       } catch (error) {
@@ -246,10 +253,43 @@ export class Assistant {
     return (this.deps.now ?? Date.now)();
   }
 
+  /** «что просрочено», «что на сегодня», «свободные окна завтра»: answered from the data directly. */
+  private async answerLocally(user: Principal, input: ChatInput, emit: (event: ChatEvent) => void): Promise<boolean> {
+    if (!this.deps.config.localAnswers) return false;
+    const intent = intentOf(input.text, input.today);
+    if (!intent.local) return false;
+    const ctx = { data: await this.deps.loadData(user), today: input.today, now: input.now, newId: () => randomUUID() };
+    const answer = localAnswer(intent, ctx);
+    if (!answer) return false;
+    const { text } = answer;
+    const { store } = this.deps;
+    const previous = input.conversationId ? await store.get(user.login, input.conversationId) : null;
+    const conversationId = previous?.id ?? randomUUID();
+    const userMessage: ChatMessage = { id: randomUUID(), role: "user", text: input.text, at: this.now() };
+    emit({ type: "start", conversationId, provider: "app", source: APP_SOURCE, userMessageId: userMessage.id });
+    emit({ type: "delta", text });
+    const message: ChatMessage = {
+      id: randomUUID(),
+      role: "assistant",
+      text,
+      at: this.now(),
+      provider: "app",
+      source: APP_SOURCE,
+      ...(answer.view ? { view: answer.view } : {}),
+      ...(answer.chips?.length ? { chips: answer.chips } : {}),
+    };
+    const conv = await store.append(user.login, conversationId, [userMessage, message], titleFrom(input.text));
+    log("info", "assistant.local_answer", { intent: intent.kind });
+    emit({ type: "done", message, title: conv.title });
+    return true;
+  }
+
   /** One answer as a stream of events (NDJSON on the wire). */
   async chat(user: Principal, input: ChatInput, emit: (event: ChatEvent) => void, signal?: AbortSignal): Promise<void> {
     const { store } = this.deps;
     if (!this.enabled) return emit({ type: "error", message: UNAVAILABLE });
+    // Simple questions are answered by the app: no model, no tokens, no consent, no rate limit.
+    if (!input.retryOf && (await this.answerLocally(user, input, emit))) return;
     if (!this.limit.take(user.login)) return emit({ type: "error", message: "Слишком много вопросов подряд. Подождите немного и спросите снова." });
     const settings = await store.settings(user.login);
     // «Повторить»: the failed answer and its question are replaced by this attempt.
