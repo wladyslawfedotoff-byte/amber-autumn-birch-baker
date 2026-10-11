@@ -1,4 +1,4 @@
-import { ageLabel, daysLeftLabel } from "@/lib/special-dates";
+import { ageLabel, daysLeftLabel, iconOf, showInTodayNow } from "@/lib/special-dates";
 import { daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter, occursOn } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { cn } from "@/lib/cn";
@@ -21,6 +21,11 @@ export function TodaySummary() {
   const planned = habitsForDay(habits, today);
   const habitLeft = planned.filter((habit) => !habit.checks.includes(today)).length;
   const nextDate = soon[0];
+  // «Показать в Сегодня»: dates within their lead window, soonest first.
+  const flagged = (milestones ?? [])
+    .map((item) => showInTodayNow(item, today))
+    .filter((row): row is NonNullable<typeof row> => Boolean(row))
+    .sort((a, b) => a.days - b.days);
   const line = [
     todayN === 0 && overdueN === 0 ? "На сегодня задач нет" : `${todayN} на сегодня`,
     overdueN > 0 ? `${overdueN} просрочено` : "",
@@ -31,8 +36,18 @@ export function TodaySummary() {
 
   return (
     <div className="mb-3">
-      <p className="font-display text-xl tracking-tight text-fg">{line}</p>
-      {nextDate ? (
+      <p className="text-base font-semibold tracking-tight text-fg">{line}</p>
+      {flagged.length ? (
+        <ul className="mt-1 space-y-0.5">
+          {flagged.map((row) => (
+            <li key={row.item.id} className="truncate text-sm">
+              <span aria-hidden="true">{iconOf(row.item)} </span>
+              {row.item.title} — <span className={row.days === 0 ? "font-medium text-accent" : "text-muted"}>{daysLeftLabel(row.days)}</span>
+              {row.age ? <span className="text-muted">, {row.age}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : nextDate ? (
         <p className="text-xs text-muted">
           {nextDate.item.title} — {daysLeftLabel(nextDate.days)}
           {ageLabel(nextDate.item, shiftIso(today, nextDate.days), today) ? `, ${ageLabel(nextDate.item, shiftIso(today, nextDate.days), today)}` : ""}

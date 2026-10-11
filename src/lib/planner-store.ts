@@ -8,6 +8,7 @@ import { parseQuick } from "@/lib/quick-add";
 import { stageRange } from "@/lib/stage-range";
 import { clearDate, clearTime, duplicateTask as duplicateTaskData, listInNotes, splitLines } from "@/lib/task-tools";
 import { isAccent, type AccentId } from "@/lib/accents";
+import { DEFAULT_TABS, normalizeCalendarMode, normalizeTabs, type CalendarMode, type TabId } from "@/lib/ui-prefs";
 import { sectionOf, sortHabits, tapDay, withEntry } from "@/lib/habit-plan";
 import { normalizeArchiveDays, restoreFromArchive, toggleTaskDone, undoRepeatTick } from "@/lib/task-done";
 import type {
@@ -26,6 +27,7 @@ import type {
   ThemeMode,
 } from "@/lib/planner-types";
 
+type MilestoneExtra = Partial<Pick<Milestone, "reminders" | "icon" | "color" | "showAge" | "showInToday" | "notes">>;
 type HabitPatch = Partial<Omit<Habit, "id" | "checks" | "log" | "updatedAt" | "owner" | "updatedBy" | "aclAt" | "createdAt">>;
 type HabitDayPatch = Partial<Omit<HabitEntry, "id" | "updatedAt">> & { done?: boolean };
 
@@ -86,6 +88,15 @@ type PlannerState = {
   scheduleDays: number;
   /** «Готово» group at the bottom of lists is folded (this device only). */
   doneFolded: boolean;
+  /** «Панель вкладок»: the tabs of the bottom bar on a phone (this device only). */
+  tabBar: TabId[];
+  /** «Календарь»: Список / Месяц / Неделя / 3 дня / День (this device only). */
+  calendarMode: CalendarMode;
+  /** «Номера недель» in the month grid (this device only). */
+  weekNumbers: boolean;
+  setTabBar: (tabs: TabId[]) => void;
+  setCalendarMode: (mode: CalendarMode) => void;
+  setWeekNumbers: (on: boolean) => void;
   setArchiveDays: (days: number) => void;
   setScheduleDays: (days: number) => void;
   setDoneFolded: (folded: boolean) => void;
@@ -144,10 +155,10 @@ type PlannerState = {
     remindAt?: string | null;
     noYear?: boolean;
     remindDays?: number;
-  }) => string | null;
+  } & MilestoneExtra) => string | null;
   updateMilestone: (
     id: string,
-    patch: Partial<Pick<Milestone, "title" | "date" | "yearly" | "kind" | "noYear" | "remindAt" | "remindDays" | "notes">>,
+    patch: Partial<Pick<Milestone, "title" | "date" | "yearly" | "kind" | "noYear" | "remindAt" | "remindDays" | "notes">> & MilestoneExtra,
   ) => void;
   deleteMilestone: (id: string) => void;
   addProject: (title: string) => string;
@@ -201,6 +212,9 @@ function seed(): Pick<
   | "archiveDays"
   | "scheduleDays"
   | "doneFolded"
+  | "tabBar"
+  | "calendarMode"
+  | "weekNumbers"
 > {
   const today = todayIso();
   const stamp = Date.now();
@@ -232,6 +246,9 @@ function seed(): Pick<
     archiveDays: 7,
     scheduleDays: 1,
     doneFolded: false,
+    tabBar: [...DEFAULT_TABS],
+    calendarMode: "month",
+    weekNumbers: false,
     lists: [
       { id: "work", name: "Работа" },
       { id: "home", name: "Дом" },
@@ -288,6 +305,8 @@ function seed(): Pick<
         kind: "birthday",
         remindAt: "09:00",
         remindDays: 3,
+        reminders: [0, 3],
+        showInToday: 3,
         items: [
           { id: "mi-1", kind: "gift", title: "Книга по фотографии", done: false, link: null, price: "1 800 ₽" },
           { id: "mi-2", kind: "todo", title: "Забронировать столик", done: false },
@@ -302,6 +321,26 @@ function seed(): Pick<
         remindAt: "09:00",
         remindDays: 7,
         items: [{ id: "mi-3", kind: "idea", title: "Ужин там же, где было первое свидание", done: false }],
+      },
+      {
+        id: "m-ny",
+        title: "Новый год",
+        date: "2000-12-31",
+        yearly: true,
+        kind: "holiday",
+        remindAt: "10:00",
+        remindDays: 7,
+        reminders: [0, 7],
+        items: [{ id: "mi-4", kind: "buy", title: "Ёлка", done: false, link: null, price: "4 000 ₽" }],
+      },
+      {
+        id: "m-trip",
+        title: "Отпуск",
+        date: shiftIso(today, 45),
+        yearly: false,
+        kind: "countdown",
+        remindAt: null,
+        items: [],
       },
     ],
     focus: freshFocus(),
@@ -799,7 +838,13 @@ renameList: (id, name) =>
               kind: input.kind,
               noYear: Boolean(input.noYear),
               remindAt: input.remindAt === undefined ? "09:00" : input.remindAt,
-              remindDays: input.remindDays ?? 0,
+              remindDays: input.remindDays ?? input.reminders?.[0] ?? 0,
+              ...(input.reminders ? { reminders: [...new Set(input.reminders)].sort((a, b) => a - b) } : {}),
+              ...(input.icon ? { icon: input.icon } : {}),
+              ...(input.color ? { color: input.color } : {}),
+              ...(typeof input.showAge === "boolean" ? { showAge: input.showAge } : {}),
+              ...(input.showInToday !== undefined ? { showInToday: input.showInToday } : {}),
+              ...(input.notes ? { notes: input.notes } : {}),
               items: [],
             },
           ],
@@ -808,7 +853,14 @@ renameList: (id, name) =>
       },
       updateMilestone: (id, patch) =>
         set((s) => ({
-          milestones: s.milestones.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+          milestones: s.milestones.map((m) => {
+            if (m.id !== id) return m;
+            const next = { ...m, ...patch };
+            if (patch.title !== undefined) next.title = patch.title.slice(0, 200);
+            // Keep the legacy single lead in step so older app versions still remind.
+            if (patch.reminders) next.remindDays = patch.reminders[0] ?? 0;
+            return next;
+          }),
         })),
       deleteMilestone: (id) => set((s) => ({ milestones: s.milestones.filter((m) => m.id !== id) })),
       addProject: (title) => {
@@ -958,6 +1010,9 @@ renameList: (id, name) =>
       ackReminder: (key, stamp) =>
         set((s) => ({ remindAck: { ...(s.remindAck ?? {}), [key]: stamp } })),
       setTheme: (theme) => set({ theme }),
+      setTabBar: (tabs) => set({ tabBar: normalizeTabs(tabs) }),
+      setCalendarMode: (mode) => set({ calendarMode: normalizeCalendarMode(mode) }),
+      setWeekNumbers: (on) => set({ weekNumbers: on }),
       setAccent: (accent) => set({ accent }),
       bumpPomo: () =>
         set((s) => {
@@ -1042,6 +1097,9 @@ renameList: (id, name) =>
           archiveDays: normalizeArchiveDays(saved.archiveDays),
           scheduleDays: [1, 2, 3, 5, 7].includes(saved.scheduleDays as number) ? (saved.scheduleDays as number) : 1,
           doneFolded: saved.doneFolded === true,
+          tabBar: normalizeTabs(saved.tabBar),
+          calendarMode: normalizeCalendarMode(saved.calendarMode),
+          weekNumbers: saved.weekNumbers === true,
           theme: saved.theme === "dark" ? "dark" : "light",
           accent: isAccent(saved.accent) ? saved.accent : current.accent,
         };

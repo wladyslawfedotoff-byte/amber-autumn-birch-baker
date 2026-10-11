@@ -19,7 +19,8 @@ const BASE = process.env.BASE_URL ?? "http://127.0.0.1:8092";
 const USER1 = process.env.USER1_PASSWORD ?? "";
 const USER2 = process.env.USER2_PASSWORD ?? "";
 const SHOTS = process.env.SHOTS_DIR ?? "";
-const ADD = 'input[placeholder="Созвон завтра в 10"]';
+// Desktop: the inline field; phone: the bottom composer opened with «+».
+const ADD = 'input[placeholder="Созвон завтра в 10"] >> visible=true';
 const tag = String(Date.now() % 100000);
 
 function fail(message) {
@@ -78,8 +79,12 @@ async function openView(page, label) {
 }
 
 async function addTask(page, title) {
+  const fab = page.getByRole("button", { name: "Добавить задачу", exact: true });
+  const phone = await fab.isVisible();
+  if (phone) await fab.click();
   await page.fill(ADD, title);
   await page.press(ADD, "Enter");
+  if (phone) await page.keyboard.press("Escape");
 }
 
 async function openTask(page, title) {
@@ -157,6 +162,7 @@ async function main() {
     await user1.getByLabel("Новая подзадача").press("Enter");
     await user1.getByLabel("Новая подзадача").fill("Упаковать");
     await user1.getByRole("button", { name: "Добавить подзадачу" }).click();
+    await user1.getByRole("button", { name: /^Совместная/ }).click(); // the row unfolds «Совместная» / «Назначить»
     await user1.getByRole("button", { name: "Пользователь 2", exact: true }).last().click(); // «Назначить» → Пользователь 2
     await shot(user1, "02-assign");
     await closeDetail(user1);
@@ -188,6 +194,7 @@ async function main() {
     await openView(user1, "Входящие");
     await addTask(user1, dated);
     await openTask(user1, dated);
+    await user1.getByRole("button", { name: /^Повтор/ }).click(); // detail rows: «Повтор ›» unfolds the select
     await user1.getByLabel("Повтор").selectOption("dates");
     const picker = user1.getByTestId("date-multi-picker");
     await picker.waitFor();
@@ -226,6 +233,7 @@ async function main() {
     // 4. «Дублировать на дату…»
     await openView(user1, "Все");
     await openTask(user1, dated);
+    await user1.getByRole("button", { name: "Дублировать", exact: true }).first().click(); // open the «Дублировать ›» row
     await user1.getByRole("button", { name: "Дублировать на дату…" }).click();
     const copyDate = await isoDay(user1, 10);
     await user1.getByLabel("Дата копии").fill(copyDate);
@@ -245,6 +253,7 @@ async function main() {
     await login(user2b, "user2", USER2, "user2b");
     const NEW = `новый пароль пользователя 2 ${tag}`;
     await openView(user2, "Настройки");
+    await user2.click('[data-row="profile"]');
     await user2.getByRole("button", { name: "Сменить пароль" }).click();
     await user2.getByLabel("Текущий пароль").fill(USER2);
     await user2.getByLabel("Новый пароль", { exact: true }).fill(NEW);

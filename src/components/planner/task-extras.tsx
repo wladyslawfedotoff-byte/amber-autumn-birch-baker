@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Copy, ListChecks, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FieldLabel } from "@/components/ui/hint";
 import { cn } from "@/lib/cn";
 import { dueLabel, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
@@ -16,20 +17,18 @@ export function NotesField({ task }: { task: Task }) {
   const notesToSubtasks = usePlanner((s) => s.notesToSubtasks);
   const found = listInNotes(task.notes).items.length;
   return (
-    <div className="mt-6">
-      <label className="block text-xs font-medium text-subtle">
+    <div className="mt-3">
+      <FieldLabel hint="Первая строка видна в списке под названием. Пункты с «- », «• » или «1. » можно одним нажатием сделать подзадачами.">
         Заметка
-        <textarea
-          value={task.notes}
-          onChange={(event) => updateTask(task.id, { notes: event.target.value })}
-          rows={task.notes ? Math.min(10, Math.max(3, task.notes.split("\n").length + 1)) : 3}
-          placeholder={"Контекст, ссылки, что не забыть.\nСписок — по строке с «- »:\n- паспорт\n- зарядка"}
-          className={cn(field, "mt-2 resize-y py-3 leading-normal")}
-        />
-      </label>
-      <p className="mt-1 text-xs text-muted">
-        Первая строка заметки видна в списке под названием. Пункты с «- », «• » или «1. » можно сделать подзадачами.
-      </p>
+      </FieldLabel>
+      <textarea
+        value={task.notes}
+        aria-label="Заметка"
+        onChange={(event) => updateTask(task.id, { notes: event.target.value })}
+        rows={task.notes ? Math.min(10, Math.max(2, task.notes.split("\n").length + 1)) : 2}
+        placeholder={"Контекст, ссылки… Список — строки с «- »"}
+        className={cn(field, "mt-1 resize-y py-2 leading-normal")}
+      />
       {found > 0 ? (
         <Button variant="soft" size="sm" className="mt-2" onClick={() => notesToSubtasks(task.id)}>
           <ListChecks className="size-4" aria-hidden="true" />
@@ -54,11 +53,13 @@ export function SubtasksBlock({ task }: { task: Task }) {
     setDraft("");
   };
   return (
-    <section className="mt-6" aria-labelledby={`subtasks-${task.id}`}>
-      <div className="flex items-baseline gap-2">
-        <h3 id={`subtasks-${task.id}`} className="text-xs font-medium text-subtle">
-          Подзадачи — шаги внутри дела
-        </h3>
+    <section className="mt-3" aria-labelledby={`subtasks-${task.id}`}>
+      <div className="flex items-center gap-2">
+        <div id={`subtasks-${task.id}`}>
+          <FieldLabel hint="Разбейте дело на шаги: «Поездка» → «купить билеты», «забронировать отель». В списке появится счётчик «0/2». Можно вставить сразу несколько строк.">
+            Подзадачи
+          </FieldLabel>
+        </div>
         {progress.total ? (
           <span className="ml-auto text-xs tabular-nums text-muted" data-testid="subtask-progress">
             {progress.done} из {progress.total}
@@ -69,12 +70,7 @@ export function SubtasksBlock({ task }: { task: Task }) {
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-elevated" aria-hidden="true">
           <div className="h-full rounded-full bg-accent" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
         </div>
-      ) : (
-        <p className="mt-1 text-xs text-muted">
-          Разбейте дело на шаги: «Поездка» → «купить билеты», «забронировать отель». В списке появится счётчик «0/2», шаги можно
-          отмечать прямо там. Можно вставить сразу несколько строк.
-        </p>
-      )}
+      ) : null}
       <ul className="mt-1">
         {subs.map((item) => (
           <li key={item.id} className="flex items-center gap-1">
@@ -144,7 +140,7 @@ export function DuplicateControls({ task, onOpen }: { task: Task; onOpen?: (id: 
     if (id) onOpen?.(id);
   };
   return (
-    <section className="mt-6" aria-label="Дублировать задачу">
+    <section aria-label="Дублировать задачу">
       <div className="flex flex-wrap gap-2">
         <Button variant="soft" size="sm" onClick={() => copy()}>
           <Copy className="size-4" aria-hidden="true" />
@@ -174,10 +170,7 @@ export function DuplicateControls({ task, onOpen }: { task: Task; onOpen?: (id: 
           </Button>
         </form>
       ) : null}
-      <p className="mt-1 text-xs text-muted">
-        Копия с тем же названием, заметкой, тегами, списком, приоритетом и шагами (без галочек) откроется сразу — останется поменять дату.
-        Удобно для дел, которые повторяются нерегулярно: «Отчёт для бухгалтера», «Уборка на даче».
-      </p>
+      <p className="mt-1 text-xs text-muted">Копия со всеми полями (без галочек) откроется сразу — например, «Отчёт для бухгалтера».</p>
     </section>
   );
 }

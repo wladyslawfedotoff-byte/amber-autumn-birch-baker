@@ -65,7 +65,7 @@ export function TaskShareControls({ task }: { task: Task }) {
   const list = task.listId ? lists.find((l) => l.id === task.listId) : null;
   const viaList = list && (list.members ?? []).length > 0;
   return (
-    <section className="mt-6" aria-labelledby="share-title">
+    <section aria-labelledby="share-title">
       <p id="share-title" className="flex items-center gap-1 text-sm font-medium text-fg">
         <Users className="size-4" aria-hidden="true" /> Совместная
       </p>
