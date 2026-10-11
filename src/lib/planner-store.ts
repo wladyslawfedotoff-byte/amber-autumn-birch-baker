@@ -26,6 +26,7 @@ import type {
   ThemeMode,
 } from "@/lib/planner-types";
 
+type MilestoneExtra = Partial<Pick<Milestone, "reminders" | "icon" | "color" | "showAge" | "showInToday" | "notes">>;
 type HabitPatch = Partial<Omit<Habit, "id" | "checks" | "log" | "updatedAt" | "owner" | "updatedBy" | "aclAt" | "createdAt">>;
 type HabitDayPatch = Partial<Omit<HabitEntry, "id" | "updatedAt">> & { done?: boolean };
 
@@ -144,10 +145,10 @@ type PlannerState = {
     remindAt?: string | null;
     noYear?: boolean;
     remindDays?: number;
-  }) => string | null;
+  } & MilestoneExtra) => string | null;
   updateMilestone: (
     id: string,
-    patch: Partial<Pick<Milestone, "title" | "date" | "yearly" | "kind" | "noYear" | "remindAt" | "remindDays" | "notes">>,
+    patch: Partial<Pick<Milestone, "title" | "date" | "yearly" | "kind" | "noYear" | "remindAt" | "remindDays" | "notes">> & MilestoneExtra,
   ) => void;
   deleteMilestone: (id: string) => void;
   addProject: (title: string) => string;
@@ -288,6 +289,8 @@ function seed(): Pick<
         kind: "birthday",
         remindAt: "09:00",
         remindDays: 3,
+        reminders: [0, 3],
+        showInToday: 3,
         items: [
           { id: "mi-1", kind: "gift", title: "Книга по фотографии", done: false, link: null, price: "1 800 ₽" },
           { id: "mi-2", kind: "todo", title: "Забронировать столик", done: false },
@@ -302,6 +305,26 @@ function seed(): Pick<
         remindAt: "09:00",
         remindDays: 7,
         items: [{ id: "mi-3", kind: "idea", title: "Ужин там же, где было первое свидание", done: false }],
+      },
+      {
+        id: "m-ny",
+        title: "Новый год",
+        date: "2000-12-31",
+        yearly: true,
+        kind: "holiday",
+        remindAt: "10:00",
+        remindDays: 7,
+        reminders: [0, 7],
+        items: [{ id: "mi-4", kind: "buy", title: "Ёлка", done: false, link: null, price: "4 000 ₽" }],
+      },
+      {
+        id: "m-trip",
+        title: "Отпуск",
+        date: shiftIso(today, 45),
+        yearly: false,
+        kind: "countdown",
+        remindAt: null,
+        items: [],
       },
     ],
     focus: freshFocus(),
@@ -799,7 +822,13 @@ renameList: (id, name) =>
               kind: input.kind,
               noYear: Boolean(input.noYear),
               remindAt: input.remindAt === undefined ? "09:00" : input.remindAt,
-              remindDays: input.remindDays ?? 0,
+              remindDays: input.remindDays ?? input.reminders?.[0] ?? 0,
+              ...(input.reminders ? { reminders: [...new Set(input.reminders)].sort((a, b) => a - b) } : {}),
+              ...(input.icon ? { icon: input.icon } : {}),
+              ...(input.color ? { color: input.color } : {}),
+              ...(typeof input.showAge === "boolean" ? { showAge: input.showAge } : {}),
+              ...(input.showInToday !== undefined ? { showInToday: input.showInToday } : {}),
+              ...(input.notes ? { notes: input.notes } : {}),
               items: [],
             },
           ],
@@ -808,7 +837,14 @@ renameList: (id, name) =>
       },
       updateMilestone: (id, patch) =>
         set((s) => ({
-          milestones: s.milestones.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+          milestones: s.milestones.map((m) => {
+            if (m.id !== id) return m;
+            const next = { ...m, ...patch };
+            if (patch.title !== undefined) next.title = patch.title.slice(0, 200);
+            // Keep the legacy single lead in step so older app versions still remind.
+            if (patch.reminders) next.remindDays = patch.reminders[0] ?? 0;
+            return next;
+          }),
         })),
       deleteMilestone: (id) => set((s) => ({ milestones: s.milestones.filter((m) => m.id !== id) })),
       addProject: (title) => {

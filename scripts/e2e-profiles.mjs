@@ -157,6 +157,7 @@ async function main() {
     await user1.getByLabel("Новая подзадача").press("Enter");
     await user1.getByLabel("Новая подзадача").fill("Упаковать");
     await user1.getByRole("button", { name: "Добавить подзадачу" }).click();
+    await user1.getByRole("button", { name: /^Совместная/ }).click(); // the row unfolds «Совместная» / «Назначить»
     await user1.getByRole("button", { name: "Пользователь 2", exact: true }).last().click(); // «Назначить» → Пользователь 2
     await shot(user1, "02-assign");
     await closeDetail(user1);
@@ -188,6 +189,7 @@ async function main() {
     await openView(user1, "Входящие");
     await addTask(user1, dated);
     await openTask(user1, dated);
+    await user1.getByRole("button", { name: /^Повтор/ }).click(); // detail rows: «Повтор ›» unfolds the select
     await user1.getByLabel("Повтор").selectOption("dates");
     const picker = user1.getByTestId("date-multi-picker");
     await picker.waitFor();
@@ -226,6 +228,7 @@ async function main() {
     // 4. «Дублировать на дату…»
     await openView(user1, "Все");
     await openTask(user1, dated);
+    await user1.getByRole("button", { name: "Дублировать", exact: true }).first().click(); // open the «Дублировать ›» row
     await user1.getByRole("button", { name: "Дублировать на дату…" }).click();
     const copyDate = await isoDay(user1, 10);
     await user1.getByLabel("Дата копии").fill(copyDate);

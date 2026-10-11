@@ -28,7 +28,7 @@ function canBoard(view: View): boolean {
 function Empty({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="px-2 py-16 text-center">
-      <p className="font-display text-2xl tracking-tight">{title}</p>
+      <p className="text-lg font-semibold tracking-tight md:font-display md:text-2xl md:font-normal">{title}</p>
       <p className="mt-2 text-sm text-muted">{hint}</p>
     </div>
   );
@@ -302,8 +302,8 @@ function TodayGroups({
   return (
     <div>
       {overdue.length > 0 ? (
-        <section className="mt-5">
-          <h2 className="px-1 font-display text-lg tracking-tight text-danger">Просрочено</h2>
+        <section className="mt-4">
+          <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-danger">Просрочено</h2>
           {overdue.map((task) => (
             <TaskRow
               key={task.id}
@@ -318,8 +318,8 @@ function TodayGroups({
         </section>
       ) : null}
       {current.length > 0 ? (
-        <section className="mt-5">
-          <h2 className="px-1 font-display text-lg tracking-tight text-fg">На сегодня</h2>
+        <section className="mt-4">
+          <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-subtle">На сегодня</h2>
           {[...current]
             .sort((a, b) => (a.startAt ?? a.remindAt ?? "99:99").localeCompare(b.startAt ?? b.remindAt ?? "99:99"))
             .map((task) => (

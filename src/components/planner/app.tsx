@@ -241,7 +241,7 @@ export function PlannerApp() {
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-20 shrink-0 px-4 py-3 md:px-8">
+        <header className="relative z-20 shrink-0 px-2 py-1.5 md:px-8 md:py-3">
           <div className="flex items-center gap-2">
             <Button size="icon" variant="ghost" className="md:hidden" aria-label="Открыть меню" onClick={() => setDrawer(true)}>
               <Menu className="size-5" />
@@ -256,10 +256,10 @@ export function PlannerApp() {
                     const current = lists.find((list) => list.id === listId)?.name ?? "";
                     if (!current.trim()) renameList(listId, "Без названия");
                   }}
-                  className="w-full bg-transparent font-display text-2xl tracking-tight outline-none md:text-4xl"
+                  className="w-full bg-transparent text-xl font-semibold tracking-tight outline-none md:font-display md:text-4xl md:font-normal"
                 />
               ) : (
-                <h1 className="truncate font-display text-2xl tracking-tight md:text-4xl">{viewTitle(view, lists)}</h1>
+                <h1 className="truncate text-xl font-semibold tracking-tight md:font-display md:text-4xl md:font-normal">{viewTitle(view, lists)}</h1>
               )}
               {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
             </div>

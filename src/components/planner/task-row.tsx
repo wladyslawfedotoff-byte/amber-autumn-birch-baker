@@ -71,7 +71,7 @@ export function TaskRow({
   return (
     <div
       className={cn(
-        "card-lift mb-2 flex items-start overflow-hidden rounded-xl bg-elevated",
+        "card-lift mb-1.5 flex items-start overflow-hidden rounded-xl bg-elevated",
         selected ? "ring-1 ring-accent" : "",
         checked && "opacity-75",
       )}
@@ -87,14 +87,14 @@ export function TaskRow({
       >
         <span
           className={cn(
-            "flex size-6 items-center justify-center rounded-full border-2 transition-[background-color,border-color] duration-150",
+            "flex size-5 items-center justify-center rounded-full border-2 transition-[background-color,border-color] duration-150",
             checked ? "border-accent bg-accent text-accent-fg" : ring(task.priority),
           )}
         >
           {checked ? <Check className="size-3" strokeWidth={3} /> : null}
         </span>
       </button>
-      <div className="min-w-0 flex-1 py-2 pr-1">
+      <div className="min-w-0 flex-1 py-[0.6875rem] pr-1">
         <div className="flex items-start">
           <button
             type="button"

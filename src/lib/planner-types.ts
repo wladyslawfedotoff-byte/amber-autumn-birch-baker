@@ -129,7 +129,8 @@ export type Habit = {
   updatedAt?: number;
 } & Shared;
 
-export type MilestoneKind = "birthday" | "anniversary" | "holiday" | "other";
+/** countdown: a one-time event that counts down, then counts the days since («Обратный отсчёт»). */
+export type MilestoneKind = "birthday" | "anniversary" | "holiday" | "countdown" | "other";
 
 /** Lists attached to a special date: gift ideas (wishlist), ideas, to-dos, purchases. */
 export type MilestoneItemKind = "gift" | "idea" | "todo" | "buy";
@@ -157,8 +158,17 @@ export type Milestone = {
   noYear?: boolean;
   /** HH:mm on the reminder day. Empty means no alarm. */
   remindAt?: string | null;
-  /** Remind this many days before (0 = on the day). */
+  /** Legacy single lead time (days before; 0 = on the day). Used when `reminders` is absent. */
   remindDays?: number;
+  /** Several lead times in days before the date, e.g. [0, 3] = «в день, за 3 дня». */
+  reminders?: number[];
+  /** Emoji in the coloured circle; empty = the type's icon. */
+  icon?: string | null;
+  color?: TaskColor | null;
+  /** «Показать возраст» («(37 л.)», «10 лет свадьбе»). Missing = on for birthdays/anniversaries. */
+  showAge?: boolean;
+  /** Show in «Сегодня» from N days before (0 = on the day, null = never). Missing = on the day. */
+  showInToday?: number | null;
   items?: MilestoneItem[];
   notes?: string;
   updatedAt?: number;

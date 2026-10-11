@@ -1,6 +1,7 @@
 import { daysBetween, dueLabel, formatShort, nextOccurrence, shiftIso, todayIso } from "./dates.ts";
 import { DAYS, pluralN } from "./plural.ts";
 import { goalOf, entryOf, isDue, reminderTimes } from "./habit-plan.ts";
+import { leadDays } from "./special-dates.ts";
 import type { Habit, Milestone, Task } from "@/lib/planner-types";
 
 export type ReminderKind = "task" | "habit" | "date";
@@ -68,29 +69,35 @@ export function collectReminders(input: {
 
   for (const item of input.milestones) {
     if (!validTime(item.remindAt)) continue;
-    // «Напомнить за N дней»: the reminder day is N days before the occurrence.
-    const lead = typeof item.remindDays === "number" && item.remindDays > 0 ? Math.min(item.remindDays, 60) : 0;
+    // Several reminders: «в день, за 3 дня» — each lead time is its own reminder.
     const when = nextOccurrence(item.date, item.yearly, today);
-    const notifyDay = shiftIso(when, -lead);
-    const days = daysBetween(today, notifyDay);
-    if (days < 0 || days > 1) continue;
-    const at = localStamp(notifyDay, item.remindAt);
-    if (at > tomorrowEnd) continue;
-    const stamp = `${notifyDay}T${item.remindAt}`;
-    const key = `date:${item.id}`;
-    const status = at <= input.now ? "due" : "later";
-    if (status === "due" && ack[key] === stamp) continue;
-    hits.push({
-      key,
-      stamp,
-      kind: "date",
-      refId: item.id,
-      title: item.title,
-      time: item.remindAt,
-      whenLabel: lead > 0 ? `${dueLabel(notifyDay, today)} в ${item.remindAt} · до даты ${pluralN(lead, DAYS)} (${formatShort(when)})` : `${dueLabel(when, today)} в ${item.remindAt}`,
-      at,
-      status,
-    });
+    const leads = leadDays(item);
+    for (const lead of leads) {
+      const notifyDay = shiftIso(when, -lead);
+      const days = daysBetween(today, notifyDay);
+      if (days < 0 || days > 1) continue;
+      const at = localStamp(notifyDay, item.remindAt);
+      if (at > tomorrowEnd) continue;
+      const stamp = `${notifyDay}T${item.remindAt}`;
+      // The first lead keeps the old key so an acknowledged reminder stays acknowledged after the update.
+      const key = lead === leads[0] ? `date:${item.id}` : `date:${item.id}:${lead}`;
+      const status = at <= input.now ? "due" : "later";
+      if (status === "due" && ack[key] === stamp) continue;
+      hits.push({
+        key,
+        stamp,
+        kind: "date",
+        refId: item.id,
+        title: item.title,
+        time: item.remindAt,
+        whenLabel:
+          lead > 0
+            ? `${dueLabel(notifyDay, today)} в ${item.remindAt} · до даты ${pluralN(lead, DAYS)} (${formatShort(when)})`
+            : `${dueLabel(when, today)} в ${item.remindAt}`,
+        at,
+        status,
+      });
+    }
   }
 
   // Habits: every reminder time of a habit planned for today and not done yet
