@@ -146,6 +146,8 @@ type PlannerState = {
   setHabitDay: (id: string, date: string, patch: HabitDayPatch) => void;
   /** Move a habit up (-1) or down (+1) inside its section. */
   moveHabit: (id: string, delta: -1 | 1) => void;
+  /** Drag-to-reorder: the ids of one section in their new order. */
+  setHabitOrder: (ids: string[]) => void;
   deleteHabit: (id: string) => void;
   addMilestone: (input: {
     title: string;
@@ -818,6 +820,13 @@ renameList: (id, name) =>
           if (index < 0 || target < 0 || target >= peers.length) return {};
           [peers[index], peers[target]] = [peers[target]!, peers[index]!];
           const order = new Map(peers.map((h, i) => [h.id, i + 1]));
+          return {
+            habits: s.habits.map((h) => (order.has(h.id) && h.order !== order.get(h.id) ? { ...h, order: order.get(h.id) } : h)),
+          };
+        }),
+      setHabitOrder: (ids) =>
+        set((s) => {
+          const order = new Map(ids.map((id, i) => [id, i + 1]));
           return {
             habits: s.habits.map((h) => (order.has(h.id) && h.order !== order.get(h.id) ? { ...h, order: order.get(h.id) } : h)),
           };

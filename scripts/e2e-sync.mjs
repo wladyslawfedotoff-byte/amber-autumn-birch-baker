@@ -100,10 +100,17 @@ async function isoDay(page, daysAgo) {
   }, daysAgo);
 }
 
+async function weekStrip(page) {
+  const show = page.locator('button[aria-label="Показать неделю"] >> visible=true');
+  if (await show.count()) await show.first().click();
+}
+
+/** Day ring of a habit (the week strip is turned on; today also has the row's big ring, so take the first). */
 async function habitButton(page, name, day) {
+  await weekStrip(page);
   const button = page.locator(`button[aria-label^="${name}, ${day}:"]`);
   if (!(await button.count())) await page.getByRole("button", { name: "Прошлая неделя" }).click();
-  return button;
+  return button.first();
 }
 
 /**
@@ -113,9 +120,11 @@ async function habitButton(page, name, day) {
 async function habitTwoClients(phone, phoneCtx, computer, computerCtx) {
   const name = `Зарядка ${Date.now() % 100000}`;
   await openView(computer, "Привычки");
-  await computer.fill('input[name="name"][aria-label="Новая привычка"]', name);
-  await computer.press('input[name="name"][aria-label="Новая привычка"]', "Enter");
-  // A new habit opens its settings sheet: close it with «Готово».
+  // «+» (FAB on a phone, header button on a computer) opens the «Новая привычка» sheet.
+  await computer.locator('button[aria-label="Новая привычка"] >> visible=true').first().click();
+  await computer.fill('input[aria-label="Название привычки"]', name);
+  await computer.press('input[aria-label="Название привычки"]', "Enter");
+  // A custom habit opens its settings sheet: close it with «Готово».
   const sheet = computer.getByRole("dialog");
   if (await sheet.isVisible().catch(() => false)) await sheet.getByRole("button", { name: "Готово" }).click();
   await openView(phone, "Привычки");
@@ -135,13 +144,15 @@ async function habitTwoClients(phone, phoneCtx, computer, computerCtx) {
     [computer, "computer"],
   ]) {
     for (const day of [today, yesterday]) {
+      await weekStrip(page);
       if (!(await page.locator(`button[aria-label^="${name}, ${day}:"]`).count())) {
         const thisWeek = page.getByRole("button", { name: "Эта неделя" });
-        if (await thisWeek.isEnabled()) await thisWeek.click();
+        if (await thisWeek.count()) await thisWeek.click();
         else await page.getByRole("button", { name: "Прошлая неделя" }).click();
       }
       await page
         .locator(`button[aria-label^="${name}, ${day}:"][aria-pressed="true"]`)
+        .first()
         .waitFor({ timeout: 30_000 })
         .catch(() => fail(`${label}: habit check ${day} missing after reconnect`));
     }

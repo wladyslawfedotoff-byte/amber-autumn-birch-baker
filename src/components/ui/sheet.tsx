@@ -22,7 +22,8 @@ export function Sheet({
   title: string;
   onClose: () => void;
   /** Primary action in the header; omit for sheets that save as you type. */
-  action?: { label: string; onClick: () => void; disabled?: boolean };
+  /** With `icon` the action is a round accent button (TickTick «✓»), `label` becomes its aria-label. */
+  action?: { label: string; onClick: () => void; disabled?: boolean; icon?: ReactNode };
   children: ReactNode;
   className?: string;
 }) {
@@ -52,7 +53,18 @@ export function Sheet({
             <X className="size-5" />
           </button>
           <p className="min-w-0 flex-1 truncate text-center text-[15px] font-semibold">{title}</p>
-          {action ? (
+          {action?.icon ? (
+            <button
+              type="button"
+              aria-label={action.label}
+              title={action.label}
+              onClick={action.onClick}
+              disabled={action.disabled}
+              className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg disabled:opacity-40"
+            >
+              {action.icon}
+            </button>
+          ) : action ? (
             <button
               type="button"
               onClick={action.onClick}
