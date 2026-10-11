@@ -414,7 +414,7 @@ export function PlannerApp() {
           {!query.trim() && view === "checklist" ? <ChecklistView selectedId={selectedId} onOpen={setSelectedId} /> : null}
           {!query.trim() && view === "matrix" ? <MatrixView selectedId={selectedId} onOpen={setSelectedId} /> : null}
           {!query.trim() && view === "focus" ? <FocusView /> : null}
-          {!query.trim() && view === "habits" ? <HabitsView /> : null}
+          {!query.trim() && view === "habits" ? <HabitsView onOpenFocus={() => openView("focus")} /> : null}
           {!query.trim() && view === "dates" ? <DatesView /> : null}
           {!query.trim() && view === "assist" ? <AssistView onOpen={setSelectedId} /> : null}
           {!query.trim() && view === "schedule" ? (

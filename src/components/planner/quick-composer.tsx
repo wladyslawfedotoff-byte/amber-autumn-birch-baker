@@ -4,7 +4,7 @@ import { AddTaskForm, type QuickOptions } from "@/components/planner/task-row";
 import { cn } from "@/lib/cn";
 
 /**
- * TickTick-like quick add on phones: a round «+» opens a composer docked to
+ * Quick add on phones: a round «+» opens a composer docked to
  * the bottom of the app frame. The frame follows the visual viewport, so the
  * composer sits right above the iOS keyboard. The composer is always mounted
  * (just hidden) so the tap can focus it synchronously — iOS shows the keyboard

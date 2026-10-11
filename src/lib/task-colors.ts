@@ -1,21 +1,21 @@
 /**
- * Task colours like in Google Calendar. Stored on the task as `color` (an id
+ * Task colours: our own palette of 10 colours. Stored on the task as `color` (an id
  * from this palette, null = no colour) and synced per field like any other
  * field. The same hue is used in both themes: the stripe is drawn at full
  * strength, the background is a light tint mixed into the theme surface, so
  * the text keeps the theme's own (readable) colour.
  */
 export const TASK_COLORS = [
-  { id: "tomato", label: "Томат", hex: "#d50000" },
-  { id: "tangerine", label: "Мандарин", hex: "#f4511e" },
-  { id: "banana", label: "Банан", hex: "#f6bf26" },
-  { id: "basil", label: "Базилик", hex: "#0b8043" },
-  { id: "sage", label: "Шалфей", hex: "#33b679" },
-  { id: "peacock", label: "Павлин", hex: "#039be5" },
-  { id: "blueberry", label: "Черника", hex: "#3f51b5" },
-  { id: "lavender", label: "Лаванда", hex: "#7986cb" },
-  { id: "grape", label: "Виноград", hex: "#8e24aa" },
-  { id: "graphite", label: "Графит", hex: "#616161" },
+  { id: "tomato", label: "Красный", hex: "#c8483f" },
+  { id: "tangerine", label: "Оранжевый", hex: "#e07a3c" },
+  { id: "banana", label: "Жёлтый", hex: "#dcae3a" },
+  { id: "basil", label: "Зелёный", hex: "#2f7d4f" },
+  { id: "sage", label: "Мятный", hex: "#4fa57e" },
+  { id: "peacock", label: "Голубой", hex: "#3a8fc4" },
+  { id: "blueberry", label: "Синий", hex: "#4a5aa8" },
+  { id: "lavender", label: "Сиреневый", hex: "#8a90c9" },
+  { id: "grape", label: "Фиолетовый", hex: "#8a4fa3" },
+  { id: "graphite", label: "Серый", hex: "#6b6763" },
 ] as const;
 
 export type TaskColor = (typeof TASK_COLORS)[number]["id"];

@@ -305,7 +305,7 @@ function draftOf(item: Milestone | undefined, kind: MilestoneKind): Draft {
   };
 }
 
-/** Add / edit a date in a bottom sheet (like TickTick): icon, name, date, reminders, repeat, type, age, «Сегодня». */
+/** Add / edit a date in a bottom sheet: icon, name, date, reminders, repeat, type, age, «Сегодня». */
 function MilestoneEditor({
   editing,
   onClose,

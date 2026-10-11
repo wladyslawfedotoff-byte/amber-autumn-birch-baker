@@ -56,7 +56,7 @@ export type Task = {
   completedBy?: string | null;
   /** Repeating task: the date it was last ticked for (shown in «Готово», «Отменить»). */
   lastDue?: string | null;
-  /** Colour like in Google Calendar (see task-colors.ts). */
+  /** Colour from our 10-colour palette (see task-colors.ts). */
   color?: TaskColor | null;
   /** Sync stamp (ms, server-corrected clock). Missing on old data = 0. */
   updatedAt?: number;
@@ -69,7 +69,7 @@ export type TaskList = {
 } & Shared;
 
 /**
- * How often a habit is planned (like TickTick «Частота»):
+ * How often a habit is planned («Частота»):
  * - daily: every day;
  * - weekdays: chosen days of the week, 1 = Monday … 7 = Sunday;
  * - weekly: N times a week on any days;
@@ -122,6 +122,8 @@ export type Habit = {
   /** Challenge length in done days (e.g. 21 or 100). */
   goalDays?: number | null;
   archived?: boolean;
+  /** «Показывать дневник при отметке»: completing the day opens the check-in sheet. */
+  journal?: boolean;
   /** Manual order inside its section (smaller first). */
   order?: number | null;
   log?: HabitEntry[];
@@ -205,6 +207,8 @@ export type FocusClock = {
   running: boolean;
   endsAt: number | null;
   taskId: string | null;
+  /** Habit the session is for (habit page → ⋯ → «Фокус»); a finished session adds a step to today. */
+  habitId?: string | null;
   note: string | null;
 };
 

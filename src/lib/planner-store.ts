@@ -146,6 +146,11 @@ type PlannerState = {
   setHabitDay: (id: string, date: string, patch: HabitDayPatch) => void;
   /** Move a habit up (-1) or down (+1) inside its section. */
   moveHabit: (id: string, delta: -1 | 1) => void;
+  /** Drag-to-reorder: the ids of one section in their new order. */
+  setHabitOrder: (ids: string[]) => void;
+  /** Habit page → ⋯ → «Фокус»: start a work session linked to the habit. */
+  focusHabit: (id: string) => void;
+  setFocusHabit: (id: string | null) => void;
   deleteHabit: (id: string) => void;
   addMilestone: (input: {
     title: string;
@@ -822,6 +827,13 @@ renameList: (id, name) =>
             habits: s.habits.map((h) => (order.has(h.id) && h.order !== order.get(h.id) ? { ...h, order: order.get(h.id) } : h)),
           };
         }),
+      setHabitOrder: (ids) =>
+        set((s) => {
+          const order = new Map(ids.map((id, i) => [id, i + 1]));
+          return {
+            habits: s.habits.map((h) => (order.has(h.id) && h.order !== order.get(h.id) ? { ...h, order: order.get(h.id) } : h)),
+          };
+        }),
       deleteHabit: (id) => set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
       addMilestone: (input) => {
         const title = input.title.trim();
@@ -1049,7 +1061,21 @@ renameList: (id, name) =>
             note: null,
           },
         })),
-      setFocusTask: (taskId) => set((s) => ({ focus: { ...s.focus, taskId } })),
+      setFocusTask: (taskId) => set((s) => ({ focus: { ...s.focus, taskId, habitId: taskId ? null : s.focus.habitId } })),
+      setFocusHabit: (habitId) => set((s) => ({ focus: { ...s.focus, habitId } })),
+      focusHabit: (id) =>
+        set((s) => ({
+          focus: {
+            ...s.focus,
+            habitId: id,
+            taskId: null,
+            mode: "work",
+            seconds: s.focus.workLen,
+            running: true,
+            endsAt: Date.now() + Math.max(1, s.focus.workLen) * 1000,
+            note: null,
+          },
+        })),
       tickFocus: () => {
         const s = get();
         if (!s.focus.running || s.focus.endsAt == null) return false;
@@ -1060,7 +1086,10 @@ renameList: (id, name) =>
         }
         const work = s.focus.mode === "work";
         const today = todayIso();
+        const habit = work && s.focus.habitId ? s.habits.find((h) => h.id === s.focus.habitId && !h.archived) : undefined;
+        const step = habit && !habit.checks.includes(today);
         set({
+          habits: step ? s.habits.map((h) => (h.id === habit.id ? tapDay(h, today) : h)) : s.habits,
           pomoDate: work ? today : s.pomoDate,
           pomoCount: work ? (s.pomoDate === today ? s.pomoCount + 1 : 1) : s.pomoCount,
           focus: {
@@ -1069,7 +1098,11 @@ renameList: (id, name) =>
             endsAt: null,
             mode: work ? "break" : "work",
             seconds: work ? breakFor(s.focus.workLen) : s.focus.workLen,
-            note: work ? "Фокус-сессия завершена. Можно сделать перерыв." : "Перерыв закончился.",
+            note: work
+              ? step
+                ? `Фокус-сессия завершена, отметка в «${habit.name}». Можно сделать перерыв.`
+                : "Фокус-сессия завершена. Можно сделать перерыв."
+              : "Перерыв закончился.",
           },
         });
         return true;
