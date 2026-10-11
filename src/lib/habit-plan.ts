@@ -1,5 +1,5 @@
 /**
- * Habit planning and statistics that respect the frequency (like TickTick):
+ * Habit planning and statistics that respect the frequency:
  * a day that is not planned (Saturday of a «пн–пт» habit, a day inside an
  * «раз в 3 дня» window, a week that already has its 3 check-ins) never breaks
  * a streak, and «Пропуск» is excused. Pure, unit-tested in habit-plan.test.ts.

@@ -13,7 +13,7 @@ import { MOODS, habitHex } from "@/components/planner/habits/habit-meta";
 type Status = "done" | "fail" | "skip";
 
 /**
- * «8 окт.» check-in like TickTick: Выполнено [4] кружек / Не выполнено / Пропуск,
+ * «8 окт.» check-in sheet: Выполнено [4] кружек / Не выполнено / Пропуск,
  * mood, note; saved with the round «✓». Mount it with `key={day}` only while open.
  */
 export function CheckinSheet({ habit, day, onClose }: { habit: Habit; day: string; onClose: () => void }) {
@@ -107,7 +107,7 @@ export function CheckinSheet({ habit, day, onClose }: { habit: Habit; day: strin
         rows={4}
         maxLength={2000}
         aria-label="Заметка"
-        placeholder="Цель на день выполнена! Что думаете об этом?"
+        placeholder="Как прошло? Пара слов для себя"
         onChange={(event) => setDraft({ ...draft, note: event.target.value })}
         className="mt-4 w-full resize-none rounded-xl bg-elevated p-3 text-base outline-none placeholder:text-subtle"
       />

@@ -22,7 +22,7 @@ export function Sheet({
   title: string;
   onClose: () => void;
   /** Primary action in the header; omit for sheets that save as you type. */
-  /** With `icon` the action is a round accent button (TickTick «✓»), `label` becomes its aria-label. */
+  /** With `icon` the action is a round accent button («✓»), `label` becomes its aria-label. */
   action?: { label: string; onClick: () => void; disabled?: boolean; icon?: ReactNode };
   children: ReactNode;
   className?: string;

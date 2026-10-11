@@ -1,10 +1,10 @@
 /**
- * View helpers for the TickTick-like habit screens (list row, detail page,
+ * View helpers for the habit screens (list row, detail page,
  * check-in sheet, editor). Pure, unit-tested in habit-view.test.ts; the
  * planning rules themselves live in habit-plan.ts.
  */
-import { dayState, entryOf, goalOf, rate, reminderTimes, sectionOf, sortHabits, streaks, totalChecks, type DayState } from "./habit-plan.ts";
-import type { Habit, HabitSection } from "./planner-types.ts";
+import { dayState, entryOf, goalOf, normalizeFreq, rate, reminderTimes, sectionOf, sortHabits, stepOf, streaks, tapDay, totalChecks, type DayState } from "./habit-plan.ts";
+import type { Habit, HabitFreq, HabitSection } from "./planner-types.ts";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -133,4 +133,75 @@ export function checkinPatch(
   if (draft.status === "fail") return { ...base, status: "fail" };
   if (goalOf(habit) > 1) return { ...base, status: null, amount: Math.max(0, draft.amount) };
   return { ...base, status: null, done: true };
+}
+
+/** Everything the «Изменить привычку» / «Новая привычка» sheet edits; saved on ✓. */
+export type HabitDraft = {
+  name: string;
+  icon: string | null;
+  color: Habit["color"] | null;
+  why: string;
+  freq: HabitFreq;
+  goal: number;
+  unit: string;
+  step: number;
+  startDate: string | null;
+  goalDays: number | null;
+  section: HabitSection;
+  reminders: string[];
+  journal: boolean;
+};
+
+export function habitDraft(habit?: Partial<Habit> | null): HabitDraft {
+  const h = (habit ?? {}) as Habit;
+  return {
+    name: h.name ?? "",
+    icon: h.icon ?? null,
+    color: h.color ?? null,
+    why: h.why ?? "",
+    freq: normalizeFreq(h.freq),
+    goal: goalOf(h),
+    unit: h.unit ?? "",
+    step: stepOf(h),
+    startDate: h.startDate ?? null,
+    goalDays: h.goalDays ?? null,
+    section: sectionOf(h),
+    reminders: reminderTimes(h),
+    journal: !!h.journal,
+  };
+}
+
+/** Draft → store patch. Daily days = all seven; amount fields only for goal > 1; legacy remindAt is folded in. */
+export function draftPatch(draft: HabitDraft): Partial<Habit> & { name: string } {
+  const amount = draft.goal > 1;
+  const freq: HabitFreq = draft.freq.kind === "weekdays" && (draft.freq.days.length === 0 || draft.freq.days.length >= 7) ? { kind: "daily" } : draft.freq;
+  return {
+    name: draft.name.trim(),
+    icon: draft.icon,
+    color: draft.color,
+    why: draft.why.trim(),
+    freq,
+    goal: amount ? draft.goal : null,
+    unit: amount ? draft.unit.trim() || null : null,
+    step: amount && draft.step > 1 ? draft.step : null,
+    startDate: draft.startDate,
+    goalDays: draft.goalDays && draft.goalDays > 0 ? draft.goalDays : null,
+    section: draft.section,
+    reminders: [...new Set(draft.reminders)].sort(),
+    remindAt: null,
+    journal: draft.journal,
+  };
+}
+
+/** Pick days for «Ежедневно»: all seven → daily; never empty. */
+export function toggleWeekday(freq: HabitFreq, day: number): HabitFreq {
+  const days = freq.kind === "weekdays" ? freq.days : [1, 2, 3, 4, 5, 6, 7];
+  const next = days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort((a, b) => a - b);
+  if (!next.length) return freq;
+  return next.length === 7 ? { kind: "daily" } : { kind: "weekdays", days: next };
+}
+
+/** True when this tap finishes the day (used to open the journal after a check). */
+export function tapCompletes(habit: Habit, day: string): boolean {
+  return !habit.checks.includes(day) && tapDay(habit, day).checks.includes(day);
 }

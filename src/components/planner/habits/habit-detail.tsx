@@ -1,9 +1,9 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { Archive, ArchiveRestore, BarChart3, CalendarCheck, Check, ChevronLeft, ChevronRight, Flame, MoreHorizontal, Pencil, Percent, Trash2, Trophy } from "lucide-react";
+import { Archive, ArchiveRestore, BarChart3, CalendarCheck, Check, ChevronLeft, ChevronRight, Flame, MoreHorizontal, Pencil, Percent, Timer, Trash2, Trophy } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatShortDay, todayIso } from "@/lib/dates";
 import { WEEKDAY_SHORT, freqLabel, goalOf, goalProgress, isDue, stepOf } from "@/lib/habit-plan";
-import { amountOn, calendarCell, monthBars, monthStats } from "@/lib/habit-view";
+import { amountOn, calendarCell, monthBars, monthStats, tapCompletes } from "@/lib/habit-view";
 import { monthGrid, shiftMonth } from "@/lib/habit-stats";
 import { usePlanner } from "@/lib/planner-store";
 import type { Habit } from "@/lib/planner-types";
@@ -15,8 +15,10 @@ import { MONTHS, MONTHS_IN, MOODS, STATE_LABEL, habitHex } from "@/components/pl
 
 const WEEKS: readonly [string, string, string] = ["неделя", "недели", "недель"];
 
-/** Habit page like TickTick: hero with the big check, month rings, stat tiles, daily chart, journal. */
-export function HabitDetail({ habit, onBack }: { habit: Habit; onBack: () => void }) {
+/** Habit page: hero with the big check, month rings, stat tiles, daily chart, journal. */
+export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBack: () => void; onOpenFocus?: () => void }) {
+  const focusHabit = usePlanner((s) => s.focusHabit);
+  const [journalDay, setJournalDay] = useState(false);
   const updateHabit = usePlanner((s) => s.updateHabit);
   const deleteHabit = usePlanner((s) => s.deleteHabit);
   const today = todayIso();
@@ -57,7 +59,7 @@ export function HabitDetail({ habit, onBack }: { habit: Habit; onBack: () => voi
           {menu ? (
             <>
               <button type="button" aria-hidden="true" tabIndex={-1} className="fixed inset-0 z-30 cursor-default" onClick={() => setMenu(false)} />
-              <div role="menu" className="absolute top-full right-0 z-40 mt-1 w-52 overflow-hidden rounded-xl bg-surface py-1 shadow-xl ring-1 ring-line">
+              <div role="menu" className="absolute top-full right-0 z-40 mt-1 w-56 overflow-hidden rounded-2xl bg-surface/95 py-1.5 shadow-2xl ring-1 ring-line backdrop-blur">
                 <MenuItem
                   icon={<Pencil className="size-4" />}
                   onClick={() => {
@@ -65,7 +67,17 @@ export function HabitDetail({ habit, onBack }: { habit: Habit; onBack: () => voi
                     setEditing(true);
                   }}
                 >
-                  Изменить
+                  Редактировать
+                </MenuItem>
+                <MenuItem
+                  icon={<Timer className="size-4" />}
+                  onClick={() => {
+                    setMenu(false);
+                    focusHabit(habit.id);
+                    onOpenFocus?.();
+                  }}
+                >
+                  Фокус
                 </MenuItem>
                 <MenuItem
                   icon={habit.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
@@ -99,7 +111,7 @@ export function HabitDetail({ habit, onBack }: { habit: Habit; onBack: () => voi
         </div>
       </div>
 
-      <Hero habit={habit} today={today} hex={hex} />
+      <Hero habit={habit} today={today} hex={hex} onCompleted={() => setJournalDay(true)} />
 
       {challenge ? (
         <div className="mt-3 rounded-2xl bg-elevated p-3">
@@ -170,15 +182,15 @@ export function HabitDetail({ habit, onBack }: { habit: Habit; onBack: () => voi
 
       <Card title="Статистика">
         <div className="grid grid-cols-2 gap-2">
-          <Tile icon={<CalendarCheck className="size-3.5" />} color="#33b679" label="Отметок за месяц" value={stats.monthChecks} unit={plural(stats.monthChecks, DAYS)} />
-          <Tile icon={<Check className="size-3.5" />} color="#039be5" label="Всего отметок" value={stats.totalChecks} unit={plural(stats.totalChecks, DAYS)} />
-          <Tile icon={<Percent className="size-3.5" />} color="#f6bf26" label="Выполнено за месяц" value={stats.percent} unit="%" />
-          <Tile icon={<Flame className="size-3.5" />} color="#f4511e" label="Текущая серия" value={stats.current} unit={plural(stats.current, streakUnit)} />
-          <Tile icon={<Trophy className="size-3.5" />} color="#8e24aa" label="Лучшая серия" value={stats.best} unit={plural(stats.best, streakUnit)} />
+          <Tile icon={<CalendarCheck className="size-3.5" />} color="#4fa57e" label="Отметок за месяц" value={stats.monthChecks} unit={plural(stats.monthChecks, DAYS)} />
+          <Tile icon={<Check className="size-3.5" />} color="#3a8fc4" label="Всего отметок" value={stats.totalChecks} unit={plural(stats.totalChecks, DAYS)} />
+          <Tile icon={<Percent className="size-3.5" />} color="#dcae3a" label="Выполнено за месяц" value={stats.percent} unit="%" />
+          <Tile icon={<Flame className="size-3.5" />} color="#e07a3c" label="Текущая серия" value={stats.current} unit={plural(stats.current, streakUnit)} />
+          <Tile icon={<Trophy className="size-3.5" />} color="#8a4fa3" label="Лучшая серия" value={stats.best} unit={plural(stats.best, streakUnit)} />
           {goal > 1 ? (
             <>
-              <Tile icon={<BarChart3 className="size-3.5" />} color="#7986cb" label="Объём за месяц" value={stats.monthVolume} unit={unitWord} />
-              <Tile icon={<BarChart3 className="size-3.5" />} color="#3f51b5" label="Общий объём" value={stats.totalVolume} unit={unitWord} />
+              <Tile icon={<BarChart3 className="size-3.5" />} color="#8a90c9" label="Объём за месяц" value={stats.monthVolume} unit={unitWord} />
+              <Tile icon={<BarChart3 className="size-3.5" />} color="#4a5aa8" label="Общий объём" value={stats.totalVolume} unit={unitWord} />
             </>
           ) : null}
         </div>
@@ -207,7 +219,8 @@ export function HabitDetail({ habit, onBack }: { habit: Habit; onBack: () => voi
       </Card>
 
       {day ? <CheckinSheet key={day} habit={habit} day={day} onClose={() => setDay(null)} /> : null}
-      <HabitEditor habit={habit} open={editing} onClose={() => setEditing(false)} onDeleted={onBack} />
+      <HabitEditor habit={habit} open={editing} onClose={() => setEditing(false)} onRemoved={onBack} />
+      {journalDay && !day ? <CheckinSheet key={`journal-${today}`} habit={habit} day={today} onClose={() => setJournalDay(false)} /> : null}
     </div>
   );
 }
@@ -220,8 +233,8 @@ function entryMark(habit: Habit, day: string): ReactNode {
 
 function MenuItem({ icon, children, onClick, danger }: { icon: ReactNode; children: ReactNode; onClick: () => void; danger?: boolean }) {
   return (
-    <button type="button" role="menuitem" onClick={onClick} className={cn("flex h-11 w-full items-center gap-3 px-3 text-left text-[0.9375rem] hover:bg-elevated", danger ? "text-danger" : "text-fg")}>
-      <span className="text-subtle">{icon}</span>
+    <button type="button" role="menuitem" onClick={onClick} className={cn("flex h-11 w-full items-center gap-3 px-4 text-left text-[0.9375rem] hover:bg-elevated", danger ? "text-danger" : "text-fg")}>
+      <span className={danger ? "text-danger" : "text-fg"}>{icon}</span>
       {children}
     </button>
   );
@@ -293,7 +306,7 @@ function BarChart({ habit, month, today, hex }: { habit: Habit; month: string; t
 }
 
 /** Big hero: icon in the habit colour, name, motivation, today's progress and a swipe-or-tap check. */
-function Hero({ habit, today, hex }: { habit: Habit; today: string; hex: string }) {
+function Hero({ habit, today, hex, onCompleted }: { habit: Habit; today: string; hex: string; onCompleted: () => void }) {
   const toggleHabit = usePlanner((s) => s.toggleHabit);
   const setHabitDay = usePlanner((s) => s.setHabitDay);
   const goal = goalOf(habit);
@@ -317,15 +330,23 @@ function Hero({ habit, today, hex }: { habit: Habit; today: string; hex: string 
         hex={hex}
         done={done}
         label={done ? "Снять отметку за сегодня" : goal > 1 ? `Добавить ${stepOf(habit)}${habit.unit ? ` ${habit.unit}` : ""}` : "Отметить сегодня"}
-        onTap={() => toggleHabit(habit.id, today)}
-        onSwipe={() => !done && setHabitDay(habit.id, today, { done: true })}
+        onTap={() => {
+          const completes = habit.journal && tapCompletes(habit, today);
+          toggleHabit(habit.id, today);
+          if (completes) onCompleted();
+        }}
+        onSwipe={() => {
+          if (done) return;
+          setHabitDay(habit.id, today, { done: true });
+          if (habit.journal) onCompleted();
+        }}
       />
       <p className="mt-1.5 text-[0.6875rem] text-subtle">{done ? "Нажмите, чтобы снять" : goal > 1 ? `Нажатие: +${stepOf(habit)} · смахните вправо — вся цель` : "Нажмите или смахните вправо"}</p>
     </section>
   );
 }
 
-/** TickTick-like pill: drag the knob to the right end = done; a tap = one step. */
+/** Swipe pill: drag the knob to the right end = done; a tap = one step. */
 function SwipeCheck({ hex, done, label, onTap, onSwipe }: { hex: string; done: boolean; label: string; onTap: () => void; onSwipe: () => void }) {
   const track = useRef<HTMLButtonElement>(null);
   const [dx, setDx] = useState<number | null>(null);

@@ -3,7 +3,7 @@ import { Archive, CalendarRange, ChevronLeft, ChevronRight, Plus } from "lucide-
 import { cn } from "@/lib/cn";
 import { dayNumber, shiftIso, todayIso, weekdayLetter, weekDays } from "@/lib/dates";
 import { SECTIONS, dayState, freqLabel, goalOf, isDue, sectionOf, sortHabits } from "@/lib/habit-plan";
-import { dayProgress, habitSubline, reorderSection } from "@/lib/habit-view";
+import { dayProgress, habitSubline, reorderSection, tapCompletes } from "@/lib/habit-view";
 import { usePlanner } from "@/lib/planner-store";
 import type { Habit } from "@/lib/planner-types";
 import { InlineHint } from "@/components/ui/hint";
@@ -11,16 +11,16 @@ import { Empty } from "@/components/planner/empty-state";
 import { Fab } from "@/components/planner/quick-composer";
 import { HabitDetail } from "@/components/planner/habits/habit-detail";
 import { HabitEditor } from "@/components/planner/habits/habit-editor";
-import { NewHabitSheet } from "@/components/planner/habits/habit-new";
+import { CheckinSheet } from "@/components/planner/habits/habit-checkin";
 import { HabitIcon, RingCheck } from "@/components/planner/habits/habit-ui";
 import { STATE_LABEL, habitHex } from "@/components/planner/habits/habit-meta";
 
-/** Habits like TickTick: compact rows by section, a ring check on the right, the habit page on tap. */
-export function HabitsView() {
+/** Habits: compact rows by section, a ring check on the right, the habit page on tap. */
+export function HabitsView({ onOpenFocus }: { onOpenFocus?: () => void }) {
   const habits = usePlanner((s) => s.habits);
   const today = todayIso();
   const [openId, setOpenId] = useState<string | null>(null);
-  const [editId, setEditId] = useState<string | null>(null);
+  const [checkinId, setCheckinId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [week, setWeek] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -33,9 +33,9 @@ export function HabitsView() {
   const groups = SECTIONS.map((section) => ({ section, items: shown.filter((h) => sectionOf(h) === section.id) })).filter((g) => g.items.length);
   const days = weekDays(shiftIso(today, offset * 7));
   const opened = habits.find((h) => h.id === openId);
-  const editing = habits.find((h) => h.id === editId);
+  const checkin = habits.find((h) => h.id === checkinId);
 
-  if (opened) return <HabitDetail key={opened.id} habit={opened} onBack={() => setOpenId(null)} />;
+  if (opened) return <HabitDetail key={opened.id} habit={opened} onBack={() => setOpenId(null)} onOpenFocus={onOpenFocus} />;
 
   return (
     <div className="mx-auto max-w-xl">
@@ -112,6 +112,7 @@ export function HabitsView() {
                 today={today}
                 days={week && !showArchive ? days : null}
                 onOpen={() => setOpenId(habit.id)}
+                onCompleted={() => setCheckinId(habit.id)}
               />
             ))}
           </ul>
@@ -135,15 +136,32 @@ export function HabitsView() {
       </div>
 
       {!showArchive ? <Fab label="Новая привычка" onClick={() => setCreating(true)} /> : null}
-      <NewHabitSheet open={creating} onClose={() => setCreating(false)} onCreated={(id, custom) => (custom ? setEditId(id) : undefined)} />
-      {editing ? <HabitEditor habit={editing} open onClose={() => setEditId(null)} onDeleted={() => setEditId(null)} /> : null}
+      <HabitEditor habit={null} open={creating} onClose={() => setCreating(false)} />
+      {checkin ? <CheckinSheet key={checkin.id} habit={checkin} day={today} onClose={() => setCheckinId(null)} /> : null}
     </div>
   );
 }
 
 const ROW_H = 60;
 
-function HabitRow({ habit, index, count, today, days, onOpen }: { habit: Habit; index: number; count: number; today: string; days: string[] | null; onOpen: () => void }) {
+function HabitRow({
+  habit,
+  index,
+  count,
+  today,
+  days,
+  onOpen,
+  onCompleted,
+}: {
+  habit: Habit;
+  index: number;
+  count: number;
+  today: string;
+  days: string[] | null;
+  onOpen: () => void;
+  /** «Показывать дневник при отметке»: the tap finished today. */
+  onCompleted: () => void;
+}) {
   const toggleHabit = usePlanner((s) => s.toggleHabit);
   const setHabitOrder = usePlanner((s) => s.setHabitOrder);
   const moveHabit = usePlanner((s) => s.moveHabit);
@@ -223,7 +241,11 @@ function HabitRow({ habit, index, count, today, days, onOpen }: { habit: Habit; 
             state={state}
             pressed={state === "done"}
             label={`${habit.name}, ${today}: ${STATE_LABEL[state]}${goal > 1 ? ` (нажмите: +шаг)` : ""}`}
-            onClick={() => toggleHabit(habit.id, today)}
+            onClick={() => {
+              const completes = habit.journal && tapCompletes(habit, today);
+              toggleHabit(habit.id, today);
+              if (completes) onCompleted();
+            }}
           />
         )}
       </div>

@@ -77,7 +77,7 @@ export function upcoming(items: Milestone[], today: string): Upcoming[] {
 
 export type KindMeta = { id: MilestoneKind; label: string; icon: string; color: TaskColor; yearly: boolean; age: boolean; dateLabel: string; example: string };
 
-/** Types like TickTick «Обратный отсчёт»: icon, colour and defaults of a new date. */
+/** Date types («Обратный отсчёт» and others): icon, colour and defaults of a new date. */
 export const KINDS: readonly KindMeta[] = [
   { id: "birthday", label: "День рождения", icon: "🎂", color: "peacock", yearly: true, age: true, dateLabel: "Дата рождения", example: "Например: Мама" },
   { id: "anniversary", label: "Годовщина", icon: "💍", color: "tomato", yearly: true, age: true, dateLabel: "Дата события", example: "Например: Свадьба" },

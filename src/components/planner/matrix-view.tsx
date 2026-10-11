@@ -8,7 +8,7 @@ import { colorHex } from "@/lib/task-colors";
 import { useDoneToast } from "@/lib/done-toast";
 
 /**
- * Eisenhower matrix like in TickTick: four quadrants on one screen (also on a
+ * Eisenhower matrix: four quadrants on one screen (also on a
  * 360 px phone), compact one-line rows, each quadrant scrolls by itself,
  * tap the header to open it full screen, quick add per quadrant. Moving: drag
  * with the mouse, or long-press (right click) → «Переместить в…».

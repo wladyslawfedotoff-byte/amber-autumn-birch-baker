@@ -28,7 +28,7 @@ export const STATE_LABEL: Record<DayState, string> = {
 };
 
 export type Template = { name: string; hint: string; extra: Partial<Habit> };
-/** «Галерея» like in TickTick: one tap creates a ready habit (it can be edited later). */
+/** Ready-made habits: one tap creates a ready habit (it can be edited later). */
 export const TEMPLATES: Template[] = [
   { name: "Пить воду", hint: "8 стаканов в день", extra: { icon: "💧", color: "peacock", goal: 8, unit: "стаканов", section: "other", reminders: ["10:00", "14:00", "18:00"] } },
   { name: "Чтение", hint: "10 страниц вечером", extra: { icon: "📖", color: "grape", goal: 10, unit: "страниц", step: 5, section: "evening" } },
@@ -45,3 +45,26 @@ export function habitHex(habit: Pick<Habit, "color">): string {
   return colorHex(habit.color) ?? "var(--accent)";
 }
 
+
+/** «Мотивация» ↻: short motivation lines (proverbs and plain advice). */
+export const QUOTES = [
+  "Маленькие шаги каждый день",
+  "Дорогу осилит идущий",
+  "Капля камень точит",
+  "Терпение и труд всё перетрут",
+  "Привычка — вторая натура",
+  "Повторение — мать учения",
+  "Тише едешь — дальше будешь",
+  "Не жди идеального момента — начни сейчас",
+  "Сделай сегодня то, за что завтра скажешь спасибо",
+  "Главное — не пропускать два дня подряд",
+  "Лучше немного, но каждый день",
+  "Сегодняшнее усилие — завтрашняя лёгкость",
+  "Не ради идеала, а ради движения",
+  "Ты сильнее, чем думаешь",
+];
+
+export function randomQuote(current: string): string {
+  const pool = QUOTES.filter((q) => q !== current);
+  return pool[Math.floor(Math.random() * pool.length)] ?? QUOTES[0]!;
+}

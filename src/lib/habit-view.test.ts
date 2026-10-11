@@ -13,6 +13,10 @@ import {
   monthStats,
   reminderSummary,
   reorderSection,
+  draftPatch,
+  habitDraft,
+  tapCompletes,
+  toggleWeekday,
 } from "./habit-view.ts";
 
 // 2026-10-11 is a Sunday.
@@ -106,4 +110,37 @@ test("check-in sheet: draft from the day and the patch it saves", () => {
   const failed = withEntry(done, TODAY, checkinPatch(simple, { status: "fail", amount: 1, mood: 2, note: "" }));
   assert.deepEqual(failed.checks, []);
   assert.equal(checkinDraft(failed, TODAY).status, "fail");
+});
+
+test("edit sheet draft round-trips and cleans up", () => {
+  const h: Habit = { id: "w", name: "Вода", checks: [], goal: 8, unit: "стаканов", remindAt: "09:00", reminders: ["18:00"], freq: { kind: "weekdays", days: [1, 2] } };
+  const d = habitDraft(h);
+  assert.equal(d.goal, 8);
+  assert.deepEqual(d.reminders.sort(), ["09:00", "18:00"]);
+  assert.equal(d.journal, false);
+  const p = draftPatch({ ...d, name: "  Вода  ", reminders: ["18:00", "09:00", "18:00"], journal: true });
+  assert.equal(p.name, "Вода");
+  assert.deepEqual(p.reminders, ["09:00", "18:00"]);
+  assert.equal(p.remindAt, null);
+  assert.equal(p.journal, true);
+  const simple = draftPatch({ ...d, goal: 1, freq: { kind: "weekdays", days: [1, 2, 3, 4, 5, 6, 7] } });
+  assert.equal(simple.goal, null);
+  assert.equal(simple.unit, null);
+  assert.deepEqual(simple.freq, { kind: "daily" });
+  assert.equal(habitDraft(null).name, "");
+});
+
+test("weekday pills: all seven = daily, never empty", () => {
+  assert.deepEqual(toggleWeekday({ kind: "daily" }, 7), { kind: "weekdays", days: [1, 2, 3, 4, 5, 6] });
+  assert.deepEqual(toggleWeekday({ kind: "weekdays", days: [1, 2, 3, 4, 5, 6] }, 7), { kind: "daily" });
+  assert.deepEqual(toggleWeekday({ kind: "weekdays", days: [3] }, 3), { kind: "weekdays", days: [3] });
+});
+
+test("tapCompletes: only the tap that finishes the day", () => {
+  const simple: Habit = { id: "s", name: "S", checks: [] };
+  assert.equal(tapCompletes(simple, TODAY), true);
+  assert.equal(tapCompletes({ ...simple, checks: [TODAY] }, TODAY), false);
+  const water: Habit = { id: "w", name: "W", checks: [], goal: 2 };
+  assert.equal(tapCompletes(water, TODAY), false);
+  assert.equal(tapCompletes(withEntry(water, TODAY, { amount: 1 }), TODAY), true);
 });

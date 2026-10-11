@@ -27,7 +27,7 @@ test("calendar mode is normalised", () => {
 });
 
 test("ISO week numbers and week start", () => {
-  assert.equal(isoWeek("2026-10-11"), 41, "as in the TickTick screenshot (Н41)");
+  assert.equal(isoWeek("2026-10-11"), 41, "ISO week number (Н41)");
   assert.equal(isoWeek("2026-01-01"), 1);
   assert.equal(isoWeek("2027-01-01"), 53);
   assert.equal(mondayOf("2026-10-11"), "2026-10-05");

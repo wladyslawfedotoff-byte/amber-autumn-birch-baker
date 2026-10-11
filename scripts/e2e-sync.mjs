@@ -120,11 +120,11 @@ async function habitButton(page, name, day) {
 async function habitTwoClients(phone, phoneCtx, computer, computerCtx) {
   const name = `Зарядка ${Date.now() % 100000}`;
   await openView(computer, "Привычки");
-  // «+» (FAB on a phone, header button on a computer) opens the «Новая привычка» sheet.
+  // «+» (FAB on a phone, header button on a computer) opens the «Новая привычка» sheet; Enter saves it.
   await computer.locator('button[aria-label="Новая привычка"] >> visible=true').first().click();
   await computer.fill('input[aria-label="Название привычки"]', name);
   await computer.press('input[aria-label="Название привычки"]', "Enter");
-  // A custom habit opens its settings sheet: close it with «Готово».
+  // Older builds left a settings sheet open: close it if present.
   const sheet = computer.getByRole("dialog");
   if (await sheet.isVisible().catch(() => false)) await sheet.getByRole("button", { name: "Готово" }).click();
   await openView(phone, "Привычки");

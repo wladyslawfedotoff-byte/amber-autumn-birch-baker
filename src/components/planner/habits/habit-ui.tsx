@@ -21,7 +21,7 @@ export function HabitIcon({ habit, size = "md", className }: { habit: Pick<Habit
 }
 
 /**
- * Round check with a progress ring (TickTick list): empty ring → arc for
+ * Round check with a progress ring (habit list): empty ring → arc for
  * partial amounts → filled circle with ✓ when done. `progress` is 0…1.
  */
 export function RingCheck({

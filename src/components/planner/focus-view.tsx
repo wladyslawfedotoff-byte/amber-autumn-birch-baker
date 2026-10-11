@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { todayIso } from "@/lib/dates";
@@ -26,6 +27,8 @@ export function FocusView() {
   const resetFocus = usePlanner((s) => s.resetFocus);
   const setWorkLen = usePlanner((s) => s.setWorkLen);
   const setFocusTask = usePlanner((s) => s.setFocusTask);
+  const setFocusHabit = usePlanner((s) => s.setFocusHabit);
+  const habit = usePlanner((s) => s.habits.find((h) => h.id === s.focus.habitId));
   const today = todayIso();
   const sessions = pomoDate === today ? pomoCount : 0;
   const total = focus.mode === "work" ? focus.workLen : breakFor(focus.workLen);
@@ -105,6 +108,19 @@ export function FocusView() {
           ))}
         </select>
       </label>
+      {habit ? (
+        <div className="mt-2 flex min-h-11 w-full items-center gap-3 rounded-xl bg-elevated pl-3 text-[0.9375rem]">
+          <span className="shrink-0">Привычка</span>
+          <span className="min-w-0 flex-1 truncate text-right text-muted">
+            {habit.icon ? `${habit.icon} ` : ""}
+            {habit.name}
+          </span>
+          <button type="button" aria-label="Отвязать привычку" onClick={() => setFocusHabit(null)} className="flex size-11 items-center justify-center text-subtle">
+            <X className="size-4" />
+          </button>
+        </div>
+      ) : null}
+      {habit ? <p className="mt-1 w-full px-1 text-xs text-subtle">Когда сессия закончится, сегодняшняя отметка добавится сама.</p> : null}
       {linked && !linked.done ? (
         <Button className="mt-2" variant="ghost" size="sm" onClick={() => toggleTask(linked.id)}>
           Отметить выполненной

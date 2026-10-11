@@ -2,7 +2,7 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { TASK_COLORS, colorLabel, type TaskColor } from "@/lib/task-colors";
 
-/** Google-Calendar-like palette: tap a colour, tap again (or «Без цвета») to clear. */
+/** Palette of 10 colours: tap a colour, tap again (or «Без цвета») to clear. */
 export function ColorPicker({ value, onChange, bare }: { value: TaskColor | null | undefined; onChange: (color: TaskColor | null) => void; bare?: boolean }) {
   return (
     <fieldset className={bare ? "" : "mt-5"}>
