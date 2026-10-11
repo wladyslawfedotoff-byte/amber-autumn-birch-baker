@@ -1,5 +1,5 @@
 import { APP_NAME, APP_VERSION } from "@/lib/site";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   Archive,
   ArrowDown,
@@ -7,6 +7,7 @@ import {
   Bell,
   CalendarClock,
   ChevronRight,
+  GripVertical,
   Cloud,
   HardDriveDownload,
   Info,
@@ -18,7 +19,7 @@ import {
 import { TAB_ICONS } from "@/components/planner/tab-icons";
 import { Sheet } from "@/components/ui/sheet";
 import { SwitchRow } from "@/components/ui/rows";
-import { CALENDAR_MODES, DEFAULT_TABS, MAX_TABS, MIN_TABS, TAB_OPTIONS, moveTab, toggleTab } from "@/lib/ui-prefs";
+import { CALENDAR_MODES, DEFAULT_TABS, MAX_TABS, MIN_TABS, TAB_OPTIONS, moveTab, placeTab, toggleTab, type TabId } from "@/lib/ui-prefs";
 import { ACCENTS } from "@/lib/accents";
 import { addFromBackup, saveBackup } from "@/lib/backup";
 import { cn } from "@/lib/cn";
@@ -414,52 +415,86 @@ function LookSection() {
   );
 }
 
-/** «Панель вкладок»: which sections sit in the bottom bar on a phone, and in what order. */
+/** «Панель вкладок»: which sections sit in the bottom bar on a phone, and in what order (drag ≡). */
 function TabsSection() {
   const tabs = usePlanner((s) => s.tabBar) ?? DEFAULT_TABS;
   const setTabs = usePlanner((s) => s.setTabBar);
   const off = TAB_OPTIONS.filter((tab) => !tabs.includes(tab.id));
+  const [drag, setDrag] = useState<{ id: TabId; order: TabId[] } | null>(null);
+  const shown = drag?.order ?? tabs;
+
+  function beginDrag(event: ReactPointerEvent<HTMLElement>, id: TabId) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    let order = tabs;
+    setDrag({ id, order });
+    const move = (ev: PointerEvent) => {
+      const rows = [...document.querySelectorAll<HTMLElement>("[data-tab-row]")];
+      const index = rows.findIndex((row) => {
+        const rect = row.getBoundingClientRect();
+        return ev.clientY < rect.top + rect.height / 2;
+      });
+      order = placeTab(order, id, index < 0 ? rows.length - 1 : index > order.indexOf(id) ? index - 1 : index);
+      setDrag({ id, order });
+    };
+    const finish = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", finish);
+      handle.removeEventListener("pointercancel", finish);
+      setDrag(null);
+      if (order.join() !== tabs.join()) setTabs(order);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", finish);
+  }
+
   return (
     <div>
-      <p className="text-sm text-muted">
-        От {MIN_TABS} до {MAX_TABS} вкладок внизу экрана на телефоне. Остальные разделы — в меню ☰. Например: Сегодня, Календарь, Привычки, Даты.
+      <p className="px-1 text-xs text-muted">
+        {MIN_TABS}–{MAX_TABS} вкладок внизу экрана. Порядок — потяните за точки справа. Остальное — в меню ☰.
       </p>
-      <p className="mt-4 mb-1 px-1 text-xs font-medium text-subtle uppercase">На панели · {tabs.length} из {MAX_TABS}</p>
+      <p className="mt-3 mb-1 px-1 text-xs font-medium text-subtle uppercase">На панели · {tabs.length} из {MAX_TABS}</p>
       <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
-        {tabs.map((id, index) => {
+        {shown.map((id, index) => {
           const Icon = TAB_ICONS[id];
           const label = TAB_OPTIONS.find((tab) => tab.id === id)?.label ?? id;
           return (
-            <li key={id} className="flex min-h-11 items-center gap-2 pl-3">
-              <Icon className="size-5 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{label}</span>
-              <button
-                type="button"
-                aria-label={`${label}: левее`}
-                disabled={index === 0}
-                onClick={() => setTabs(moveTab(tabs, id, -1))}
-                className="flex size-10 items-center justify-center text-muted disabled:opacity-30"
-              >
-                <ArrowUp className="size-4" />
-              </button>
-              <button
-                type="button"
-                aria-label={`${label}: правее`}
-                disabled={index === tabs.length - 1}
-                onClick={() => setTabs(moveTab(tabs, id, 1))}
-                className="flex size-10 items-center justify-center text-muted disabled:opacity-30"
-              >
-                <ArrowDown className="size-4" />
-              </button>
+            <li key={id} data-tab-row="" className={cn("flex min-h-11 items-center gap-2 pr-1", drag?.id === id && "bg-surface shadow-md")}>
               <button
                 type="button"
                 aria-label={`Убрать «${label}» с панели`}
                 disabled={tabs.length <= MIN_TABS}
                 onClick={() => setTabs(toggleTab(tabs, id))}
-                className="flex size-11 items-center justify-center text-danger disabled:opacity-30"
+                className="flex size-11 shrink-0 items-center justify-center text-danger disabled:opacity-30"
               >
                 <MinusCircle className="size-5" />
               </button>
+              <Icon className="size-5 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{label}</span>
+              {/* Keyboard / screen-reader fallback for the drag handle. */}
+              <button type="button" aria-label={`${label}: левее`} disabled={index === 0} onClick={() => setTabs(moveTab(tabs, id, -1))} className="sr-only focus:not-sr-only">
+                <ArrowUp className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label={`${label}: правее`}
+                disabled={index === shown.length - 1}
+                onClick={() => setTabs(moveTab(tabs, id, 1))}
+                className="sr-only focus:not-sr-only"
+              >
+                <ArrowDown className="size-4" />
+              </button>
+              <span
+                aria-hidden="true"
+                title="Потяните, чтобы поменять порядок"
+                onPointerDown={(event) => beginDrag(event, id)}
+                className="drag-handle flex size-11 shrink-0 cursor-grab items-center justify-center text-subtle"
+              >
+                <GripVertical className="size-5" />
+              </span>
             </li>
           );
         })}

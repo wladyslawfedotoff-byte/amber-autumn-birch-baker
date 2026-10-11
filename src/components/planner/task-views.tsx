@@ -3,8 +3,11 @@ import { Archive, ChevronDown, ChevronRight, GripVertical, RotateCcw, Trash2 } f
 import { TodayStrip, TodaySummary, WeekDays } from "@/components/planner/today-strip";
 import { AddTaskForm, TaskRow } from "@/components/planner/task-row";
 import { Button } from "@/components/ui/button";
+import { InlineHint } from "@/components/ui/hint";
+import { Empty } from "@/components/planner/empty-state";
+import { canBoard } from "@/lib/ui-prefs";
 import { cn } from "@/lib/cn";
-import { dueLabel, formatLong, shiftIso, todayIso, occursOn } from "@/lib/dates";
+import { dueLabel, formatShortDay, shiftIso, todayIso, occursOn } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { Priority, Task, View } from "@/lib/planner-types";
 import { byNewest, doneInScope, matchesQuery, scopeTasks } from "@/lib/queries";
@@ -21,18 +24,6 @@ function defaultsFor(view: View, today: string): { listId: string | null; due: s
   return { listId: null, due: null };
 }
 
-function canBoard(view: View): boolean {
-  return view === "inbox" || view === "tomorrow" || view === "week" || view.startsWith("list:") || view.startsWith("tag:");
-}
-
-function Empty({ title, hint }: { title: string; hint: string }) {
-  return (
-    <div className="px-2 py-16 text-center">
-      <p className="text-lg font-semibold tracking-tight md:font-display md:text-2xl md:font-normal">{title}</p>
-      <p className="mt-2 text-sm text-muted">{hint}</p>
-    </div>
-  );
-}
 
 export function TaskViews({
   view,
@@ -40,7 +31,10 @@ export function TaskViews({
   selectedId,
   onOpen,
   onPickDay,
+  board: boardMode = false,
 }: {
+  /** «Доска» chosen with the icon in the header (lists that can be a board). */
+  board?: boolean;
   view: View;
   query: string;
   selectedId: string | null;
@@ -56,9 +50,8 @@ export function TaskViews({
   const doneFolded = usePlanner((s) => s.doneFolded);
   const setDoneFolded = usePlanner((s) => s.setDoneFolded);
   const now = syncNow();
-  const [mode, setMode] = useState<"list" | "board">("list");
   const searching = query.trim().length > 0;
-  const board = canBoard(view) && mode === "board" && !searching;
+  const board = canBoard(view) && boardMode && !searching;
 
   const found = searching
     ? tasks.filter((task) => matchesQuery(task, query, lists)).sort(byNewest)
@@ -69,12 +62,12 @@ export function TaskViews({
   const currentList = view.startsWith("list:") ? lists.find((list) => list.id === view.slice(5)) : undefined;
   const doneBlock =
     !searching && done.length > 0 && view !== "done" && view !== "archive" ? (
-      <section className="mt-6" aria-label="Готово">
+      <section className="mt-4" aria-label="Готово">
         <button
           type="button"
           aria-expanded={!doneFolded}
           onClick={() => setDoneFolded(!doneFolded)}
-          className="flex h-11 items-center gap-1 rounded-md px-1 text-sm font-medium text-muted hover:text-fg"
+          className="flex h-10 items-center gap-1 rounded-md px-1 text-xs font-semibold uppercase text-subtle hover:text-fg"
         >
           {doneFolded ? <ChevronRight className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
           Готово · <span className="tabular-nums">{done.length}</span>
@@ -93,11 +86,11 @@ export function TaskViews({
                 ticked={!task.done && repeatTickedOn(task, today)}
               />
             ))}
-            <p className="px-1 text-xs text-subtle">
+            <InlineHint label="Куда уходят выполненные" className="mt-1">
               {archiveDays > 0
                 ? `Выполненные задачи уходят в «Архив» ${archiveOptionLabel(archiveDays)} — срок меняется в «Настройках».`
                 : "Автоархив выключен — выполненные задачи остаются здесь. Включить можно в «Настройках»."}
-            </p>
+            </InlineHint>
           </>
         )}
       </section>
@@ -108,10 +101,10 @@ export function TaskViews({
     <div>
       {currentList && !searching ? <ListShareBar list={currentList} /> : null}
       {view === "shared" && !searching ? (
-        <p className="mb-3 text-sm text-muted">
+        <InlineHint label="Что сюда попадает" className="mb-1">
           Задачи, которые видите не только вы: совместные, назначенные и из общих списков. Поделиться — откройте задачу → «Совместная» или
           «Назначить»; целый список — в его заголовке.
-        </p>
+        </InlineHint>
       ) : null}
       {canAdd && view !== "today" && view !== "shared" ? (
         <AddTaskForm
@@ -128,29 +121,8 @@ export function TaskViews({
         />
       ) : null}
 
-      {canBoard(view) && !searching ? (
-        <div className="mt-3 grid grid-cols-2 gap-1 rounded-md border border-line p-1">
-          <button
-            type="button"
-            aria-pressed={mode === "list"}
-            onClick={() => setMode("list")}
-            className={cn("h-11 rounded-md text-sm", mode === "list" ? "bg-elevated font-medium text-fg" : "text-muted")}
-          >
-            Список
-          </button>
-          <button
-            type="button"
-            aria-pressed={mode === "board"}
-            onClick={() => setMode("board")}
-            className={cn("h-11 rounded-md text-sm", mode === "board" ? "bg-elevated font-medium text-fg" : "text-muted")}
-          >
-            Доска
-          </button>
-        </div>
-      ) : null}
-
       {searching ? (
-        <div className="mt-4">
+        <div className="mt-2">
           {found.length === 0 ? (
             <Empty title="Ничего не нашлось" hint="Попробуйте другое слово, тег или название списка." />
           ) : (
@@ -184,7 +156,7 @@ export function TaskViews({
       ) : view.startsWith("day:") ? (
         <>
           <WeekDays selected={view.slice(4)} onPick={onPickDay} />
-          <div className="mt-3">
+          <div className="mt-2">
             <AddTaskForm
             className="hidden md:block"
               placeholder="Задача на этот день"
@@ -194,7 +166,7 @@ export function TaskViews({
           {open.length === 0 ? (
             <Empty title="На этот день пусто" hint="Добавьте задачу или перенесите сюда с другого дня." />
           ) : (
-            <div className="mt-3">
+            <div className="mt-2">
               {open.map((task) => (
                 <TaskRow
                   key={task.id}
@@ -228,7 +200,7 @@ export function TaskViews({
       ) : view === "done" ? (
         doneAll(recentDone(tasks, now, archiveDays), selectedId, today, onOpen, archiveDays)
       ) : (
-        <div className="mt-3">
+        <div className="mt-2">
           {open.map((task) => (
             <TaskRow
               key={task.id}
@@ -265,12 +237,12 @@ function doneAll(
   }
   return (
     <div>
-      <p className="mb-3 text-sm text-muted">
+      <InlineHint label="Как вернуть задачу" className="mb-1">
         {archiveDays > 0
           ? `Выполненные за последние дни. Через ${archiveOptionLabel(archiveDays).replace("через ", "")} после выполнения задача уходит в «Архив».`
           : "Все выполненные задачи. Автоархив выключен в «Настройках»."}{" "}
         Кружок слева — вернуть задачу в работу.
-      </p>
+      </InlineHint>
       {items.map((task) => (
         <TaskRow
           key={task.id}
@@ -305,7 +277,7 @@ function TodayGroups({
   return (
     <div>
       {overdue.length > 0 ? (
-        <section className="mt-4">
+        <section className="mt-3">
           <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-danger">Просрочено</h2>
           {overdue.map((task) => (
             <TaskRow
@@ -321,7 +293,7 @@ function TodayGroups({
         </section>
       ) : null}
       {current.length > 0 ? (
-        <section className="mt-4">
+        <section className="mt-3">
           <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-subtle">На сегодня</h2>
           {[...current]
             .sort((a, b) => (a.startAt ?? a.remindAt ?? "99:99").localeCompare(b.startAt ?? b.remindAt ?? "99:99"))
@@ -363,8 +335,11 @@ function WeekGroups({
   return (
     <div>
       {groups.map((group) => (
-        <section key={group.day} className="mt-5">
-          <h2 className="px-3 text-sm font-medium text-muted">{formatLong(group.day)}</h2>
+        <section key={group.day} className="mt-3">
+          <h2 className={cn("px-1 pb-1 text-xs font-semibold uppercase tracking-wide", group.day === today ? "text-accent" : "text-subtle")}>
+            {group.day === today ? "Сегодня · " : group.day === shiftIso(today, 1) ? "Завтра · " : ""}
+            {formatShortDay(group.day, true)}
+          </h2>
           {group.items.map((task) => (
             <TaskRow
               key={task.id}
@@ -443,9 +418,9 @@ function PriorityBoard({
   }
 
   return (
-    <div className="mt-3">
-      <p className="text-xs text-muted">Потяните карточку в другой приоритет.</p>
-      <div ref={scrollerRef} className="mt-2 flex gap-2 overflow-x-auto pb-2">
+    <div className="mt-1">
+      <InlineHint label="Как переставлять">Потяните карточку за любое место в другую колонку — у задачи сменится приоритет. Нажатие открывает задачу.</InlineHint>
+      <div ref={scrollerRef} className="no-scrollbar -mx-4 mt-1 flex snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
         {COLUMNS.map((column) => {
           const items = tasks.filter((task) => task.priority === column.priority);
           return (
@@ -453,29 +428,29 @@ function PriorityBoard({
               key={column.priority}
               data-priority={column.priority}
               className={cn(
-                "flex w-64 shrink-0 flex-col rounded-lg border bg-bg p-3",
-                over === column.priority ? "border-accent" : "border-line",
+                "flex w-[80vw] max-w-72 shrink-0 snap-start flex-col rounded-xl bg-bg p-2 ring-1",
+                over === column.priority ? "ring-accent" : "ring-transparent",
               )}
             >
-              <p className="flex h-11 items-center justify-between text-sm font-medium">
+              <p className="flex h-8 items-center justify-between px-1 text-xs font-semibold uppercase text-subtle">
                 {column.title}
-                <span className="tabular-nums text-xs text-subtle">{items.length}</span>
+                <span className="tabular-nums">{items.length}</span>
               </p>
-              <ul className="flex min-h-16 flex-col gap-2">
+              <ul className="flex min-h-16 flex-col gap-1">
                 {items.map((task) => (
                   <li key={task.id}>
                     <div
                       className={cn(
-                        "drag-handle rounded-md border border-line bg-elevated px-3 py-3",
-                        selectedId === task.id && "border-accent",
+                        "drag-handle rounded-lg bg-elevated px-2.5 py-2",
+                        selectedId === task.id && "ring-1 ring-accent",
                       )}
                       onPointerDown={(event) => begin(event, task)}
                     >
-                      <span className="flex items-start gap-2">
-                        <GripVertical className="mt-0.5 size-4 shrink-0 text-subtle" />
+                      <span className="flex items-start gap-1.5">
+                        <GripVertical className="mt-0.5 size-3.5 shrink-0 text-subtle" />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-sm text-fg">{task.title}</span>
-                          <span className="mt-1 block text-xs text-muted">
+                          <span className="block text-[0.9375rem] leading-snug text-fg">{task.title}</span>
+                          <span className="mt-0.5 block text-[0.75rem] text-muted">
                             {task.due ? dueLabel(task.due, today) : "без даты"}
                           </span>
                         </span>
@@ -531,10 +506,10 @@ function ArchiveList({
   }
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <p className="min-w-0 flex-1 text-sm text-muted">
-          <Archive className="mr-1 inline size-4 align-text-bottom" aria-hidden="true" />
-          {tasks.length} в архиве. «Вернуть» — снова в работу; общие задачи удаляются по тем же правилам, что и обычно.
+      <div className="mb-2 flex items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs text-subtle">
+          <Archive className="mr-1 inline size-3.5 align-text-bottom" aria-hidden="true" />
+          {tasks.length} в архиве · «↺» — снова в работу
         </p>
         {confirm === "all" ? (
           <Button
@@ -554,7 +529,7 @@ function ArchiveList({
         )}
       </div>
       {tasks.map((task) => (
-        <div key={task.id} className="flex items-start gap-1">
+        <div key={task.id} className="mb-1 flex items-start gap-1">
           <div className="min-w-0 flex-1">
             <TaskRow task={task} today={today} selected={selectedId === task.id} showDue showList onOpen={onOpen} />
           </div>

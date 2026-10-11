@@ -79,6 +79,12 @@ async function waitForText(page, text, label) {
 }
 
 async function openView(page, label) {
+  // On a phone the drawer leaves out what is already in the bottom tab bar.
+  const tab = page.locator('nav[aria-label="Основные разделы"] button').filter({ hasText: new RegExp(`^${label}$`) });
+  if ((await tab.count()) && (await tab.first().isVisible())) {
+    await tab.first().click();
+    return;
+  }
   const menu = page.locator('button[aria-label="Открыть меню"]');
   if (await menu.isVisible()) await menu.click();
   await page.locator(`text="${label}" >> visible=true`).first().click();

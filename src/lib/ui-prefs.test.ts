@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_TABS, MAX_TABS, moveTab, normalizeCalendarMode, normalizeTabs, toggleTab, modeDays } from "./ui-prefs.ts";
+import { DEFAULT_TABS, MAX_TABS, moveTab, normalizeCalendarMode, normalizeTabs, toggleTab, modeDays, drawerItems, placeTab, canBoard } from "./ui-prefs.ts";
 import { keyboardFrame, revealDelta } from "./viewport.ts";
 import { dotsFor, isoWeek, layoutDay, minutesOf, mondayOf, rangeStart, timeRange } from "./calendar-layout.ts";
 
@@ -72,4 +72,43 @@ test("focused field is revealed inside its scroll box", () => {
   assert.equal(revealDelta({ top: 500, bottom: 544 }, box), 106);
   assert.equal(revealDelta({ top: 20, bottom: 64 }, box), -42);
   assert.equal(revealDelta({ top: 60, bottom: 900 }, box), 0, "tall field: keep its top in view");
+});
+
+test("schedule board: tap → half-hour slot, opens at «now»", async () => {
+  const { slotAt, focusMinute } = await import("./day-board.ts");
+  assert.deepEqual(slotAt(0.5, 7 * 60, 23 * 60), { start: 900, end: 960 }, "middle of 07–23 → 15:00");
+  assert.deepEqual(slotAt(0.535, 7 * 60, 23 * 60), { start: 930, end: 990 });
+  assert.deepEqual(slotAt(1, 7 * 60, 23 * 60), { start: 1350, end: 1380 }, "kept inside the board");
+  assert.equal(focusMinute({ isToday: true, now: 14 * 60 + 10, spans: [], workStart: 540 }), 13 * 60 + 10);
+  assert.equal(focusMinute({ isToday: false, now: 0, spans: [{ id: "a", title: "", start: 600, end: 660, done: false, assumed: false }], workStart: 540 }), 570);
+  assert.equal(focusMinute({ isToday: false, now: 0, spans: [], workStart: 540 }), 510);
+});
+
+test("drawer does not repeat the tab bar (phone only)", () => {
+  const items = ["inbox", "today", "tomorrow", "week", "checklist", "calendar", "schedule", "projects", "focus", "settings"].map((id) => ({ id }));
+  const ids = (list: { id: string }[]) => list.map((item) => item.id);
+  assert.deepEqual(ids(drawerItems(items, ["today", "calendar", "schedule", "habits", "focus"], true)), [
+    "inbox",
+    "tomorrow",
+    "week",
+    "checklist",
+    "projects",
+    "settings",
+  ]);
+  // Core smart lists stay even when pinned to the bar.
+  assert.deepEqual(ids(drawerItems(items, ["inbox", "checklist", "projects"], true)), ["inbox", "today", "tomorrow", "week", "checklist", "calendar", "schedule", "focus", "settings"]);
+  assert.equal(drawerItems(items, ["today"], false).length, items.length);
+});
+
+test("tab bar: drag to a new place", () => {
+  const tabs = ["today", "calendar", "schedule", "habits", "focus"] as const;
+  assert.deepEqual(placeTab([...tabs], "focus", 0), ["focus", "today", "calendar", "schedule", "habits"]);
+  assert.deepEqual(placeTab([...tabs], "today", 2), ["calendar", "schedule", "today", "habits", "focus"]);
+  assert.deepEqual(placeTab([...tabs], "today", 99), ["calendar", "schedule", "habits", "focus", "today"]);
+  assert.deepEqual(placeTab([...tabs], "dates", 1), [...tabs], "unknown tab: unchanged");
+});
+
+test("board icon only on lists that can be a board", () => {
+  for (const view of ["inbox", "tomorrow", "week", "list:abc", "tag:дом"]) assert.equal(canBoard(view), true, view);
+  for (const view of ["today", "checklist", "schedule", "day:2026-10-11"]) assert.equal(canBoard(view), false, view);
 });

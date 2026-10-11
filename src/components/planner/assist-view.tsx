@@ -1,3 +1,4 @@
+import { InlineHint } from "@/components/ui/hint";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { todayIso } from "@/lib/dates";
@@ -65,17 +66,18 @@ export function AssistView({ onOpen }: { onOpen: (id: string) => void }) {
 
   return (
     <div className="mx-auto max-w-xl">
-      <p className="text-sm text-muted">
+      <InlineHint label="Что умеет помощник">
         Напишите, что крутится в голове. Помощник разложит это на задачи или соберёт план на сегодня из того, что уже есть.
-      </p>
+      </InlineHint>
       <textarea
         value={text}
         onChange={(event) => setText(event.target.value)}
-        rows={6}
+        rows={4}
+        aria-label="Что нужно сделать"
         placeholder="Завтра созвон, купить подарок к дню рождения, дописать отчёт..."
-        className="mt-4 w-full resize-y rounded-lg border border-line bg-elevated px-3 py-3 text-sm outline-none placeholder:text-subtle"
+        className="mt-1 w-full resize-y rounded-xl bg-elevated px-3 py-2.5 text-base outline-none placeholder:text-subtle"
       />
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap gap-2">
         <Button variant="primary" disabled={pending !== null || !text.trim()} onClick={() => void ask("capture")}>
           {pending === "capture" ? "Разбираю…" : "Разобрать в задачи"}
         </Button>
@@ -86,9 +88,9 @@ export function AssistView({ onOpen }: { onOpen: (id: string) => void }) {
       {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
       {note ? <p className="mt-4 text-sm text-fg">{note}</p> : null}
       {drafts.length > 0 ? (
-        <ul className="mt-4 divide-y divide-line rounded-lg border border-line">
+        <ul className="mt-3 divide-y divide-line overflow-hidden rounded-xl bg-elevated">
           {drafts.map((draft, index) => (
-            <li key={`${draft.title}-${index}`} className="flex items-start gap-3 px-3 py-3">
+            <li key={`${draft.title}-${index}`} className="flex items-start gap-3 px-3 py-2">
               <input
                 type="checkbox"
                 className="mt-1 size-4"
@@ -99,8 +101,8 @@ export function AssistView({ onOpen }: { onOpen: (id: string) => void }) {
                 aria-label={draft.title}
               />
               <div className="min-w-0">
-                <p className="text-sm">{draft.title}</p>
-                <p className="text-xs text-muted">
+                <p className="text-[0.9375rem]">{draft.title}</p>
+                <p className="text-[0.75rem] text-muted">
                   {[
                     draft.due,
                     draft.list,

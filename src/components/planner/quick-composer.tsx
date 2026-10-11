@@ -54,7 +54,7 @@ export function QuickComposer({
 
   return (
     <div
-      className={cn("absolute inset-0 z-[60] flex flex-col justify-end md:hidden", open ? "" : "pointer-events-none")}
+      className={cn("absolute inset-0 z-[60] flex flex-col justify-end md:items-center", open ? "" : "pointer-events-none", !open && "md:hidden")}
     >
       <button
         type="button"
@@ -67,13 +67,13 @@ export function QuickComposer({
         role="dialog"
         aria-label="Новая задача"
         className={cn(
-          "relative rounded-t-2xl bg-surface px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-xl transition-[transform,opacity] duration-150",
+          "relative rounded-t-2xl bg-surface px-3 md:mb-6 md:w-[32rem] md:rounded-2xl pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-xl transition-[transform,opacity] duration-150",
           open ? "translate-y-0 opacity-100" : "translate-y-[110%] opacity-0",
         )}
       >
         <p className="px-1 pb-1.5 text-xs font-medium text-subtle">{title}</p>
         <AddTaskForm placeholder={placeholder} inputRef={inputRef} onAdd={onAdd} onEscape={onClose} />
-        <p className="px-1 pt-1.5 text-xs text-subtle">Дата и время распознаются сами: «завтра в 10», «в пятницу в 15», «через неделю».</p>
+        <p className="px-1 pt-1.5 text-xs text-subtle">«завтра в 10», «в пятницу в 15» — дата и время распознаются сами. Несколько строк — несколько задач.</p>
       </div>
     </div>
   );

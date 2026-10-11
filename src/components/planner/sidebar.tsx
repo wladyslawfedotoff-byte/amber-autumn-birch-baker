@@ -31,6 +31,8 @@ import { countInbox, countList, countOpen, countToday, countTomorrow, countWeek,
 import { logout } from "@/lib/server-sync";
 import { APP_NAME, APP_TAGLINE } from "@/lib/site";
 import { useCapabilities } from "@/lib/use-capabilities";
+import { drawerItems } from "@/lib/ui-prefs";
+import { projectProgress } from "@/lib/projects";
 import { useShareScope } from "@/lib/use-share-scope";
 import { archivedTasks, recentDone } from "@/lib/task-done";
 import { syncNow } from "@/lib/sync/clock";
@@ -58,11 +60,17 @@ export function Sidebar({
   view,
   onView,
   onClose,
+  onProject,
 }: {
   view: View;
   onView: (view: View) => void;
+  /** Set for the phone drawer: items already in the tab bar are left out. */
   onClose?: () => void;
+  onProject?: (id: string) => void;
 }) {
+  const tabBar = usePlanner((s) => s.tabBar);
+  const projects = usePlanner((s) => s.projects) ?? [];
+  const phone = Boolean(onClose);
   const lists = usePlanner((s) => s.lists);
   const tasks = usePlanner((s) => s.tasks);
   const habits = usePlanner((s) => s.habits);
@@ -78,9 +86,9 @@ export function Sidebar({
   // «Помощник» needs XAI_API_KEY on the server; hide it otherwise.
   const profile = useCapabilities();
   const { assistant } = profile;
-  const tools = assistant ? TOOLS : TOOLS.filter((item) => item.id !== "assist");
+  const tools = drawerItems(assistant ? TOOLS : TOOLS.filter((item) => item.id !== "assist"), tabBar, phone);
   const share = useShareScope();
-  const smart = share ? [...SMART, { id: "shared" as View, label: "Общие", icon: Users }] : SMART;
+  const smart = drawerItems(share ? [...SMART, { id: "shared" as View, label: "Общие", icon: Users }] : SMART, tabBar, phone);
 
   function count(id: View): number | null {
     if (id === "today") return countToday(tasks, today);
@@ -98,9 +106,9 @@ export function Sidebar({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-bg text-fg">
-      <div className="flex items-center gap-2 px-3 py-3">
-        <span className="flex size-8 items-center justify-center rounded-md bg-accent text-accent-fg">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-bg text-fg">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <span className="flex size-7 items-center justify-center rounded-md bg-accent text-accent-fg">
           <svg viewBox="0 0 32 32" className="size-4" aria-hidden="true">
             <path
               d="M7 16.5 13 22.5 25 9.5"
@@ -113,7 +121,7 @@ export function Sidebar({
           </svg>
         </span>
         <div className="min-w-0 flex-1">
-          <p className="font-display text-xl leading-none tracking-tight">{APP_NAME}</p>
+          <p className="text-[0.9375rem] font-semibold leading-none">{APP_NAME}</p>
           {APP_TAGLINE ? <p className="mt-0.5 truncate text-xs leading-none text-subtle">{APP_TAGLINE}</p> : null}
         </div>
         {onClose ? (
@@ -124,7 +132,6 @@ export function Sidebar({
       </div>
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Разделы">
-        <p className="px-2 pb-1 text-xs font-medium text-subtle">Смарт-списки</p>
         <ul className="flex flex-col">
           {smart.map((item) => (
             <NavRow
@@ -138,22 +145,26 @@ export function Sidebar({
           ))}
         </ul>
 
-        <p className="mt-3 px-2 pb-1 text-xs font-medium text-subtle">Инструменты</p>
-        <ul className="grid grid-cols-2 gap-1">
-          {tools.map((item) => (
-            <NavRow
-              key={item.id}
-              item={item}
-              active={itemActive(item.id)}
-              count={count(item.id)}
-              alert={false}
-              onView={onView}
-            />
-          ))}
-        </ul>
+        {tools.length > 0 ? (
+          <>
+            <SectionLabel>Инструменты</SectionLabel>
+            <ul className="flex flex-col">
+              {tools.map((item) => (
+                <NavRow
+                  key={item.id}
+                  item={item}
+                  active={itemActive(item.id)}
+                  count={count(item.id)}
+                  alert={false}
+                  onView={onView}
+                />
+              ))}
+            </ul>
+          </>
+        ) : null}
 
-        <div className="mt-3 flex items-center justify-between px-2">
-          <p className="text-xs font-medium text-subtle">Списки</p>
+        <div className="mt-2 flex h-8 items-center justify-between pr-1 pl-2">
+          <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-subtle">Списки</p>
           <button
             type="button"
             aria-label="Новый список"
@@ -175,11 +186,13 @@ export function Sidebar({
                   aria-current={active ? "page" : undefined}
                   onClick={() => onView(id)}
                   className={cn(
-                    "flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors duration-150",
+                    "flex h-9 w-full items-center gap-2.5 rounded-lg px-2 text-left text-sm transition-colors duration-150",
                     active ? "bg-elevated font-medium text-fg" : "text-muted hover:bg-elevated hover:text-fg",
                   )}
                 >
-                  <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+                  <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+                    <span className="size-1.5 rounded-full bg-accent" />
+                  </span>
                   <span className="min-w-0 flex-1 truncate">{list.name}</span>
                   {share && ((list.members ?? []).length > 0 || ownerOf(list, share.dataOwner) !== share.me) ? (
                     <Users className="size-3.5 shrink-0 text-subtle" aria-label="общий список" />
@@ -194,8 +207,8 @@ export function Sidebar({
           const tags = [...new Set(tasks.flatMap((task) => task.tags ?? []))].sort((a, b) => a.localeCompare(b, "ru"));
           if (tags.length === 0) return null;
           return (
-            <div className="mt-3">
-              <p className="px-2 pb-1 text-xs font-medium text-subtle">Теги</p>
+            <div className="mt-2">
+              <SectionLabel>Теги</SectionLabel>
               <div className="flex flex-wrap gap-1 px-1">
                 {tags.map((tag) => {
                   const id = `tag:${tag}` as const;
@@ -207,8 +220,8 @@ export function Sidebar({
                       aria-current={view === id ? "page" : undefined}
                       onClick={() => onView(id)}
                       className={cn(
-                        "flex h-10 items-center gap-1 rounded-full border px-3 text-sm",
-                        view === id ? "border-accent bg-elevated font-medium text-fg" : "border-line text-muted",
+                        "flex h-8 items-center gap-1 rounded-full px-2.5 text-xs",
+                        view === id ? "bg-accent text-accent-fg" : "bg-elevated text-muted",
                       )}
                     >
                       #{tag}
@@ -245,54 +258,86 @@ export function Sidebar({
               }}
               placeholder="Название списка"
               aria-label="Название списка"
-              className="h-11 w-full rounded-md border border-line bg-elevated px-3 text-sm text-fg outline-none placeholder:text-subtle"
+              className="h-10 w-full rounded-lg bg-elevated px-3 text-sm text-fg outline-none placeholder:text-subtle"
             />
           </form>
         ) : null}
-        <ul className="mt-1 flex flex-col">
+        {onProject && projects.length > 0 ? (
+          <>
+            <SectionLabel>Проекты</SectionLabel>
+            <ul className="flex flex-col">
+              {projects.map((project) => {
+                const { done, total } = projectProgress(project);
+                return (
+                  <li key={project.id}>
+                    <button
+                      type="button"
+                      onClick={() => onProject(project.id)}
+                      className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2 text-left text-sm text-muted hover:bg-elevated hover:text-fg"
+                    >
+                      <Columns3 className="size-4 shrink-0" strokeWidth={1.75} />
+                      <span className="min-w-0 flex-1 truncate">{project.title || "Без названия"}</span>
+                      {total > 0 ? (
+                        <span className="tabular-nums text-xs text-subtle">
+                          {done}/{total}
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        ) : null}
+        <ul className="mt-2 flex flex-col border-t border-line pt-2">
           <NavRow item={{ id: "done", label: "Готово", icon: CheckCheck }} active={view === "done"} count={doneCount} alert={false} onView={onView} />
           <NavRow item={{ id: "archive", label: "Архив", icon: Archive }} active={view === "archive"} count={archiveCount} alert={false} onView={onView} />
         </ul>
       </nav>
 
-      <div className="shrink-0 border-t border-line px-2 py-2">
-        <button
-          type="button"
-          aria-current={view === "settings" ? "page" : undefined}
-          onClick={() => onView("settings")}
-          className={cn(
-            "flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm",
-            view === "settings" ? "bg-elevated font-medium text-fg" : "text-muted hover:bg-elevated hover:text-fg",
-          )}
-        >
-          <Settings className="size-4 shrink-0" strokeWidth={1.75} />
-          <span className="min-w-0 flex-1 truncate">Настройки</span>
-        </button>
+      <div className="flex shrink-0 items-center gap-1 border-t border-line px-2 py-1.5">
         {profile.login ? (
-          <div className="mt-1 flex items-center gap-2 px-2">
+          <>
             <span
               className="flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-medium text-fg"
               aria-hidden="true"
             >
               {(profile.name || profile.login).slice(0, 1).toUpperCase()}
             </span>
-            <span className="min-w-0 flex-1 truncate text-sm text-muted" title={profile.login}>
+            <span className="min-w-0 flex-1 truncate px-1 text-sm text-muted" title={profile.login}>
               {profile.name || profile.login}
             </span>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="flex h-10 items-center gap-1 rounded-md px-2 text-sm text-muted hover:bg-elevated hover:text-fg"
-              aria-label={`Выйти из профиля ${profile.name || profile.login}`}
-            >
-              <LogOut className="size-4" strokeWidth={1.75} />
-              Выйти
-            </button>
-          </div>
+          </>
+        ) : (
+          <span className="flex-1" />
+        )}
+        <button
+          type="button"
+          aria-current={view === "settings" ? "page" : undefined}
+          onClick={() => onView("settings")}
+          className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-sm text-muted hover:bg-elevated hover:text-fg"
+        >
+          <Settings className="size-4 shrink-0" strokeWidth={1.75} />
+          Настройки
+        </button>
+        {profile.login ? (
+          <button
+            type="button"
+            onClick={() => void logout()}
+            title="Выйти"
+            className="flex size-9 items-center justify-center rounded-lg text-muted hover:bg-elevated hover:text-fg"
+            aria-label={`Выйти из профиля ${profile.name || profile.login}`}
+          >
+            <LogOut className="size-4" strokeWidth={1.75} />
+          </button>
         ) : null}
       </div>
     </div>
   );
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return <p className="mt-2 flex h-8 items-center px-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-subtle">{children}</p>;
 }
 
 function NavRow({
@@ -316,7 +361,7 @@ function NavRow({
         aria-current={active ? "page" : undefined}
         onClick={() => onView(item.id)}
         className={cn(
-          "flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors duration-150",
+          "flex h-9 w-full items-center gap-2.5 rounded-lg px-2 text-left text-sm transition-colors duration-150",
           active ? "bg-elevated font-medium text-fg" : "text-muted hover:bg-elevated hover:text-fg",
         )}
       >

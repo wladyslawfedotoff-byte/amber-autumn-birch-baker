@@ -1,3 +1,4 @@
+import { InlineHint } from "@/components/ui/hint";
 import { useEffect, useRef, useState } from "react";
 import { Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -101,12 +102,12 @@ export function ReminderPanel({
   const later = hits.filter((hit) => hit.status === "later");
 
   return (
-    <div className="absolute top-full right-0 z-30 mt-2 w-full max-w-sm rounded-lg border border-line bg-surface p-3">
-      <p className="text-xs font-medium text-subtle">Напоминания</p>
+    <div className="absolute top-full right-2 left-2 z-30 mt-1 rounded-2xl bg-surface p-2 shadow-xl ring-1 ring-line md:left-auto md:w-96">
+      <p className="px-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-subtle">Напоминания</p>
       {hits.length === 0 ? (
-        <p className="py-4 text-sm text-muted">Пока тихо. Время ставится в задаче, привычке или дате.</p>
+        <p className="px-1 py-3 text-sm text-muted">Пока тихо. Время ставится в задаче, привычке или дате.</p>
       ) : (
-        <ul className="mt-2 max-h-80 overflow-y-auto">
+        <ul className="mt-1 max-h-80 overflow-y-auto rounded-xl bg-elevated px-2">
           {due.map((hit) => (
             <ReminderRow key={hit.key} hit={hit} onOpen={onOpen} onAck={onAck} />
           ))}
@@ -115,13 +116,14 @@ export function ReminderPanel({
           ))}
         </ul>
       )}
-      <p className="mt-2 text-xs text-subtle">
+      <InlineHint label="Когда звучит сигнал" className="mt-1">
         Звук только пока «Пора» открыта. Утром всё на сегодня — на экране «Сегодня».
-      </p>
+      </InlineHint>
       {perm === "default" ? (
         <Button
           variant="soft"
-          className="mt-2 w-full"
+          size="sm"
+          className="mt-1 w-full"
           onClick={() => {
             void Notification.requestPermission().then((next) => setPerm(next));
           }}
@@ -129,7 +131,7 @@ export function ReminderPanel({
           Включить уведомления
         </Button>
       ) : null}
-      {perm === "granted" ? <p className="mt-2 text-xs text-muted">Уведомления браузера включены.</p> : null}
+      {perm === "granted" ? <p className="px-1 pb-1 text-xs text-muted">Уведомления браузера включены.</p> : null}
     </div>
   );
 }

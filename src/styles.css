@@ -176,6 +176,11 @@
     top: env(safe-area-inset-top, 0px);
   }
 
+  /* Non-working hours on the schedule board: barely there. */
+  .off-band {
+    background: color-mix(in oklab, var(--fg) 3.5%, transparent);
+  }
+
   .work-band {
     background: color-mix(in oklab, var(--accent) 10%, transparent);
   }
@@ -187,6 +192,34 @@
   .drag-handle {
     touch-action: none;
   }
+}
+
+/* TickTick-like task rows: one flat group with hairline dividers, rounded
+   only at the group's ends (no per-row card, shadow or gap). */
+.task-row {
+  position: relative;
+  border-radius: 0;
+}
+.task-row + .task-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 2.5rem;
+  right: 0.75rem;
+  height: 1px;
+  background: var(--line);
+  opacity: 0.7;
+}
+.task-row:not(.task-row + .task-row) {
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+}
+.task-row:not(:has(+ .task-row)) {
+  border-bottom-left-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+}
+.task-row[data-selected="true"] {
+  background: color-mix(in oklab, var(--accent) 10%, var(--elevated)) !important;
 }
 
 @media (max-width: 1023px) {
