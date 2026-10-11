@@ -103,7 +103,8 @@ export function sameData(a: SyncData, b: SyncData): boolean {
  *   _f  { field: stamp } for fields edited after `_b`
  *   _s  { setField: { element: ±stamp } } for set-like arrays (habit checks,
  *       task tags): positive = present since, negative = removed at
- *   _d  { keyedField: { childId: deletedAt } } for child lists with ids (subtasks)
+ *   _d  { keyedField: { childId: deletedAt } } for child lists with ids (subtasks,
+ *       special-date items, habit log days)
  * Children of a keyed list (subtasks) carry their own `updatedAt` (and `_b`/
  * `_f` once edited); a child without a stamp has the parent field's stamp.
  * Elements/children a copy does not mention have the field's stamp: present
@@ -127,7 +128,7 @@ export const NO_SPECIAL: EntitySpecial = { sets: [], keyed: [] };
 export const ENTITY_SPECIAL: Record<Collection, EntitySpecial> = {
   lists: { sets: ["members"], keyed: [] },
   tasks: { sets: ["tags", "repeatDates", "members"], keyed: ["subtasks"] },
-  habits: { sets: ["checks", "members"], keyed: [] },
+  habits: { sets: ["checks", "members"], keyed: ["log"] },
   milestones: { sets: ["members"], keyed: ["items"] },
   projects: { sets: ["members"], keyed: [] },
 };

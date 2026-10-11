@@ -8,10 +8,12 @@ import { parseQuick } from "@/lib/quick-add";
 import { stageRange } from "@/lib/stage-range";
 import { clearDate, clearTime, duplicateTask as duplicateTaskData, listInNotes, splitLines } from "@/lib/task-tools";
 import { isAccent, type AccentId } from "@/lib/accents";
+import { sectionOf, sortHabits, tapDay, withEntry } from "@/lib/habit-plan";
 import { normalizeArchiveDays, restoreFromArchive, toggleTaskDone, undoRepeatTick } from "@/lib/task-done";
 import type {
   FocusClock,
   Habit,
+  HabitEntry,
   Milestone,
   MilestoneItem,
   MilestoneItemKind,
@@ -23,6 +25,9 @@ import type {
   TaskList,
   ThemeMode,
 } from "@/lib/planner-types";
+
+type HabitPatch = Partial<Omit<Habit, "id" | "checks" | "log" | "updatedAt" | "owner" | "updatedBy" | "aclAt" | "createdAt">>;
+type HabitDayPatch = Partial<Omit<HabitEntry, "id" | "updatedAt">> & { done?: boolean };
 
 type NewTask = {
   title: string;
@@ -121,9 +126,15 @@ type PlannerState = {
   addList: (name: string) => string;
   renameList: (id: string, name: string) => void;
   deleteList: (id: string) => void;
-  addHabit: (name: string) => void;
-  updateHabit: (id: string, patch: { remindAt?: string | null }) => void;
+  /** Returns the new habit's id (null for an empty name). */
+  addHabit: (name: string, extra?: HabitPatch) => string | null;
+  updateHabit: (id: string, patch: HabitPatch) => void;
+  /** One tap on a day: toggles a simple habit, adds a step to an amount habit. */
   toggleHabit: (id: string, date: string) => void;
+  /** Edit one day of the log: done / skip / fail, amount, note, mood (also past days). */
+  setHabitDay: (id: string, date: string, patch: HabitDayPatch) => void;
+  /** Move a habit up (-1) or down (+1) inside its section. */
+  moveHabit: (id: string, delta: -1 | 1) => void;
   deleteHabit: (id: string) => void;
   addMilestone: (input: {
     title: string;
@@ -230,16 +241,29 @@ function seed(): Pick<
       {
         id: "water",
         name: "Вода",
-        checks: [shiftIso(today, -1), shiftIso(today, -2), shiftIso(today, -3), today],
+        checks: [shiftIso(today, -1), shiftIso(today, -2), shiftIso(today, -3)],
         why: "Стакан сразу после подъёма",
-        remindAt: "08:00",
+        remindAt: null,
+        reminders: ["09:00", "13:00", "18:00"],
+        icon: "💧",
+        color: "peacock",
+        goal: 8,
+        unit: "стаканов",
+        section: "morning",
+        log: [{ id: today, amount: 3 }],
+        order: 1,
       },
       {
         id: "walk",
         name: "Прогулка",
         checks: [shiftIso(today, -1), shiftIso(today, -2)],
         why: "20 минут без телефона",
-        remindAt: "08:00",
+        remindAt: null,
+        icon: "🚶",
+        color: "sage",
+        freq: { kind: "weekly", times: 4 },
+        section: "afternoon",
+        order: 2,
       },
       {
         id: "read",
@@ -247,6 +271,12 @@ function seed(): Pick<
         checks: [shiftIso(today, -1), today],
         why: "Десять страниц перед сном",
         remindAt: "21:30",
+        icon: "📖",
+        color: "grape",
+        section: "evening",
+        goalDays: 21,
+        startDate: shiftIso(today, -1),
+        order: 3,
       },
     ],
     milestones: [
@@ -710,28 +740,49 @@ renameList: (id, name) =>
             ),
           };
         }),
-      addHabit: (name) => {
-        const clean = name.trim();
-        if (!clean) return;
-        set((s) => ({
-          habits: [...s.habits, { id: uid(), name: clean, checks: [], remindAt: null }],
-        }));
+      addHabit: (name, extra) => {
+        const clean = name.trim().slice(0, 200);
+        if (!clean) return null;
+        const id = uid();
+        set((s) => {
+          const order = s.habits.reduce((max, h) => Math.max(max, h.order ?? 0), 0) + 1;
+          const habit: Habit = { remindAt: null, ...extra, id, name: clean, checks: [], log: [], order, createdAt: Date.now() };
+          return { habits: [...s.habits, habit] };
+        });
+        return id;
       },
       updateHabit: (id, patch) =>
         set((s) => ({
-          habits: s.habits.map((h) => (h.id === id ? { ...h, ...patch } : h)),
+          habits: s.habits.map((h) => {
+            if (h.id !== id) return h;
+            const next: Habit = { ...h, ...patch };
+            if (patch.name !== undefined) next.name = patch.name.trim().slice(0, 200) || h.name;
+            return next;
+          }),
         })),
       toggleHabit: (id, date) =>
         set((s) => ({
-          habits: s.habits.map((h) => {
-            if (h.id !== id) return h;
-            const has = h.checks.includes(date);
-            return {
-              ...h,
-              checks: has ? h.checks.filter((d) => d !== date) : [...h.checks, date],
-            };
-          }),
+          habits: s.habits.map((h) => (h.id === id ? tapDay(h, date) : h)),
         })),
+      setHabitDay: (id, date, patch) =>
+        set((s) => ({
+          habits: s.habits.map((h) => (h.id === id ? withEntry(h, date, patch) : h)),
+        })),
+      moveHabit: (id, delta) =>
+        set((s) => {
+          const habit = s.habits.find((h) => h.id === id);
+          if (!habit) return {};
+          const section = sectionOf(habit);
+          const peers = sortHabits(s.habits.filter((h) => !h.archived === !habit.archived && sectionOf(h) === section));
+          const index = peers.findIndex((h) => h.id === id);
+          const target = index + delta;
+          if (index < 0 || target < 0 || target >= peers.length) return {};
+          [peers[index], peers[target]] = [peers[target]!, peers[index]!];
+          const order = new Map(peers.map((h, i) => [h.id, i + 1]));
+          return {
+            habits: s.habits.map((h) => (order.has(h.id) && h.order !== order.get(h.id) ? { ...h, order: order.get(h.id) } : h)),
+          };
+        }),
       deleteHabit: (id) => set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
       addMilestone: (input) => {
         const title = input.title.trim();

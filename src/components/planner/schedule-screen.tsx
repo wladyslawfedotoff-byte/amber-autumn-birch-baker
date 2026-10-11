@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { formatLong, isoFromTs, occursOn, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
+import { habitChip, habitsForDay } from "@/lib/habit-plan";
 import type { Task } from "@/lib/planner-types";
 import { ageLabel, occursOnDay } from "@/lib/special-dates";
 
@@ -104,11 +105,11 @@ function AgendaDays({ count, onOpen }: { count: number; onOpen: (id: string) => 
                 {closed.length > 0 ? <p className="mt-1 px-1 text-xs text-subtle">Готово: {closed.length}</p> : null}
               </div>
               <AddTaskForm placeholder="Например: «в 18 тренировка»" onAdd={(title, quick) => addTask({ title, ...quick, due: day, listId: null })} />
-              {habits.length > 0 ? (
+              {habitsForDay(habits, day).length > 0 ? (
                 <div className="mt-3">
                   <p className="text-xs font-medium text-subtle">Привычки</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
-                    {habits.map((habit) => {
+                    {habitsForDay(habits, day).map((habit) => {
                       const on = habit.checks.includes(day);
                       return (
                         <button
@@ -125,7 +126,7 @@ function AgendaDays({ count, onOpen }: { count: number; onOpen: (id: string) => 
                           )}
                         >
                           {on ? <Check className="size-3" strokeWidth={3} aria-hidden="true" /> : null}
-                          {habit.name}
+                          {habitChip(habit, day)}
                         </button>
                       );
                     })}

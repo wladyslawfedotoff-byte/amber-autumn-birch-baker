@@ -68,15 +68,66 @@ export type TaskList = {
   updatedAt?: number;
 } & Shared;
 
+/**
+ * How often a habit is planned (like TickTick «Частота»):
+ * - daily: every day;
+ * - weekdays: chosen days of the week, 1 = Monday … 7 = Sunday;
+ * - weekly: N times a week on any days;
+ * - interval: once every N days (counted from the last check-in).
+ */
+export type HabitFreq =
+  | { kind: "daily" }
+  | { kind: "weekdays"; days: number[] }
+  | { kind: "weekly"; times: number }
+  | { kind: "interval"; every: number };
+
+/** Time-of-day section of the habit list («Утро / День / Вечер / Другое»). */
+export type HabitSection = "morning" | "afternoon" | "evening" | "other";
+
+/** One day of a habit's log. `id` is the day (YYYY-MM-DD), so per-day edits sync independently. */
+export type HabitEntry = {
+  id: string;
+  /** skip = «Пропуск» (excused, does not break the streak); fail = «Не выполнено». Done lives in `checks`. */
+  status?: "skip" | "fail" | null;
+  /** Progress towards `goal` for amount habits (e.g. 5 of 8 glasses). */
+  amount?: number | null;
+  note?: string;
+  /** 1 (плохо) … 5 (отлично). */
+  mood?: number | null;
+  updatedAt?: number;
+};
+
 export type Habit = {
   id: string;
   name: string;
+  /** Days done (YYYY-MM-DD). Kept as the single source of «выполнено» (older versions read only this). */
   checks: string[];
   why?: string;
-  /** Daily HH:mm. Empty means no alarm. */
+  /** Legacy single daily reminder HH:mm (still honoured); new habits use `reminders`. */
   remindAt?: string | null;
+  /** Several daily reminders, HH:mm. */
+  reminders?: string[];
+  /** Emoji shown next to the name. */
+  icon?: string | null;
+  color?: TaskColor | null;
+  freq?: HabitFreq | null;
+  /** Amount per day (e.g. 8 glasses). null/1 = a simple check-in. */
+  goal?: number | null;
+  unit?: string | null;
+  /** How much one tap adds (default 1). */
+  step?: number | null;
+  section?: HabitSection | null;
+  /** First planned day; nothing before it counts as missed. */
+  startDate?: string | null;
+  /** Challenge length in done days (e.g. 21 or 100). */
+  goalDays?: number | null;
+  archived?: boolean;
+  /** Manual order inside its section (smaller first). */
+  order?: number | null;
+  log?: HabitEntry[];
+  createdAt?: number;
   updatedAt?: number;
-};
+} & Shared;
 
 export type MilestoneKind = "birthday" | "anniversary" | "holiday" | "other";
 

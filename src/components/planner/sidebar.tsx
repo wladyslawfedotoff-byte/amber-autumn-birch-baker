@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
+import { habitsForDay } from "@/lib/habit-plan";
 import type { View } from "@/lib/planner-types";
 import { countInbox, countList, countOpen, countToday, countTomorrow, countWeek, ownerOf, scopeTasks } from "@/lib/queries";
 import { logout } from "@/lib/server-sync";
@@ -73,7 +74,7 @@ export function Sidebar({
   const now = syncNow();
   const doneCount = recentDone(tasks, now, archiveDays).length;
   const archiveCount = archivedTasks(tasks, now, archiveDays).length;
-  const habitLeft = habits.filter((h) => !h.checks.includes(today)).length;
+  const habitLeft = habitsForDay(habits, today).filter((h) => !h.checks.includes(today)).length;
   // «Помощник» needs XAI_API_KEY on the server; hide it otherwise.
   const profile = useCapabilities();
   const { assistant } = profile;

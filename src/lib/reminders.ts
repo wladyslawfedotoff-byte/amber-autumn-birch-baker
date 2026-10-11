@@ -1,6 +1,7 @@
-import { daysBetween, dueLabel, formatShort, nextOccurrence, shiftIso, todayIso } from "@/lib/dates";
-import { DAYS, pluralN } from "@/lib/plural";
-import type { Milestone, Task } from "@/lib/planner-types";
+import { daysBetween, dueLabel, formatShort, nextOccurrence, shiftIso, todayIso } from "./dates.ts";
+import { DAYS, pluralN } from "./plural.ts";
+import { goalOf, entryOf, isDue, reminderTimes } from "./habit-plan.ts";
+import type { Habit, Milestone, Task } from "@/lib/planner-types";
 
 export type ReminderKind = "task" | "habit" | "date";
 
@@ -35,6 +36,7 @@ export function kindLabel(kind: ReminderKind): string {
 export function collectReminders(input: {
   tasks: Task[];
   milestones: Milestone[];
+  habits?: Habit[];
   remindAck: Record<string, string>;
   now: number;
 }): ReminderHit[] {
@@ -89,6 +91,34 @@ export function collectReminders(input: {
       at,
       status,
     });
+  }
+
+  // Habits: every reminder time of a habit planned for today and not done yet
+  // (amount habits: until the goal is reached). Each time is its own reminder.
+  for (const habit of input.habits ?? []) {
+    if (habit.archived || habit.checks.includes(today) || !isDue(habit, today)) continue;
+    const goal = goalOf(habit);
+    const amount = entryOf(habit, today)?.amount ?? 0;
+    const status = entryOf(habit, today)?.status;
+    if (status === "skip" || status === "fail") continue;
+    for (const time of reminderTimes(habit)) {
+      const at = localStamp(today, time);
+      const stamp = `${today}T${time}`;
+      const key = `habit:${habit.id}:${time}`;
+      const state = at <= input.now ? "due" : "later";
+      if (state === "due" && ack[key] === stamp) continue;
+      hits.push({
+        key,
+        stamp,
+        kind: "habit",
+        refId: habit.id,
+        title: `${habit.icon ? `${habit.icon} ` : ""}${habit.name}`,
+        time,
+        whenLabel: goal > 1 ? `сегодня в ${time} · ${amount} из ${goal}${habit.unit ? ` ${habit.unit}` : ""}` : `сегодня в ${time}`,
+        at,
+        status: state,
+      });
+    }
   }
 
   hits.sort((a, b) => a.at - b.at || a.title.localeCompare(b.title, "ru"));
