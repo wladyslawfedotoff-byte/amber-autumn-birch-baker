@@ -8,6 +8,7 @@ import { parseQuick } from "@/lib/quick-add";
 import { stageRange } from "@/lib/stage-range";
 import { clearDate, clearTime, duplicateTask as duplicateTaskData, listInNotes, splitLines } from "@/lib/task-tools";
 import { isAccent, type AccentId } from "@/lib/accents";
+import { DEFAULT_TABS, normalizeCalendarMode, normalizeTabs, type CalendarMode, type TabId } from "@/lib/ui-prefs";
 import { sectionOf, sortHabits, tapDay, withEntry } from "@/lib/habit-plan";
 import { normalizeArchiveDays, restoreFromArchive, toggleTaskDone, undoRepeatTick } from "@/lib/task-done";
 import type {
@@ -87,6 +88,15 @@ type PlannerState = {
   scheduleDays: number;
   /** «Готово» group at the bottom of lists is folded (this device only). */
   doneFolded: boolean;
+  /** «Панель вкладок»: the tabs of the bottom bar on a phone (this device only). */
+  tabBar: TabId[];
+  /** «Календарь»: Список / Месяц / Неделя / 3 дня / День (this device only). */
+  calendarMode: CalendarMode;
+  /** «Номера недель» in the month grid (this device only). */
+  weekNumbers: boolean;
+  setTabBar: (tabs: TabId[]) => void;
+  setCalendarMode: (mode: CalendarMode) => void;
+  setWeekNumbers: (on: boolean) => void;
   setArchiveDays: (days: number) => void;
   setScheduleDays: (days: number) => void;
   setDoneFolded: (folded: boolean) => void;
@@ -202,6 +212,9 @@ function seed(): Pick<
   | "archiveDays"
   | "scheduleDays"
   | "doneFolded"
+  | "tabBar"
+  | "calendarMode"
+  | "weekNumbers"
 > {
   const today = todayIso();
   const stamp = Date.now();
@@ -233,6 +246,9 @@ function seed(): Pick<
     archiveDays: 7,
     scheduleDays: 1,
     doneFolded: false,
+    tabBar: [...DEFAULT_TABS],
+    calendarMode: "month",
+    weekNumbers: false,
     lists: [
       { id: "work", name: "Работа" },
       { id: "home", name: "Дом" },
@@ -994,6 +1010,9 @@ renameList: (id, name) =>
       ackReminder: (key, stamp) =>
         set((s) => ({ remindAck: { ...(s.remindAck ?? {}), [key]: stamp } })),
       setTheme: (theme) => set({ theme }),
+      setTabBar: (tabs) => set({ tabBar: normalizeTabs(tabs) }),
+      setCalendarMode: (mode) => set({ calendarMode: normalizeCalendarMode(mode) }),
+      setWeekNumbers: (on) => set({ weekNumbers: on }),
       setAccent: (accent) => set({ accent }),
       bumpPomo: () =>
         set((s) => {
@@ -1078,6 +1097,9 @@ renameList: (id, name) =>
           archiveDays: normalizeArchiveDays(saved.archiveDays),
           scheduleDays: [1, 2, 3, 5, 7].includes(saved.scheduleDays as number) ? (saved.scheduleDays as number) : 1,
           doneFolded: saved.doneFolded === true,
+          tabBar: normalizeTabs(saved.tabBar),
+          calendarMode: normalizeCalendarMode(saved.calendarMode),
+          weekNumbers: saved.weekNumbers === true,
           theme: saved.theme === "dark" ? "dark" : "light",
           accent: isAccent(saved.accent) ? saved.accent : current.accent,
         };

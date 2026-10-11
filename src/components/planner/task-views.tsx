@@ -115,6 +115,7 @@ export function TaskViews({
       ) : null}
       {canAdd && view !== "today" && view !== "shared" ? (
         <AddTaskForm
+            className="hidden md:block"
           placeholder="Созвон завтра в 10"
           onAdd={(title, quick) =>
             addTask({
@@ -172,6 +173,7 @@ export function TaskViews({
         <>
           <TodaySummary />
           <AddTaskForm
+            className="hidden md:block"
             placeholder="Созвон завтра в 10"
             onAdd={(title, quick) => addTask({ title, ...quick, ...defaultsFor(view, today) })}
           />
@@ -184,6 +186,7 @@ export function TaskViews({
           <WeekDays selected={view.slice(4)} onPick={onPickDay} />
           <div className="mt-3">
             <AddTaskForm
+            className="hidden md:block"
               placeholder="Задача на этот день"
               onAdd={(title, quick) => addTask({ title, ...quick, due: view.slice(4), listId: null })}
             />

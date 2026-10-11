@@ -104,9 +104,10 @@
     height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
-    background: var(--bg);
+    background: var(--surface);
     color: var(--fg);
     font-family: var(--font-sans);
+    overflow-x: hidden;
     line-height: 1.5;
   }
 
@@ -152,10 +153,23 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 
-  .app-frame {
+  /* Pinned to the screen; while the iOS keyboard is open — to the visible
+     part above it (see use-viewport-frame.ts). Never 100vh. */
+  .vv-frame {
+    position: fixed;
+    inset: 0;
+  }
+  html.kb-open .vv-frame {
+    top: var(--vv-top, 0px);
+    bottom: auto;
     height: var(--app-h, 100dvh);
-    max-height: var(--app-h, 100dvh);
+  }
+
+  .app-frame {
     padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    overflow-x: hidden;
   }
 
   .sheet {
@@ -205,7 +219,11 @@ textarea.text-sm {
   body {
     line-height: 1.4;
   }
-  /* iOS zooms into inputs under 16px: keep form controls at 16px. */
+}
+
+/* iOS zooms into inputs under 16px (and the page then stays zoomed):
+   keep form controls at 16px on phones, incl. landscape and tablets. */
+@media (max-width: 767px), (pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea {

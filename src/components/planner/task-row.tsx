@@ -1,5 +1,5 @@
 import { Check, ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Plus } from "lucide-react";
-import { useState, type PointerEvent } from "react";
+import { useState, type PointerEvent, type Ref } from "react";
 import { cn } from "@/lib/cn";
 import { dueLabel, repeatLabel, shiftIso, todayIso } from "@/lib/dates";
 import { parseQuick } from "@/lib/quick-add";
@@ -158,12 +158,9 @@ export function TaskRow({
               type="button"
               aria-label={`Перенести «${task.title}» на завтра`}
               onClick={() => updateTask(task.id, { due: tomorrow })}
-              className={cn(
-                "flex h-11 shrink-0 items-center rounded-full px-3 text-xs",
-                overdue ? "bg-bg text-danger" : "text-subtle",
-              )}
+              className="-my-2 flex h-11 shrink-0 items-center px-0.5 text-xs"
             >
-              завтра
+              <span className={cn("rounded-full px-2 py-0.5 leading-5", overdue ? "bg-bg text-danger" : "text-subtle")}>завтра</span>
             </button>
           ) : null}
         </div>
@@ -241,8 +238,15 @@ export type QuickOptions = { noDate?: boolean; noTime?: boolean };
 export function AddTaskForm({
   placeholder,
   onAdd,
+  inputRef,
+  className,
+  onEscape,
 }: {
   placeholder: string;
+  /** Lets the bottom composer focus the field inside the tap (iOS opens the keyboard only then). */
+  inputRef?: Ref<HTMLInputElement>;
+  className?: string;
+  onEscape?: () => void;
   /** `options`: the user dropped the recognised date / time — pass them on to addTask. */
   onAdd: (title: string, options: QuickOptions) => void;
 }) {
@@ -252,7 +256,7 @@ export function AddTaskForm({
   const parsed = parseQuick(value);
   const timeText = parsed.startAt ? (parsed.endAt ? `${parsed.startAt}–${parsed.endAt}` : parsed.startAt) : "";
   return (
-    <div>
+    <div className={className}>
       <form
         className="card-lift flex items-center gap-2 rounded-2xl bg-elevated pr-1 pl-3"
         onSubmit={(event) => {
@@ -267,7 +271,12 @@ export function AddTaskForm({
       >
         <span className="size-2 shrink-0 rounded-full border-2 border-subtle" aria-hidden="true" />
         <input
+          ref={inputRef}
           name="title"
+          enterKeyHint="done"
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && onEscape) onEscape();
+          }}
           value={value}
           onChange={(event) => {
             setValue(event.target.value);

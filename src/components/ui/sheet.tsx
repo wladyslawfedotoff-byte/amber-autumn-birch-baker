@@ -7,6 +7,8 @@ import { cn } from "@/lib/cn";
  * One editing surface for the whole app: a bottom sheet on phones (like iOS),
  * a centred dialog on wide screens. Header: «×» on the left, title in the
  * middle, the ONE primary action on the right («Готово», «Сохранить»).
+ * The overlay follows the visual viewport, so with the iOS keyboard open the
+ * sheet shrinks to the space above it instead of sliding off-screen.
  */
 export function Sheet({
   open,
@@ -34,14 +36,14 @@ export function Sheet({
   }, [open, onClose]);
   if (!open || typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-end justify-center md:items-center" role="presentation">
+    <div className="vv-frame z-[70] flex items-end justify-center pt-[env(safe-area-inset-top)] md:items-center" role="presentation">
       <button type="button" aria-hidden="true" tabIndex={-1} className="scrim absolute inset-0" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "sheet-panel relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-surface shadow-xl md:max-w-lg md:rounded-2xl",
+          "sheet-panel relative flex max-h-[calc(100%-0.5rem)] md:max-h-[92%] w-full flex-col rounded-t-2xl bg-surface shadow-xl md:max-w-lg md:rounded-2xl",
           className,
         )}
       >
