@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Check, Clock, Cloud, Cpu, Menu, Mic, MicOff, Plus, RotateCw, ShieldCheck, Sparkles, Square, Trash2, X } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
+import { AssistMarkdown } from "@/components/planner/assist-markdown";
 import { cn } from "@/lib/cn";
 import { formatShortDay, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
@@ -278,6 +279,9 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
+    // Cards and long answers settle a moment later.
+    const later = window.setTimeout(() => bottom.current?.scrollIntoView({ block: "end" }), 120);
+    return () => window.clearTimeout(later);
   }, [messages]);
 
   // A conversation opened from the bell («Помощник ответил»).
@@ -530,7 +534,11 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
               ) : (
                 <li key={m.id} className="max-w-[95%]">
                   {m.text ? (
-                    <p className={cn("text-[0.9375rem] whitespace-pre-wrap", m.error && "text-danger")}>{m.text}</p>
+                    m.error ? (
+                      <p className="text-[0.9375rem] whitespace-pre-wrap text-danger">{m.text}</p>
+                    ) : (
+                      <AssistMarkdown text={m.text} />
+                    )
                   ) : busy && !m.proposals?.length ? (
                     <p className="flex h-6 items-center gap-1 text-muted" aria-label="Помощник думает">
                       <span className="size-1.5 animate-pulse rounded-full bg-current" />
@@ -550,7 +558,8 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
             )}
           </ul>
         )}
-        <div ref={bottom} />
+        {/* scroll-margin: the input bar is sticky and would cover the end of the answer. */}
+        <div ref={bottom} className="h-px scroll-mb-28" />
       </div>
 
       <form
