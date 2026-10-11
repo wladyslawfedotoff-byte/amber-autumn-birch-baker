@@ -8,7 +8,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { AiWhich, ProviderState } from "../../../src/lib/assistant/types.ts";
-import { DEFAULT_LOCAL_MODEL, hostOf, type AiConfig, type LocalType, type ProviderConfig } from "./config.ts";
+import { log } from "../log.ts";
+import { DEFAULT_LOCAL_MODEL, hostOf, type AiConfig, type LocalType, type ProviderConfig, type ToolsMode } from "./config.ts";
 
 export type Endpoint = {
   provider: string;
@@ -19,6 +20,8 @@ export type Endpoint = {
   paid: boolean;
   /** JSON mode may send response_format (some servers reject json_object). */
   jsonFormat?: boolean;
+  /** auto | native | json (see ToolsMode); json once the model was seen ignoring tools. */
+  tools?: ToolsMode;
 };
 
 /** Why nothing could be asked (for a clear message). */
@@ -169,6 +172,13 @@ export class ProviderChain {
     return probe.models.slice(0, 1);
   }
 
+  /** Models seen rejecting or ignoring `tools` (auto mode): asked in JSON mode from now on. */
+  private jsonOnly = new Set<string>();
+
+  rememberJsonMode(endpoint: Endpoint): void {
+    this.jsonOnly.add(`${endpoint.provider}|${endpoint.model}`);
+  }
+
   private cooled(key: string): boolean {
     const until = this.cooldown.get(key);
     if (!until) return false;
@@ -214,7 +224,8 @@ export class ProviderChain {
           blocked.add("cooldown");
           continue;
         }
-        endpoints.push({ provider: p.name, which: p.kind, baseUrl: modelUrl(p.baseUrl, model), apiKey: p.apiKey, model, paid: p.paid, jsonFormat });
+        const tools = p.tools === "auto" && this.jsonOnly.has(`${p.name}|${model}`) ? "json" : p.tools;
+        endpoints.push({ provider: p.name, which: p.kind, baseUrl: modelUrl(p.baseUrl, model), apiKey: p.apiKey, model, paid: p.paid, jsonFormat, tools });
       }
     }
     return { endpoints, blocked: [...blocked] };
@@ -371,7 +382,7 @@ export function chatClient(endpoint: Endpoint, timeoutMs: number, fetchFn: Fetch
 
 /** A JSON (non-streamed) answer: {"code":…,"msg":…} errors or a regular completion. */
 function plainReply(text: string, tools: boolean, onDelta?: (text: string) => void): ChatReply {
-  let body: { choices?: { message?: { content?: string | null; tool_calls?: WireToolCall[] } }[]; usage?: { total_tokens?: number }; msg?: string; error?: unknown };
+  let body: { choices?: { message?: { content?: unknown; tool_calls?: WireToolCall[] } }[]; usage?: { total_tokens?: number }; msg?: string; error?: unknown };
   try {
     body = JSON.parse(text);
   } catch {
@@ -386,12 +397,80 @@ function plainReply(text: string, tools: boolean, onDelta?: (text: string) => vo
   }
   const message = body.choices?.[0]?.message;
   if (!message) throw new ProviderError("no answer", false);
-  const content = message.content ?? "";
+  const content = textOf(message.content);
   if (content) onDelta?.(content);
   return { content, tokens: body.usage?.total_tokens ?? 0, toolCalls: (message.tool_calls ?? []).map((c, i) => ({ id: c.id || `call_${i}`, type: "function" as const, function: { name: c.function.name, arguments: c.function.arguments || "{}" } })) };
 }
 
 /** Parses the SSE stream («data: {...}» lines) of a chat completion. */
+type StreamCall = { index?: number; id?: string; type?: string; function?: { name?: string; arguments?: string | Record<string, unknown> } };
+type StreamChunk = {
+  usage?: { total_tokens?: number };
+  error?: { message?: string; code?: number | string };
+  msg?: string;
+  choices?: {
+    delta?: { content?: unknown; tool_calls?: StreamCall[]; function_call?: { name?: string; arguments?: string } };
+    message?: { content?: unknown; tool_calls?: StreamCall[] };
+    text?: string;
+  }[];
+};
+
+/** Text of `content`: a string or an array of parts ({type:"text", text}). */
+function textOf(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) return content.map((part) => (typeof part === "string" ? part : typeof (part as { text?: unknown })?.text === "string" ? (part as { text: string }).text : "")).join("");
+  return "";
+}
+
+/**
+ * JSON objects in a piece of stream text that did not parse as one: several
+ * objects glued together («{…}data: {…}»), an object spread over several
+ * lines, or raw line breaks inside strings. Anything between objects is skipped.
+ */
+export function scanObjects(text: string): unknown[] {
+  const out: unknown[] = [];
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let current = "";
+  for (const ch of text) {
+    if (depth === 0) {
+      if (ch === "{") {
+        depth = 1;
+        current = ch;
+      }
+      continue;
+    }
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      current += ch === "\n" ? "\\n" : ch === "\r" ? "" : ch;
+      continue;
+    }
+    current += ch;
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) {
+      try {
+        out.push(JSON.parse(current));
+      } catch {
+        // not JSON after all
+      }
+      current = "";
+    }
+  }
+  return out;
+}
+
+/**
+ * Parses an OpenAI-style SSE stream: `data: {chunk}` events with text deltas,
+ * tool-call fragments (`index`, `id`, name and argument pieces), usage, and
+ * errors (`error` or a {"code","msg"} body). Tolerates what some services
+ * send instead: no blank lines between events, an event spread over several
+ * lines, glued events, bare JSON lines, content as an array of parts, a
+ * whole `message` in a chunk, tool calls without `index`.
+ */
 export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (text: string) => void): Promise<ChatReply> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -399,38 +478,83 @@ export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (te
   let content = "";
   let usage = 0;
   let streamError = "";
+  let unparsed = 0;
+  let pending: string | null = null;
   const calls: { id: string; name: string; args: string }[] = [];
-  const handle = (line: string) => {
-    const trimmed = line.trim();
-    // A bare JSON line is an error body sent without the SSE framing.
-    if (!trimmed.startsWith("data:") && !trimmed.startsWith("{")) return;
-    const payload = trimmed.startsWith("data:") ? trimmed.slice(5).trim() : trimmed;
-    if (!payload || payload === "[DONE]") return;
-    let chunk: { usage?: { total_tokens?: number }; error?: { message?: string; code?: number | string }; choices?: { delta?: { content?: string | null; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] }; message?: { content?: string } }[] };
-    try {
-      chunk = JSON.parse(payload);
-    } catch {
-      return;
+
+  const addCall = (call: StreamCall, position: number) => {
+    let index = call.index;
+    if (typeof index !== "number") {
+      // No index: a new id starts a new call, otherwise the fragment continues the last one.
+      const last = calls[calls.length - 1];
+      index = !last || (call.id && last.id && last.id !== call.id) || position > 0 ? calls.length : calls.length - 1;
     }
+    const slot = (calls[index] ??= { id: "", name: "", args: "" });
+    if (call.id) slot.id = call.id;
+    if (call.function?.name && !slot.name.endsWith(call.function.name)) slot.name += call.function.name;
+    const args = call.function?.arguments;
+    if (typeof args === "string") slot.args += args;
+    else if (args && typeof args === "object") slot.args = JSON.stringify(args);
+  };
+
+  const onChunk = (raw: unknown) => {
+    if (!raw || typeof raw !== "object") return;
+    const chunk = raw as StreamChunk;
     if (chunk.error) streamError = `${chunk.error.code ?? ""} ${chunk.error.message ?? ""}`;
     const embedded = embeddedStatus(chunk);
-    if (embedded !== null) streamError = `${embedded} ${(chunk as { msg?: string }).msg ?? ""}`;
+    if (embedded !== null) streamError = `${embedded} ${chunk.msg ?? ""}`;
     if (typeof chunk.usage?.total_tokens === "number") usage = chunk.usage.total_tokens;
     const choice = chunk.choices?.[0];
-    const delta = choice?.delta;
-    const text = delta?.content ?? choice?.message?.content ?? "";
+    if (!choice) return;
+    const delta = choice.delta;
+    // A whole message (some services end the stream with it): only if nothing came as deltas.
+    const whole = !delta && choice.message ? textOf(choice.message.content) : "";
+    const text = delta ? textOf(delta.content) : whole && !content ? whole : !delta ? (choice.text ?? "") : "";
     if (text) {
       content += text;
       onDelta?.(text);
     }
-    for (const call of delta?.tool_calls ?? []) {
-      const index = call.index ?? calls.length;
-      const slot = (calls[index] ??= { id: "", name: "", args: "" });
-      if (call.id) slot.id = call.id;
-      if (call.function?.name) slot.name += call.function.name;
-      if (call.function?.arguments) slot.args += call.function.arguments;
+    (delta?.tool_calls ?? []).forEach(addCall);
+    if (!delta && choice.message?.tool_calls && !calls.length) choice.message.tool_calls.forEach((call, i) => addCall({ ...call, index: i }, i));
+    if (delta?.function_call) addCall({ index: 0, function: delta.function_call }, 0);
+  };
+
+  const tryParse = (payload: string): boolean => {
+    try {
+      onChunk(JSON.parse(payload));
+      return true;
+    } catch {
+      return false;
     }
   };
+  const flushPending = () => {
+    if (pending === null) return;
+    const found = scanObjects(pending);
+    if (!found.length && pending.trim()) unparsed++;
+    found.forEach(onChunk);
+    pending = null;
+  };
+  const handle = (line: string) => {
+    const text = line.replace(/\r$/, "");
+    if (!text.trim()) return flushPending();
+    if (text.startsWith("data:")) {
+      flushPending();
+      const payload = text.slice(5).trim();
+      if (!payload || payload === "[DONE]") return;
+      if (!tryParse(payload)) pending = payload;
+      return;
+    }
+    if (pending !== null) {
+      // The event continues on this line (or a broken one).
+      pending += `\n${text}`;
+      if (tryParse(pending)) pending = null;
+      return;
+    }
+    // A bare JSON line: an error body sent without the SSE framing.
+    if (text.trimStart().startsWith("{") && !tryParse(text.trim())) pending = text.trim();
+    // event:, id:, retry:, «: comment» lines carry nothing we need.
+  };
+
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -441,7 +565,10 @@ export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (te
       buffer = buffer.slice(newline + 1);
     }
   }
+  buffer += decoder.decode();
   if (buffer) handle(buffer);
+  flushPending();
+  if (unparsed) log("warn", "assistant.stream_unparsed", { events: unparsed });
   if (streamError && !content) {
     if (/^\s*40[13]\b/.test(streamError)) throw new ProviderError(`http ${streamError.trim().slice(0, 3)}`, false);
     throw new ProviderError("stream error", false, /rate.?limit|quota|credit|insufficient|exceeded|too many|429|402/i.test(streamError));
@@ -449,6 +576,6 @@ export async function readStream(body: ReadableStream<Uint8Array>, onDelta?: (te
   return {
     content,
     tokens: usage,
-    toolCalls: calls.filter(Boolean).map((call, i) => ({ id: call.id || `call_${i}`, type: "function" as const, function: { name: call.name, arguments: call.args || "{}" } })),
+    toolCalls: calls.filter((call) => call?.name).map((call, i) => ({ id: call.id || `call_${i}`, type: "function" as const, function: { name: call.name, arguments: call.args || "{}" } })),
   };
 }
