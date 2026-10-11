@@ -11,6 +11,7 @@
  *                    AI_<NAME>_PAID=1, AI_<NAME>_MONTHLY_TOKENS=…,
  *                    AI_<NAME>_CHECK_URL (for «Проверить связь», default <base>/models),
  *                    AI_<NAME>_JSON_FORMAT=0 (no response_format in JSON mode),
+ *                    AI_<NAME>_TOOLS=auto|native|json (function calling or JSON),
  *                    AI_<NAME>_KIND=local (+ AI_<NAME>_TYPE) makes it a home-network model too.
  *
  * Simple setups (no AI_PROVIDERS):
@@ -27,6 +28,14 @@ export type AiMode = "off" | "auto" | "openai" | "ollama" | "chain";
 
 /** Which server runs on the home PC (both speak the OpenAI-compatible API under /v1). */
 export type LocalType = "ollama" | "lmstudio" | "auto";
+
+/**
+ * How the model gets at the user's data and makes proposals:
+ * native — OpenAI function calling (`tools`);
+ * json   — tools described in the prompt, the model answers with JSON;
+ * auto   — native, switching to json when the endpoint rejects or ignores tools.
+ */
+export type ToolsMode = "auto" | "native" | "json";
 
 export type ProviderConfig = {
   /** Short name from AI_PROVIDERS («local», «free», …). */
@@ -47,6 +56,8 @@ export type ProviderConfig = {
   paid: boolean;
   /** 0 = no cap. */
   monthlyTokens: number;
+  /** AI_<NAME>_TOOLS (AI_LOCAL_TOOLS for the home PC). */
+  tools: ToolsMode;
 };
 
 export type AiConfig = {
@@ -93,6 +104,19 @@ function models(raw: string, fallback = ""): string[] {
   return list.length ? list : fallback ? [fallback] : [];
 }
 
+function toolsMode(raw: string): ToolsMode {
+  const t = raw.trim().toLowerCase();
+  return t === "json" || t === "native" ? t : "auto";
+}
+
+/** AI_<NAME>_TOOLS per provider; the home PC also reads AI_LOCAL_TOOLS. */
+function withTools(env: Env, providers: ProviderConfig[]): ProviderConfig[] {
+  return providers.map((p) => {
+    const own = str(env, `AI_${envKey(p.name)}_TOOLS`) || (p.kind === "local" ? str(env, "AI_LOCAL_TOOLS") : "");
+    return { ...p, tools: toolsMode(own) };
+  });
+}
+
 function localType(raw: string): LocalType {
   const t = raw.toLowerCase().replace(/[^a-z]/g, "");
   return t === "ollama" || t === "lmstudio" ? t : "auto";
@@ -105,7 +129,7 @@ function localType(raw: string): LocalType {
  */
 function localProvider(name: string, url: string, model: string, type: LocalType): ProviderConfig {
   const root = trimSlash(url).replace(/\/v1$/, "");
-  return { name, kind: "local", baseUrl: `${root}/v1`, localRoot: root, localType: type, checkUrl: null, jsonFormat: type !== "lmstudio", apiKey: null, models: models(model, type === "ollama" ? DEFAULT_LOCAL_MODEL : ""), paid: false, monthlyTokens: 0 };
+  return { name, kind: "local", baseUrl: `${root}/v1`, localRoot: root, localType: type, checkUrl: null, jsonFormat: type !== "lmstudio", apiKey: null, models: models(model, type === "ollama" ? DEFAULT_LOCAL_MODEL : ""), paid: false, monthlyTokens: 0, tools: "auto" };
 }
 
 /** AI_LOCAL_* with the older AI_OLLAMA_* names as aliases. */
@@ -149,6 +173,7 @@ function chainFrom(env: Env, names: string[]): ProviderConfig[] {
       models: list,
       paid: flag(env, `AI_${key}_PAID`),
       monthlyTokens: int(env, `AI_${key}_MONTHLY_TOKENS`, 0, 0, 1_000_000_000),
+      tools: "auto",
     });
   }
   return out;
@@ -164,7 +189,7 @@ function simpleFrom(env: Env, mode: Exclude<AiMode, "off" | "chain">): ProviderC
     const key = str(env, "AI_API_KEY");
     const url = str(env, "AI_BASE_URL");
     const model = str(env, "AI_MODEL");
-    const base = { name: "cloud", kind: "cloud" as const, localRoot: null, localType: null, checkUrl: null, jsonFormat: true, paid: flag(env, "AI_PAID"), monthlyTokens: int(env, "AI_MONTHLY_TOKENS", 0, 0, 1_000_000_000) };
+    const base = { name: "cloud", kind: "cloud" as const, localRoot: null, localType: null, checkUrl: null, jsonFormat: true, tools: "auto" as const, paid: flag(env, "AI_PAID"), monthlyTokens: int(env, "AI_MONTHLY_TOKENS", 0, 0, 1_000_000_000) };
     if (key && url && model) cloud = { ...base, baseUrl: trimSlash(url), apiKey: key, models: models(model) };
     else if (str(env, "XAI_API_KEY") && !key) cloud = { ...base, baseUrl: trimSlash(url || LEGACY_URL), apiKey: str(env, "XAI_API_KEY"), models: models(model, LEGACY_MODEL) };
   }
@@ -184,13 +209,13 @@ export function readAiConfig(env: Env = process.env): AiConfig {
   if (raw === "off") return { mode: "off", providers: [], ...base };
   const chain = str(env, "AI_PROVIDERS");
   if (chain) {
-    const providers = chainFrom(env, chain.split(","));
+    const providers = withTools(env, chainFrom(env, chain.split(",")));
     return { mode: providers.length ? "chain" : "off", providers, ...base };
   }
   const anySet = ["AI_LOCAL_URL", "AI_OLLAMA_URL", "AI_BASE_URL", "AI_API_KEY", "XAI_API_KEY"].some((name) => str(env, name));
   const mode = raw === "auto" || raw === "openai" || raw === "ollama" ? raw : anySet ? "auto" : "off";
   if (mode === "off") return { mode, providers: [], ...base };
-  const providers = simpleFrom(env, mode);
+  const providers = withTools(env, simpleFrom(env, mode));
   return { mode: providers.length ? mode : "off", providers, ...base };
 }
 

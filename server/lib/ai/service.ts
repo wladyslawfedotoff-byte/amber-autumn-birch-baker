@@ -193,9 +193,11 @@ export class Assistant {
           chat,
           ctx,
           history: args.history,
-          jsonMode: config.tools === "json",
+          tools: config.tools === "json" ? "json" : (endpoint.tools ?? "auto"),
           signal: options.signal,
           events: {
+            // Asked again in JSON mode: the app drops the text shown so far.
+            onReset: () => emit({ type: "start", conversationId: options.conversationId, provider: endpoint.which, source, userMessageId: options.userMessageId }),
             onDelta: (text) => {
               committed = true;
               emit({ type: "delta", text });
@@ -207,6 +209,10 @@ export class Assistant {
           },
         });
         if (!result.text.trim() && !result.proposals.length) throw new ProviderError("empty answer", false);
+        if (result.jsonMode && (endpoint.tools ?? "auto") === "auto" && config.tools !== "json") {
+          this.chain.rememberJsonMode(endpoint);
+          log("info", "assistant.json_mode", { provider: endpoint.provider, model: endpoint.model });
+        }
         this.chain.report(endpoint, "ok", { tokens });
         const message: ChatMessage = {
           id: randomUUID(),

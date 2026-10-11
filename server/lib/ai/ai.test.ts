@@ -778,3 +778,210 @@ test("«Проверить связь» uses the check URL and reads {code} from
   assert.deepEqual(await chain.check(), { kie: false });
   assert.equal(chain.info()[0]?.state, "error");
 });
+
+/* ---- 1.6.1: tools per provider, JSON fallback, stream shapes ------------- */
+
+function rawStream(text: string, split = 7): Response {
+  const bytes = new TextEncoder().encode(text);
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (let i = 0; i < bytes.length; i += split) controller.enqueue(bytes.slice(i, i + split));
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+}
+
+const PAID_GPT = {
+  AI_PROVIDERS: "kieai",
+  AI_KIEAI_BASE_URL: "https://paid.example/{model}/v1",
+  AI_KIEAI_API_KEY: KEY,
+  AI_KIEAI_MODEL: "gpt-5-2",
+  AI_KIEAI_PAID: "1",
+  AI_KIEAI_JSON_FORMAT: "0",
+};
+
+test("config: AI_<NAME>_TOOLS and AI_LOCAL_TOOLS (default auto)", () => {
+  assert.equal(readAiConfig(PAID_GPT).providers[0]?.tools, "auto");
+  assert.equal(readAiConfig({ ...PAID_GPT, AI_KIEAI_TOOLS: "JSON" }).providers[0]?.tools, "json");
+  assert.equal(readAiConfig({ ...PAID_GPT, AI_KIEAI_TOOLS: "native" }).providers[0]?.tools, "native");
+  assert.equal(readAiConfig({ AI_LOCAL_URL: "http://pc:1234", AI_LOCAL_TOOLS: "json" }).providers[0]?.tools, "json");
+  assert.equal(readAiConfig({ AI_PROVIDERS: "local", AI_LOCAL_URL: "http://pc:1234", AI_LOCAL_TOOLS: "json" }).providers[0]?.tools, "json");
+});
+
+test("the system prompt carries the user's week: overdue, today, next days, free time", async () => {
+  const data = seed();
+  data.tasks.push({ id: "t3", title: "Встреча с командой", notes: "", listId: null, done: false, priority: 0, due: "2026-10-13", startAt: "10:00", endAt: "11:30", tags: [], subtasks: [], createdAt: 1, completedAt: null, owner: "user1", updatedAt: 1 } as never);
+  const { assistant, store, calls, dir } = makeAssistant({ ...PAID_GPT, AI_KIEAI_TOOLS: "json" }, { chat: [() => sse({ text: '{"reply":"Ок","actions":[]}' })] }, data);
+  try {
+    await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+    await ask(assistant, "Что сегодня?");
+    const system = String((calls[0]?.body?.messages as { content: string }[])[0]?.content);
+    assert.match(system, /Просрочено:\n- \[t2\] Позвонить в банк · 2026-10-10/);
+    assert.match(system, /Сегодня:\n- \[t1\] Отчёт за квартал · Работа · приоритет 2/);
+    assert.match(system, /Ближайшие 7 дней.*:\n- \[t3\] Встреча с командой · 2026-10-13 \(вт\) · 10:00–11:30/);
+    assert.match(system, /- 2026-10-13 \(вт\): 09:00–10:00, 11:30–18:00/);
+    assert.match(system, /- 2026-10-14 \(ср\): 09:00–18:00/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("TOOLS=json: no `tools` sent, actions in the JSON answer become cards", async () => {
+  const { assistant, store, calls, dir } = makeAssistant(
+    { ...PAID_GPT, AI_KIEAI_TOOLS: "json" },
+    { chat: [() => sse({ text: '{"reply":"Предлагаю **две** задачи:","actions":[{"name":"create_tasks","arguments":{"tasks":[{"title":"Купить молоко","due":"2026-10-13","time":"10:00"},{"title":"Позвонить маме"}]}}]}' })] },
+  );
+  try {
+    await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+    const events = await ask(assistant, "Добавь купить молоко послезавтра в 10 и позвонить маме");
+    assert.equal(calls[0]?.body?.tools, undefined);
+    assert.equal(calls[0]?.body?.response_format, undefined, "JSON_FORMAT=0");
+    assert.equal(calls[0]?.url, "https://paid.example/gpt-5-2/v1/chat/completions");
+    const done = events.at(-1);
+    assert.equal(done?.type, "done");
+    if (done?.type !== "done") return;
+    assert.equal(done.message.text, "Предлагаю **две** задачи:");
+    assert.deepEqual(done.message.proposals?.[0]?.items.map((i) => (i.op === "create" ? [i.title, i.due, i.start] : null)), [
+      ["Купить молоко", "2026-10-13", "10:00"],
+      ["Позвонить маме", null, null],
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("auto: tools silently ignored («нет доступа к инструментам») → asked again in JSON mode, remembered for next time", async () => {
+  const { assistant, store, calls, dir } = makeAssistant(PAID_GPT, {
+    chat: [
+      () => sse({ text: "«free_slots», поэтому пока не могу. Сейчас у меня нет доступа к нужным инструментам планировщика." }),
+      () => sse({ text: '{"reply":"Завтра свободно 09:00–18:00.","actions":[]}' }),
+      () => sse({ text: '{"reply":"Предлагаю задачу.","actions":[{"name":"create_tasks","arguments":{"tasks":[{"title":"Тест"}]}}]}' }),
+    ],
+  });
+  try {
+    await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+    const events = await ask(assistant, "Найди свободные окна на завтра");
+    assert.deepEqual(events.map((e) => e.type).filter((t) => t !== "delta"), ["start", "start", "done"], "the second start clears the text on screen");
+    const afterReset = events.slice(events.map((e) => e.type).lastIndexOf("start") + 1).flatMap((e) => (e.type === "delta" ? [e.text] : []));
+    assert.equal(afterReset.join(""), "Завтра свободно 09:00–18:00.");
+    const done = events.at(-1);
+    assert.equal(done?.type === "done" && done.message.text, "Завтра свободно 09:00–18:00.");
+    assert.ok(Array.isArray(calls[0]?.body?.tools));
+    assert.equal(calls[1]?.body?.tools, undefined);
+    assert.match(String((calls[1]?.body?.messages as { content: string }[])[0]?.content), /ТОЛЬКО одним JSON-объектом/);
+    const next = await ask(assistant, "Добавь задачу Тест");
+    assert.equal(calls[2]?.body?.tools, undefined, "remembered: straight to JSON mode");
+    const card = next.at(-1);
+    assert.equal(card?.type === "done" && card.message.proposals?.[0]?.items[0]?.op, "create");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("auto: a normal answer, and TOOLS=native, are not asked again", async () => {
+  for (const [env, text] of [
+    [PAID_GPT, "Сегодня у вас одна задача: «Отчёт за квартал»."],
+    [{ ...PAID_GPT, AI_KIEAI_TOOLS: "native" }, "Сейчас у меня нет доступа к нужным инструментам."],
+  ] as const) {
+    const { assistant, store, calls, dir } = makeAssistant(env, { chat: [() => sse({ text })] });
+    try {
+      await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+      const events = await ask(assistant, "Что сегодня?");
+      assert.equal(calls.length, 1);
+      assert.equal(events.at(-1)?.type === "done" && (events.at(-1) as { message: { text: string } }).message.text, text);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+test("auto: tools rejected in a 200 body ({code:422,msg:'tools …'}) → JSON mode", async () => {
+  const { assistant, store, calls, dir } = makeAssistant(PAID_GPT, {
+    chat: [() => Response.json({ code: 422, msg: "Only the built-in web_search function is supported in tools" }), () => sse({ text: '{"reply":"Готово к работе.","actions":[]}' })],
+  });
+  try {
+    await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+    const events = await ask(assistant, "Привет");
+    assert.equal(events.at(-1)?.type, "done");
+    assert.equal(calls[1]?.body?.tools, undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* stream shapes seen from OpenAI-compatible services */
+
+const endpointOf = (fetchFn: typeof fetch) => chatClient({ provider: "kieai", which: "cloud", baseUrl: "https://paid.example/m/v1", apiKey: KEY, model: "m", paid: true }, 5000, fetchFn);
+const chunk = (delta: Record<string, unknown>) => JSON.stringify({ id: "c1", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: null }] });
+const TEXT = "«Завтра», поэтому свободно: **09:00–12:00**.\n\n- пункт";
+
+test("stream: the start of the answer survives glued, split, multi-line and CRLF events", async () => {
+  const parts = ["«Завтра»", ", поэтому свободно: ", "**09:00–12:00**.", "\n\n- пункт"];
+  const shapes: Record<string, string> = {
+    standard: `${parts.map((p) => `data: ${chunk({ content: p })}\n\n`).join("")}data: [DONE]\n\n`,
+    roleFirst: `data: ${chunk({ role: "assistant", content: "" })}\n\n${parts.map((p) => `data: ${chunk({ content: p })}\n\n`).join("")}data: [DONE]\n\n`,
+    noBlankLines: `${parts.map((p) => `data: ${chunk({ content: p })}\n`).join("")}data: [DONE]\n`,
+    crlf: `${parts.map((p) => `data: ${chunk({ content: p })}\r\n\r\n`).join("")}data: [DONE]\r\n\r\n`,
+    glued: `data: ${chunk({ content: parts[0] })}data: ${chunk({ content: parts[1] })}\n\n${parts
+      .slice(2)
+      .map((p) => `data: ${chunk({ content: p })}\n\n`)
+      .join("")}data: [DONE]\n\n`,
+    multiLine: `data: ${JSON.stringify(JSON.parse(chunk({ content: parts[0] })), null, 2)}\n\n${parts
+      .slice(1)
+      .map((p) => `data: ${chunk({ content: p })}\n\n`)
+      .join("")}data: [DONE]\n\n`,
+    withEventLines: `: keep-alive\n\n${parts.map((p) => `event: message\nid: 1\ndata: ${chunk({ content: p })}\n\n`).join("")}data: [DONE]\n\n`,
+    contentParts: `${parts.map((p) => `data: ${chunk({ content: [{ type: "text", text: p }] })}\n\n`).join("")}data: [DONE]\n\n`,
+    reasoningFirst: `data: ${chunk({ reasoning_content: "Думаю о free_slots…" })}\n\n${parts.map((p) => `data: ${chunk({ content: p })}\n\n`).join("")}data: [DONE]\n\n`,
+    wholeMessage: `data: ${JSON.stringify({ choices: [{ index: 0, message: { role: "assistant", content: TEXT }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+  };
+  for (const [name, body] of Object.entries(shapes)) {
+    for (const split of [3, 64, 100_000]) {
+      const shown: string[] = [];
+      const reply = await endpointOf((async () => rawStream(body, split)) as typeof fetch)({ messages: [{ role: "user", content: "?" }], tools: null, onDelta: (d) => shown.push(d) });
+      assert.equal(reply.content, TEXT, `${name} / ${split}`);
+      assert.equal(shown.join(""), TEXT, `${name} / ${split}: streamed`);
+    }
+  }
+});
+
+test("stream: tool calls with index, without index, arguments as an object, in a whole message", async () => {
+  const expected = [
+    { name: "free_slots", arguments: '{"date":"2026-10-12"}' },
+    { name: "list_tasks", arguments: '{"scope":"today"}' },
+  ];
+  const shapes: Record<string, string> = {
+    indexed: [
+      chunk({ tool_calls: [{ index: 0, id: "a", type: "function", function: { name: "free_slots", arguments: "" } }] }),
+      chunk({ tool_calls: [{ index: 0, function: { arguments: '{"date":' } }] }),
+      chunk({ tool_calls: [{ index: 0, function: { arguments: '"2026-10-12"}' } }] }),
+      chunk({ tool_calls: [{ index: 1, id: "b", type: "function", function: { name: "list_tasks", arguments: '{"scope":"today"}' } }] }),
+    ]
+      .map((c) => `data: ${c}\n\n`)
+      .join(""),
+    noIndex: [
+      chunk({ tool_calls: [{ id: "a", type: "function", function: { name: "free_slots", arguments: '{"date":' } }] }),
+      chunk({ tool_calls: [{ function: { arguments: '"2026-10-12"}' } }] }),
+      chunk({ tool_calls: [{ id: "b", type: "function", function: { name: "list_tasks", arguments: '{"scope":"today"}' } }] }),
+    ]
+      .map((c) => `data: ${c}\n\n`)
+      .join(""),
+    objectArgs: `data: ${chunk({ tool_calls: [{ id: "a", type: "function", function: { name: "free_slots", arguments: { date: "2026-10-12" } } }, { id: "b", type: "function", function: { name: "list_tasks", arguments: { scope: "today" } } }] })}\n\n`,
+    wholeMessage: `data: ${JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "a", type: "function", function: { name: "free_slots", arguments: '{"date":"2026-10-12"}' } }, { id: "b", type: "function", function: { name: "list_tasks", arguments: '{"scope":"today"}' } }] } }] })}\n\n`,
+  };
+  for (const [name, body] of Object.entries(shapes)) {
+    const reply = await endpointOf((async () => rawStream(`${body}data: [DONE]\n\n`, 11)) as typeof fetch)({ messages: [{ role: "user", content: "?" }], tools: [] });
+    assert.deepEqual(
+      reply.toolCalls.map((c) => c.function),
+      expected,
+      name,
+    );
+  }
+});
+
+test("looksToolless: the phrases that mean the tools never reached the model", async () => {
+  const { looksToolless } = await import("./agent.ts");
+  for (const text of ["Сейчас у меня нет доступа к нужным инструментам планировщика.", "Не могу вызвать инструмент free_slots", "Я добавил задачу «Купить молоко».", "I don't have access to the tools"]) assert.ok(looksToolless(text), text);
+  for (const text of ["Сегодня у вас 3 задачи.", "Вы добавили много дел — давайте разберём.", "Свободно с 9 до 12."]) assert.ok(!looksToolless(text), text);
+});

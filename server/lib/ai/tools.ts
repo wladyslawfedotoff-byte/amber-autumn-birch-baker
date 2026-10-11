@@ -98,6 +98,58 @@ export function freeSlots(data: SyncData, date: string, today: string, now: stri
   return slots.filter((slot) => slot.minutes >= 15);
 }
 
+const WEEKDAY_SHORT = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function weekdayOf(date: string): string {
+  return WEEKDAY_SHORT[new Date(`${date}T12:00:00Z`).getUTCDay()] ?? "";
+}
+
+/**
+ * Compact picture of the user's week for the system prompt, so a model
+ * answers «what's today», «free windows tomorrow» even without tools:
+ * overdue, today, the next 7 days, the count without a date, and free time
+ * per day. Only the signed-in user's own view (ctx.data) is used.
+ */
+export function snapshot(ctx: ToolContext): string {
+  const { data, today, now } = ctx;
+  const open = tasksOf(data).filter((t) => !t.done);
+  const weekEnd = addDays(today, 7);
+  const line = (t: TaskLike) => {
+    const b = brief(data, t);
+    return `- [${b.id}] ${b.title}${b.due && b.due !== today ? ` · ${b.due} (${weekdayOf(b.due)})` : ""}${b.time ? ` · ${b.time}` : ""} · ${b.list}${b.priority ? ` · приоритет ${b.priority}` : ""}${b.steps ? ` · шаги ${b.steps}` : ""}`;
+  };
+  const byDue = (a: TaskLike, b: TaskLike) => `${a.due}${a.startAt ?? "99"}`.localeCompare(`${b.due}${b.startAt ?? "99"}`);
+  const section = (title: string, rows: TaskLike[], max: number) => {
+    if (!rows.length) return [`${title}: нет`];
+    const more = rows.length > max ? [`  …и ещё ${rows.length - max} (list_tasks)`] : [];
+    return [`${title}:`, ...rows.slice(0, max).map(line), ...more];
+  };
+  const overdue = open.filter((t) => t.due !== null && t.due < today).sort(byDue);
+  const todays = open.filter((t) => t.due === today).sort(byDue);
+  const week = open.filter((t) => t.due !== null && t.due > today && t.due <= weekEnd).sort(byDue);
+  const noDate = open.filter((t) => !t.due).length;
+  const hours = `${data.settings?.workStart ?? "09:00"}–${data.settings?.workEnd ?? "18:00"}`;
+  const free = Array.from({ length: 8 }, (_, i) => addDays(today, i)).map((day) => {
+    const slots = freeSlots(data, day, today, now);
+    return `- ${day} (${weekdayOf(day)}): ${slots.length ? slots.map((s) => `${s.start}–${s.end}`).join(", ") : "свободного времени нет"}`;
+  });
+  return [
+    "Данные пользователя на сейчас (открытые задачи, в квадратных скобках id для изменений):",
+    ...section("Просрочено", overdue, 15),
+    ...section("Сегодня", todays, 25),
+    ...section(`Ближайшие 7 дней (до ${weekEnd})`, week, 30),
+    `Без даты: ${noDate}${noDate ? " (list_tasks со scope no_date)" : ""}`,
+    `Свободное время в рабочие часы ${hours} (с учётом задач со временем):`,
+    ...free,
+  ].join("\n");
+}
+
 /* ---- specs ------------------------------------------------------------- */
 
 const taskFields = {
