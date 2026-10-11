@@ -34,7 +34,7 @@ services:
       - SETGID        # переход на PGID
     # Секреты и необязательные настройки — только из .env рядом с этим файлом.
     # Не добавляйте APP_PASSWORD / APP_PASSWORD_HASH / SESSION_SECRET /
-    # XAI_API_KEY в environment ниже: environment перекрывает env_file,
+    # ключи AI_* в environment ниже: environment перекрывает env_file,
     # даже пустым значением.
     env_file:
       - .env

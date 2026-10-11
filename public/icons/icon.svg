@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- «Пора»: rising sun over the horizon with a check mark. Full bleed, no rounded corners. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f4a6e"/>
+      <stop offset="1" stop-color="#4f9e86"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g transform="translate(512 512) scale(0.92) translate(-512 -500)">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M221.5 586.7L75.3 521.6 M291.1 487.2L180.0 372.2 M392.9 421.2L332.9 272.8 M512.0 398.0L512.0 238.0 M631.1 421.2L691.1 272.8" stroke="#fbf1d9" stroke-width="15"/>
+    <path d="M298 716A214 214 0 0 1 726 716Z" fill="#eea43a" stroke="none"/>
+    <path d="M122 716H902" stroke="#fbf1d9" stroke-width="18"/>
+    <path d="M404 640 512 742 822 404" stroke="#fbf1d9" stroke-width="50"/>
+  </g>
+  </g>
+</svg>

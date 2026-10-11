@@ -162,6 +162,16 @@ export function renderInstallPageHtml(template, { host, url, appName } = {}) {
     .replaceAll("{{APP_URL}}", escapeHtml(stripInstallParams(url)));
 }
 
+// App icons (public/icons; keep ICON_VERSION in step with src/lib/app-icons.ts).
+const ICON_VERSION = "1.6.0";
+const MANIFEST_BACKGROUND = "#0f4a6e";
+const MANIFEST_THEME = "#f6f4ef";
+const MANIFEST_ICONS = [
+  ...[192, 512].map((size) => ({ src: `/icons/icon-${size}.png?v=${ICON_VERSION}`, sizes: `${size}x${size}`, type: "image/png", purpose: "any" })),
+  ...[192, 512].map((size) => ({ src: `/icons/icon-maskable-${size}.png?v=${ICON_VERSION}`, sizes: `${size}x${size}`, type: "image/png", purpose: "maskable" })),
+  { src: `/icons/apple-touch-icon-180.png?v=${ICON_VERSION}`, sizes: "180x180", type: "image/png" },
+];
+
 export function renderWebManifest(hostHeader, appName = "", description = "") {
   const name = resolveAppName(hostHeader, appName);
   const about = String(description ?? "").trim();
@@ -174,15 +184,9 @@ export function renderWebManifest(hostHeader, appName = "", description = "") {
       start_url: "/",
       scope: "/",
       display: "standalone",
-      background_color: "#000000",
-      theme_color: "#000000",
-      icons: [
-        {
-          src: "/__grok/icon-180.png",
-          sizes: "180x180",
-          type: "image/png",
-        },
-      ],
+      background_color: MANIFEST_BACKGROUND,
+      theme_color: MANIFEST_THEME,
+      icons: MANIFEST_ICONS,
     },
     null,
     2,
@@ -457,8 +461,9 @@ export function injectGrokPwaHead(html, ctx = {}) {
 
   const missing = grokPwaHeadTags(appName)
     .filter(([key]) => {
-      if (key === "manifest") return !next.includes('href="/__grok/manifest.webmanifest"');
-      if (key === "apple-touch-icon") return !next.includes('href="/__grok/icon-180.png"');
+      // The app's own links (with sizes and a version query) count as present.
+      if (key === "manifest") return !/rel="manifest"/.test(next);
+      if (key === "apple-touch-icon") return !/rel="apple-touch-icon"/.test(next);
       return !next.includes(`name="${key}"`);
     })
     .map(([, tag]) => tag);

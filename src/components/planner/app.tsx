@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Columns3, List, Menu, Search, Trash2, X } from "lucide-react";
 import { AssistView } from "@/components/planner/assist-view";
+import { AssistantNoticeList } from "@/components/planner/assist-notices";
+import { useAssistantNotices } from "@/lib/assistant/use-notices";
 import { CalendarView } from "@/components/planner/calendar-view";
 import { ChecklistView } from "@/components/planner/checklist-view";
 import { DatesView } from "@/components/planner/dates-view";
@@ -69,6 +71,8 @@ export function PlannerApp() {
   const hits = useReminderHits();
   const dueHits = hits.filter((hit) => hit.status === "due");
   useReminderChime(dueHits);
+  const assistantNotices = useAssistantNotices(Boolean(profile.assistant));
+  const [assistOpen, setAssistOpen] = useState<string | null>(null);
   const [view, setView] = useState<View>("today");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -321,7 +325,7 @@ export function PlannerApp() {
               </Button>
             )}
             <SyncIndicator onOpen={() => openView("settings")} />
-            <ReminderBell dueCount={dueHits.length} open={bell} onToggle={() => setBell((open) => !open)} />
+            <ReminderBell dueCount={dueHits.length + assistantNotices.notices.length} open={bell} onToggle={() => setBell((open) => !open)} />
           </div>
           {showSearch ? (
             <label className="relative mt-1.5 block">
@@ -356,7 +360,21 @@ export function PlannerApp() {
                 className="fixed inset-0 z-20 cursor-default"
                 onClick={() => setBell(false)}
               />
-              <ReminderPanel hits={hits} onOpen={openHit} onAck={(hit) => ackReminder(hit.key, hit.stamp)} />
+              <ReminderPanel
+                hits={hits}
+                onOpen={openHit}
+                onAck={(hit) => ackReminder(hit.key, hit.stamp)}
+                top={
+                  <AssistantNoticeList
+                    notices={assistantNotices.notices}
+                    onOpen={(notice) => {
+                      assistantNotices.dismiss({ conversationId: notice.conversationId });
+                      openView("assist");
+                      setAssistOpen(`${notice.conversationId}#${Date.now()}`);
+                    }}
+                  />
+                }
+              />
             </>
           ) : null}
         </header>
@@ -372,7 +390,7 @@ export function PlannerApp() {
         ) : null}
 
         <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-2 pb-24 md:px-8 md:py-6">
+        <div className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-2 md:px-8 md:py-6", view === "assist" && !query.trim() ? "pb-0 md:pb-0" : "pb-24")}>
           {showLists ? (
             <TaskViews
               key={view}
@@ -416,7 +434,7 @@ export function PlannerApp() {
           {!query.trim() && view === "focus" ? <FocusView /> : null}
           {!query.trim() && view === "habits" ? <HabitsView onOpenFocus={() => openView("focus")} /> : null}
           {!query.trim() && view === "dates" ? <DatesView /> : null}
-          {!query.trim() && view === "assist" ? <AssistView onOpen={setSelectedId} /> : null}
+          {!query.trim() && view === "assist" ? <AssistView onOpen={setSelectedId} openConversationId={assistOpen} /> : null}
           {!query.trim() && view === "schedule" ? (
             <ScheduleScreen
               onOpen={setSelectedId}

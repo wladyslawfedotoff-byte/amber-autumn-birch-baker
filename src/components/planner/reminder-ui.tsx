@@ -1,5 +1,5 @@
 import { InlineHint } from "@/components/ui/hint";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { beep } from "@/lib/beep";
@@ -86,10 +86,13 @@ export function ReminderPanel({
   hits,
   onOpen,
   onAck,
+  top,
 }: {
   hits: ReminderHit[];
   onOpen: (hit: ReminderHit) => void;
   onAck: (hit: ReminderHit) => void;
+  /** Extra notices above the reminders (the assistant's answers). */
+  top?: ReactNode;
 }) {
   const [perm, setPerm] = useState<NotificationPermission | "off">("off");
 
@@ -103,6 +106,7 @@ export function ReminderPanel({
 
   return (
     <div className="absolute top-full right-2 left-2 z-30 mt-1 rounded-2xl bg-surface p-2 shadow-xl ring-1 ring-line md:left-auto md:w-96">
+      {top}
       <p className="px-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-subtle">Напоминания</p>
       {hits.length === 0 ? (
         <p className="px-1 py-3 text-sm text-muted">Пока тихо. Время ставится в задаче, привычке или дате.</p>
