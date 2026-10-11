@@ -63,7 +63,7 @@ test("29 February: celebrated on 28 February in other years", () => {
   assert.equal(ageLabel(item({ date: "2000-02-29" }), "2027-02-28", "2026-10-11"), "исполнится 27");
 });
 
-test("TickTick-like cards: short age, big number, countdown in the past", () => {
+test("compact cards: short age, big number, countdown in the past", () => {
   const today = "2026-10-11";
   assert.equal(shortAge(item({ date: "1989-12-14" }), "2026-12-14"), "(37 л.)");
   assert.equal(shortAge(item({ date: "2025-06-01" }), "2026-06-01"), "(1 г.)");

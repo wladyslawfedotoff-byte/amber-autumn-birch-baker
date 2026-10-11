@@ -339,7 +339,7 @@ const SHEET_TITLES: Record<SheetId, string> = {
   about: "О приложении",
 };
 
-/** iOS/TickTick-like row: coloured icon, label, value, «›». */
+/** Settings row: coloured icon, label, value, «›». */
 function NavRow({
   id,
   icon: Icon,

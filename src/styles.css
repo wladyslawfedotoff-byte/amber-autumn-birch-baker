@@ -194,7 +194,7 @@
   }
 }
 
-/* TickTick-like task rows: one flat group with hairline dividers, rounded
+/* Compact task rows: one flat group with hairline dividers, rounded
    only at the group's ends (no per-row card, shadow or gap). */
 .task-row {
   position: relative;
@@ -234,7 +234,7 @@ textarea.text-sm {
   font-size: 1rem;
 }
 
-/* Compact density on phones (TickTick-like): ~15px body, smaller headings,
+/* Compact density on phones: ~15px body, smaller headings,
    tap targets stay 44px (spacing is not scaled, only the type ramp). */
 @media (max-width: 767px) {
   :root {

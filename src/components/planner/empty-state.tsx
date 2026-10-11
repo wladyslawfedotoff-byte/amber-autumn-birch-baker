@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** Compact empty state (TickTick-like): short title, one muted line, no big serif. */
+/** Compact empty state: short title, one muted line, no big serif. */
 export function Empty({ title, hint, icon }: { title: string; hint: string; icon?: ReactNode }) {
   return (
     <div className="flex flex-col items-center px-6 pt-12 pb-6 text-center">

@@ -1,4 +1,4 @@
-/** Pure helpers for the TickTick-like calendar (week numbers, dots, the hour grid). */
+/** Pure helpers for the compact calendar (week numbers, dots, the hour grid). */
 
 function parts(iso: string): [number, number, number] {
   const [y, m, d] = iso.split("-").map(Number);
