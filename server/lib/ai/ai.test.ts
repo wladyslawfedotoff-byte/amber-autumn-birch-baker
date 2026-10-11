@@ -105,7 +105,8 @@ test("config: off by default, auto when any AI_* is set, legacy XAI key", () => 
       ["cloud", "cloud", "https://api.example.com/v1", ["m-cloud"]],
     ],
   );
-  assert.equal(auto.providers[0]?.healthUrl, "http://192.168.1.20:11434/api/tags");
+  assert.equal(auto.providers[0]?.localRoot, "http://192.168.1.20:11434");
+  assert.equal(auto.providers[0]?.localType, "ollama", "AI_OLLAMA_URL implies Ollama");
   const legacy = readAiConfig({ XAI_API_KEY: KEY });
   assert.equal(legacy.mode, "auto");
   assert.deepEqual(
@@ -637,4 +638,143 @@ test("queue: background answers use only providers the user agreed to", async ()
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/* ---- home PC: Ollama or LM Studio --------------------------------------- */
+
+/** A home PC that runs one kind of server and lists these models. */
+function homePc(kind: "ollama" | "lmstudio" | "off", models: string[]) {
+  const urls: string[] = [];
+  const fn = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (kind === "ollama" && url.endsWith("/api/tags")) return Response.json({ models: models.map((name) => ({ name })) });
+    if (kind === "lmstudio" && url.endsWith("/v1/models")) return Response.json({ object: "list", data: models.map((id) => ({ id, object: "model" })) });
+    if (kind !== "off") return new Response("not found", { status: 404 });
+    throw new TypeError("fetch failed");
+  }) as typeof fetch;
+  return { fn, urls };
+}
+
+test("config: AI_LOCAL_* with AI_OLLAMA_* as aliases and AI_LOCAL_TYPE", () => {
+  const lm = readAiConfig({ AI_LOCAL_URL: "http://192.168.1.20:1234/v1/", AI_LOCAL_TYPE: "lmstudio", AI_LOCAL_MODEL: "qwen2.5-7b-instruct" });
+  assert.equal(lm.mode, "auto");
+  assert.deepEqual(
+    lm.providers.map((p) => [p.name, p.kind, p.baseUrl, p.localRoot, p.localType, p.models, p.jsonFormat]),
+    [["local", "local", "http://192.168.1.20:1234/v1", "http://192.168.1.20:1234", "lmstudio", ["qwen2.5-7b-instruct"], false]],
+  );
+  const auto = readAiConfig({ AI_LOCAL_URL: "http://pc:1234" });
+  assert.deepEqual([auto.providers[0]?.localType, auto.providers[0]?.models], ["auto", []], "auto-detect, model from the PC");
+  const alias = readAiConfig({ AI_OLLAMA_URL: "http://pc:11434", AI_OLLAMA_MODEL: "llama3.1:8b" });
+  assert.deepEqual([alias.providers[0]?.localType, alias.providers[0]?.models], ["ollama", ["llama3.1:8b"]]);
+  const chain = readAiConfig({ AI_PROVIDERS: "local, kie", AI_LOCAL_URL: "http://pc:1234", AI_LOCAL_TYPE: "LM Studio", AI_KIE_BASE_URL: "https://paid.example/{model}/v1", AI_KIE_API_KEY: KEY, AI_KIE_MODEL: "m-1,m-2", AI_KIE_PAID: "1", AI_KIE_CHECK_URL: "https://paid.example/api/credit", AI_KIE_JSON_FORMAT: "0" });
+  assert.equal(chain.mode, "chain");
+  assert.deepEqual(
+    chain.providers.map((p) => [p.name, p.localType, p.baseUrl, p.checkUrl, p.jsonFormat, p.paid]),
+    [
+      ["local", "lmstudio", "http://pc:1234/v1", null, false, false],
+      ["kie", null, "https://paid.example/{model}/v1", "https://paid.example/api/credit", false, true],
+    ],
+  );
+});
+
+test("home PC: LM Studio is found via /v1/models and its model is used", async () => {
+  const pc = homePc("lmstudio", ["qwen2.5-7b-instruct", "text-embedding-nomic-embed-text-v1.5"]);
+  const chain = new ProviderChain(readAiConfig({ AI_LOCAL_URL: "http://pc:1234" }), pc.fn);
+  const all = { allowCloud: true, allowPaid: true };
+  const found = await chain.candidates(all);
+  assert.deepEqual(
+    found.endpoints.map((e) => [e.which, e.baseUrl, e.model, e.jsonFormat]),
+    [["local", "http://pc:1234/v1", "qwen2.5-7b-instruct", false]],
+  );
+  assert.deepEqual(pc.urls, ["http://pc:1234/api/tags", "http://pc:1234/v1/models"], "auto tries Ollama first, then LM Studio");
+  assert.equal(chain.info()[0]?.models[0], "qwen2.5-7b-instruct");
+  const typed = homePc("lmstudio", ["m"]);
+  await new ProviderChain(readAiConfig({ AI_LOCAL_URL: "http://pc:1234", AI_LOCAL_TYPE: "lmstudio" }), typed.fn).candidates(all);
+  assert.deepEqual(typed.urls, ["http://pc:1234/v1/models"], "with a type only that server is asked");
+  const empty = await new ProviderChain(readAiConfig({ AI_LOCAL_URL: "http://pc:1234", AI_LOCAL_TYPE: "lmstudio" }), homePc("off", []).fn).candidates({ allowCloud: false, allowPaid: false });
+  assert.deepEqual(empty, { endpoints: [], blocked: ["down"] });
+});
+
+test("home PC: Ollama auto-detected; the default model when it is there", async () => {
+  const all = { allowCloud: true, allowPaid: true };
+  const withDefault = await new ProviderChain(readAiConfig({ AI_LOCAL_URL: "http://pc:11434" }), homePc("ollama", ["llama3.1:8b", "qwen2.5:7b-instruct"]).fn).candidates(all);
+  assert.deepEqual(withDefault.endpoints.map((e) => [e.model, e.jsonFormat]), [["qwen2.5:7b-instruct", true]]);
+  const other = await new ProviderChain(readAiConfig({ AI_LOCAL_URL: "http://pc:11434" }), homePc("ollama", ["llama3.1:8b"]).fn).candidates(all);
+  assert.deepEqual(other.endpoints.map((e) => e.model), ["llama3.1:8b"]);
+});
+
+test("home PC: LM Studio answers in JSON mode without response_format", async () => {
+  const requests: Record<string, unknown>[] = [];
+  const fn = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(JSON.parse(String(init?.body)));
+    return sse({ text: '{"reply":"ok"}' });
+  }) as typeof fetch;
+  await chatClient({ provider: "local", which: "local", baseUrl: "http://pc:1234/v1", apiKey: null, model: "m", paid: false, jsonFormat: false }, 5000, fn)({ messages: [{ role: "user", content: "hi" }], tools: null });
+  assert.equal(requests[0]?.response_format, undefined);
+  await chatClient({ provider: "local", which: "local", baseUrl: "http://pc:11434/v1", apiKey: null, model: "m", paid: false }, 5000, fn)({ messages: [{ role: "user", content: "hi" }], tools: null });
+  assert.deepEqual(requests[1]?.response_format, { type: "json_object" });
+});
+
+/* ---- per-model URLs, errors sent as HTTP 200 ----------------------------- */
+
+const KIE = {
+  AI_PROVIDERS: "free,kie",
+  AI_FREE_BASE_URL: "https://free.example/api/v1",
+  AI_FREE_API_KEY: KEY,
+  AI_FREE_MODEL: "a:free",
+  AI_KIE_BASE_URL: "https://paid.example/{model}/v1",
+  AI_KIE_API_KEY: KEY,
+  AI_KIE_MODEL: "flash-openai,pro-openai",
+  AI_KIE_PAID: "1",
+  AI_KIE_MONTHLY_TOKENS: "100000",
+  AI_KIE_CHECK_URL: "https://paid.example/api/v1/chat/credit",
+};
+
+test("per-model URL template and {code,msg} errors with HTTP 200 → next model", async () => {
+  const { assistant, store, calls, dir } = makeAssistant(KIE, {
+    chat: [
+      limited,
+      () => Response.json({ code: 402, msg: "Credits insufficient" }),
+      () => sse({ text: "Готово", usage: 120 }),
+    ],
+  });
+  try {
+    await store.setSettings("user1", { consent: "cloud", allowPaid: true });
+    const events = await ask(assistant, "Привет");
+    assert.deepEqual(starts(events), ["free · a:free", "kie · flash-openai", "kie · pro-openai"]);
+    assert.equal(events.at(-1)?.type, "done");
+    const chatUrls = calls.filter((c) => c.url.endsWith("/chat/completions")).map((c) => c.url);
+    assert.deepEqual(chatUrls, ["https://free.example/api/v1/chat/completions", "https://paid.example/flash-openai/v1/chat/completions", "https://paid.example/pro-openai/v1/chat/completions"]);
+    assert.ok(calls.every((c) => !c.url.includes("{model}")));
+    assert.equal((await assistant.status(user1)).providers.find((p) => p.name === "kie")?.usedTokens, 120);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("errors inside a 200 body: 401 skips the provider, bare JSON in the stream, plain JSON answers", async () => {
+  const fn401 = (async () => Response.json({ code: 401, msg: "You do not have access permissions" })) as typeof fetch;
+  const endpoint = { provider: "kie", which: "cloud" as const, baseUrl: "https://paid.example/m/v1", apiKey: KEY, model: "m", paid: true };
+  await assert.rejects(chatClient(endpoint, 5000, fn401)({ messages: [{ role: "user", content: "hi" }], tools: null }), /http 401/);
+  const streamed = (async () => new Response('{"code":429,"msg":"Rate limited"}\n', { status: 200, headers: { "content-type": "text/event-stream" } })) as typeof fetch;
+  await assert.rejects(chatClient(endpoint, 5000, streamed)({ messages: [{ role: "user", content: "hi" }], tools: null }), (e: Error & { limit?: boolean }) => e.limit === true);
+  const plain = (async () => Response.json({ choices: [{ message: { content: "Привет" } }], usage: { total_tokens: 7 } })) as typeof fetch;
+  const reply = await chatClient(endpoint, 5000, plain)({ messages: [{ role: "user", content: "hi" }], tools: null });
+  assert.deepEqual([reply.content, reply.tokens], ["Привет", 7]);
+});
+
+test("«Проверить связь» uses the check URL and reads {code} from the body", async () => {
+  let code = 200;
+  const urls: string[] = [];
+  const fn = (async (input: RequestInfo | URL) => {
+    urls.push(String(input));
+    return Response.json({ code, msg: "success", data: 100 });
+  }) as typeof fetch;
+  const chain = new ProviderChain(readAiConfig({ ...KIE, AI_PROVIDERS: "kie" }), fn);
+  assert.deepEqual(await chain.check(), { kie: true });
+  assert.deepEqual(urls, ["https://paid.example/api/v1/chat/credit"]);
+  code = 401;
+  assert.deepEqual(await chain.check(), { kie: false });
+  assert.equal(chain.info()[0]?.state, "error");
 });

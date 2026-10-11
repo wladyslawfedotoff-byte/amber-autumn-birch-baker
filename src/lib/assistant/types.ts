@@ -5,7 +5,7 @@
  */
 import type { HabitFreq, HabitSection, Priority } from "../planner-types.ts";
 
-/** Which model answered: on the home PC (Ollama) or a cloud API. */
+/** Which model answered: on the home PC or a cloud API. */
 export type AiWhich = "local" | "cloud";
 
 export type ProposalItem =
