@@ -77,7 +77,7 @@ export function Sheet({
             <span className="size-11 shrink-0" aria-hidden="true" />
           )}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))]">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-[max(1rem,var(--safe-b))]">{children}</div>
       </div>
     </div>,
     document.body,

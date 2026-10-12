@@ -31,6 +31,7 @@ import { Fab, QuickComposer } from "@/components/planner/quick-composer";
 import { TAB_ICONS } from "@/components/planner/tab-icons";
 import { TAB_OPTIONS, canBoard } from "@/lib/ui-prefs";
 import { useViewportFrame } from "@/lib/use-viewport-frame";
+import { useShareScope } from "@/lib/use-share-scope";
 
 function viewTitle(view: View, lists: { id: string; name: string }[]): string {
   if (view === "today") return "Сегодня";
@@ -73,6 +74,15 @@ export function PlannerApp() {
   useReminderChime(dueHits);
   const assistantNotices = useAssistantNotices(Boolean(profile.assistant));
   const [assistOpen, setAssistOpen] = useState<string | null>(null);
+  /** «Помощник» opened from an open project: offers «Разбей проект на шаги». */
+  const [assistProject, setAssistProject] = useState<string | null>(null);
+  /** «Помощник» puts its «История» / «Новая беседа» buttons into the app header. */
+  const [assistSlot, setAssistSlot] = useState<HTMLDivElement | null>(null);
+  /** Project open on the «Проекты» screen right now. */
+  const shownProject = useRef<string | null>(null);
+  const onProjectShown = useCallback((id: string | null) => {
+    shownProject.current = id;
+  }, []);
   const [view, setView] = useState<View>("today");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -82,6 +92,9 @@ export function PlannerApp() {
   const [bell, setBell] = useState(false);
   const [confirmList, setConfirmList] = useState(false);
   const tabBar = usePlanner((s) => s.tabBar);
+  const share = useShareScope();
+  // «Общие» has nothing to show without shared lists on this server.
+  const tabs = share ? tabBar : tabBar.filter((id) => id !== "shared");
   const addTask = usePlanner((s) => s.addTask);
   const [composer, setComposer] = useState(false);
   const composerRef = useRef<HTMLInputElement>(null);
@@ -163,6 +176,7 @@ export function PlannerApp() {
   }
 
   function openView(next: View) {
+    if (next === "assist") setAssistProject(view === "projects" ? shownProject.current : null);
     setView(next);
     setBoard(false);
     setCalendarDay(null);
@@ -270,14 +284,15 @@ export function PlannerApp() {
 
   return (
     <div className="app-frame vv-frame flex overflow-hidden bg-surface text-fg">
-      <aside className="hidden h-full w-64 shrink-0 border-r border-line md:flex">
+      <aside className="hidden h-full w-72 shrink-0 border-r border-line md:flex">
         <Sidebar view={view} onView={openView} onProject={openProject} />
       </aside>
 
       {drawer ? (
-        <div className="sheet absolute inset-x-0 bottom-0 z-40 md:hidden">
+        // Full height (under the status bar too); the panel pads itself by the safe areas.
+        <div className="absolute inset-0 z-40 md:hidden">
           <button type="button" className="scrim absolute inset-0" aria-label="Закрыть меню" onClick={() => setDrawer(false)} />
-          <div className="sheet-safe absolute inset-y-0 left-0 flex w-72 flex-col bg-bg">
+          <div className="drawer-panel sheet-safe absolute inset-y-0 left-0 flex w-[19rem] max-w-[86vw] flex-col bg-bg pt-[env(safe-area-inset-top)] shadow-xl">
             <Sidebar view={view} onView={openView} onClose={() => setDrawer(false)} onProject={openProject} />
           </div>
         </div>
@@ -319,7 +334,8 @@ export function PlannerApp() {
                 {board ? <List className="size-5" /> : <Columns3 className="size-5" />}
               </Button>
             ) : null}
-            {showSearch ? null : (
+            {view === "assist" && !query.trim() ? <div ref={setAssistSlot} className="flex items-center" /> : null}
+            {showSearch || view === "assist" ? null : (
               <Button size="icon" variant="ghost" aria-label="Поиск" onClick={() => setSearchOpen(true)}>
                 <Search className="size-5" />
               </Button>
@@ -434,7 +450,7 @@ export function PlannerApp() {
           {!query.trim() && view === "focus" ? <FocusView /> : null}
           {!query.trim() && view === "habits" ? <HabitsView onOpenFocus={() => openView("focus")} /> : null}
           {!query.trim() && view === "dates" ? <DatesView /> : null}
-          {!query.trim() && view === "assist" ? <AssistView onOpen={setSelectedId} openConversationId={assistOpen} /> : null}
+          {!query.trim() && view === "assist" ? <AssistView onOpen={setSelectedId} openConversationId={assistOpen} headerSlot={assistSlot} projectId={assistProject} /> : null}
           {!query.trim() && view === "schedule" ? (
             <ScheduleScreen
               onOpen={setSelectedId}
@@ -446,8 +462,8 @@ export function PlannerApp() {
               }}
             />
           ) : null}
-          {!query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} /> : null}
-          {!query.trim() && view === "settings" ? <SettingsView /> : null}
+          {!query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} onOpenChange={onProjectShown} /> : null}
+          {!query.trim() && view === "settings" ? <SettingsView onView={openView} /> : null}
         </div>
         {quick ? (
           <Fab
@@ -478,10 +494,10 @@ export function PlannerApp() {
 
         <nav
           className="grid shrink-0 border-t border-line bg-surface pb-safe md:hidden"
-          style={{ gridTemplateColumns: `repeat(${tabBar.length}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
           aria-label="Основные разделы"
         >
-          {tabBar.map((id) => {
+          {tabs.map((id) => {
             const Icon = TAB_ICONS[id];
             const label = TAB_OPTIONS.find((tab) => tab.id === id)?.label ?? id;
             const active = !query.trim() && (view === id || (id === "today" && view.startsWith("day:")));

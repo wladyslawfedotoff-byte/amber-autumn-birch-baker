@@ -89,6 +89,13 @@
 }
 
 @layer base {
+  :root {
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  html.frame-short {
+    --safe-b: 0px;
+  }
+
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -149,8 +156,12 @@
     transform: scale(0.98);
   }
 
+  /* Bottom inset for bars and sheets. Use var(--safe-b), never
+     env(safe-area-inset-bottom) directly: in a short Home Screen frame
+     (html.frame-short, see use-viewport-frame.ts) the inset is already
+     below the page and must not lift the tab bar a second time. */
   .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: var(--safe-b);
   }
 
   /* Pinned to the screen; while the iOS keyboard is open — to the visible
@@ -224,7 +235,7 @@
 
 @media (max-width: 1023px) {
   .sheet-safe {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: var(--safe-b);
   }
 }
 
@@ -337,6 +348,26 @@ input {
 }
 .sheet-panel {
   animation: sheet-up 180ms var(--ease);
+}
+
+/* Side menu slides in from the left, full-screen panels from the right. */
+@keyframes slide-from-left {
+  from {
+    transform: translateX(-24px);
+    opacity: 0.6;
+  }
+}
+@keyframes slide-from-right {
+  from {
+    transform: translateX(32px);
+    opacity: 0.6;
+  }
+}
+.drawer-panel {
+  animation: slide-from-left 180ms var(--ease);
+}
+.panel-right {
+  animation: slide-from-right 200ms var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -67,7 +67,7 @@ export function QuickComposer({
         role="dialog"
         aria-label="Новая задача"
         className={cn(
-          "relative rounded-t-2xl bg-surface px-3 md:mb-6 md:w-[32rem] md:rounded-2xl pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-xl transition-[transform,opacity] duration-150",
+          "relative rounded-t-2xl bg-surface px-3 md:mb-6 md:w-[32rem] md:rounded-2xl pt-2 pb-[max(0.5rem,var(--safe-b))] shadow-xl transition-[transform,opacity] duration-150",
           open ? "translate-y-0 opacity-100" : "translate-y-[110%] opacity-0",
         )}
       >

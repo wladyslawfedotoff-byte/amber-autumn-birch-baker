@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { keyboardFrame, revealDelta } from "@/lib/viewport";
+import { frameEndsAboveScreen, keyboardFrame, revealDelta } from "@/lib/viewport";
 
 function editable(node: Element | null): node is HTMLElement {
   if (!(node instanceof HTMLElement)) return false;
@@ -28,10 +28,22 @@ function revealFocused() {
   if (delta !== 0) box.scrollTop += delta;
 }
 
+/** env(safe-area-inset-top) in px (a hidden probe: CSS env() is not readable from JS directly). */
+function safeTopPx(probe: HTMLElement): number {
+  return Number.parseFloat(getComputedStyle(probe).paddingTop) || 0;
+}
+
+function isStandalone(): boolean {
+  const nav = navigator as Navigator & { standalone?: boolean };
+  return nav.standalone === true || window.matchMedia?.("(display-mode: standalone)").matches === true;
+}
+
 /**
  * Keeps `--app-h` / `--vv-top` and `html.kb-open` in step with the visual
  * viewport, undoes the page scroll iOS leaves after the keyboard closes and
- * keeps the focused field visible above the keyboard.
+ * keeps the focused field visible above the keyboard. Also sets
+ * `html.frame-short` when the page ends above the home indicator (see
+ * frameEndsAboveScreen): then `--safe-b` drops the bottom inset.
  */
 export function useViewportFrame() {
   useEffect(() => {
@@ -40,6 +52,10 @@ export function useViewportFrame() {
     let raf = 0;
     let wasKeyboard = false;
     let lastKey = "";
+    const probe = document.createElement("div");
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top,0px)";
+    document.body.appendChild(probe);
 
     const apply = () => {
       raf = 0;
@@ -48,6 +64,17 @@ export function useViewportFrame() {
         vvHeight: vv?.height ?? window.innerHeight,
         vvTop: vv?.offsetTop ?? 0,
       });
+      const short = frameEndsAboveScreen({
+        standalone: isStandalone(),
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        screenWidth: window.screen?.width ?? window.innerWidth,
+        screenHeight: window.screen?.height ?? window.innerHeight,
+        safeTop: safeTopPx(probe),
+        keyboard: frame.keyboard,
+      });
+      // While the keyboard is open the last known state stays (the bar is hidden then anyway).
+      if (!frame.keyboard) root.classList.toggle("frame-short", short);
       const key = `${frame.keyboard}:${frame.top}:${frame.height}`;
       if (key !== lastKey) {
         lastKey = key;
@@ -82,6 +109,8 @@ export function useViewportFrame() {
     document.addEventListener("focusout", onFocusOut);
     return () => {
       if (raf) window.cancelAnimationFrame(raf);
+      probe.remove();
+      root.classList.remove("frame-short");
       vv?.removeEventListener("resize", schedule);
       vv?.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
