@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUp,
   Bell,
+  CheckCheck,
   CalendarClock,
   ChevronRight,
   GripVertical,
@@ -14,14 +15,31 @@ import {
   MinusCircle,
   Palette,
   PanelBottom,
-  PlusCircle,
+  Plus,
   Sparkles,
 } from "lucide-react";
 import { AssistantSection } from "@/components/planner/assist-settings";
-import { TAB_ICONS } from "@/components/planner/tab-icons";
+import { NAV_ICONS, TAB_ICONS } from "@/components/planner/tab-icons";
 import { Sheet } from "@/components/ui/sheet";
 import { SwitchRow } from "@/components/ui/rows";
-import { CALENDAR_MODES, DEFAULT_TABS, MAX_TABS, MIN_TABS, TAB_OPTIONS, moveTab, placeTab, toggleTab, type TabId } from "@/lib/ui-prefs";
+import {
+  CALENDAR_MODES,
+  DEFAULT_TABS,
+  MAX_TABS,
+  MIN_TABS,
+  NAV_ITEMS,
+  TAB_OPTIONS,
+  isNavId,
+  moveTab,
+  placeTab,
+  placementOf,
+  setPlacement,
+  toggleTab,
+  type NavId,
+  type NavPrefs,
+  type Placement,
+  type TabId,
+} from "@/lib/ui-prefs";
 import { ACCENTS } from "@/lib/accents";
 import { addFromBackup, saveBackup } from "@/lib/backup";
 import { cn } from "@/lib/cn";
@@ -29,19 +47,51 @@ import { usePlanner } from "@/lib/planner-store";
 import { changePassword, dismissLegacyNote, logout, logoutEverywhere, syncServerNow } from "@/lib/server-sync";
 import { reloadProfile, useProfile } from "@/lib/use-capabilities";
 import { phaseLabel, useServerSyncStatus } from "@/lib/use-server-sync";
-import { ARCHIVE_OPTIONS } from "@/lib/task-done";
+import { ARCHIVE_OPTIONS, archivedTasks, recentDone } from "@/lib/task-done";
+import { syncNow } from "@/lib/sync/clock";
+import { useShareScope } from "@/lib/use-share-scope";
+import type { View } from "@/lib/planner-types";
 
-function ArchiveSection() {
+function ArchiveSection({ onView }: { onView?: (view: View) => void }) {
   const archiveDays = usePlanner((s) => s.archiveDays);
   const setArchiveDays = usePlanner((s) => s.setArchiveDays);
+  const { done, archived } = useDoneCounts();
+  const [help, setHelp] = useState(false);
   return (
-    <section aria-label="Готово и архив">
-      <p className="text-sm text-muted">
-        Выполненные задачи сначала видны внизу списка в группе «Готово», а потом уходят в «Архив», чтобы не мешать. Из архива задачу можно вернуть
-        или удалить. Настройка общая для всех ваших устройств.
-      </p>
-      <p className="mt-3 text-xs font-medium text-subtle">Убирать в архив</p>
-      <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Убирать в архив">
+    <section aria-label="Готово и архив" className="text-sm">
+      <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+        <button type="button" disabled={!onView} onClick={() => onView?.("done")} className="flex min-h-11 w-full items-center gap-3 px-3 text-left">
+          <CheckCheck className="size-[1.125rem] shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+          <span className="min-w-0 flex-1 text-[0.9375rem]">Выполненные</span>
+          <span className="text-muted tabular-nums">{done}</span>
+          <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
+        </button>
+        <button type="button" disabled={!onView} onClick={() => onView?.("archive")} className="flex min-h-11 w-full items-center gap-3 px-3 text-left">
+          <Archive className="size-[1.125rem] shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+          <span className="min-w-0 flex-1 text-[0.9375rem]">Архив</span>
+          <span className="text-muted tabular-nums">{archived}</span>
+          <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="mt-4 mb-1 flex items-center gap-1 px-1">
+        <p className="min-w-0 flex-1 text-[0.6875rem] font-semibold tracking-wide text-subtle uppercase">Убирать в архив</p>
+        <button
+          type="button"
+          aria-expanded={help}
+          aria-label="Подсказка"
+          onClick={() => setHelp((value) => !value)}
+          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-muted"
+        >
+          ?
+        </button>
+      </div>
+      {help ? (
+        <p className="mb-2 rounded-lg bg-elevated px-3 py-2 text-xs text-muted">
+          Выполненные задачи сначала видны внизу списка в группе «Готово», а через выбранный срок уходят в «Архив». Из архива задачу можно вернуть
+          или удалить. Срок общий для всех ваших устройств.
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Убирать в архив">
         {ARCHIVE_OPTIONS.map((days) => {
           const on = archiveDays === days;
           return (
@@ -51,7 +101,7 @@ function ArchiveSection() {
               role="radio"
               aria-checked={on}
               onClick={() => setArchiveDays(days)}
-              className={cn("h-11 rounded-xl px-3 text-sm", on ? "bg-accent text-accent-fg" : "card-lift bg-elevated text-fg")}
+              className={cn("h-10 rounded-xl px-3 text-sm", on ? "bg-accent text-accent-fg" : "card-lift bg-elevated text-fg")}
             >
               {days === 0 ? "Никогда" : `${days} ${days === 1 ? "день" : days < 5 ? "дня" : "дней"}`}
             </button>
@@ -60,6 +110,14 @@ function ArchiveSection() {
       </div>
     </section>
   );
+}
+
+/** «Выполненные» (still in lists) and «Архив» counts, as in the menu of 1.6. */
+function useDoneCounts(): { done: number; archived: number } {
+  const tasks = usePlanner((s) => s.tasks);
+  const archiveDays = usePlanner((s) => s.archiveDays);
+  const now = syncNow();
+  return { done: recentDone(tasks, now, archiveDays).length, archived: archivedTasks(tasks, now, archiveDays).length };
 }
 
 function formatSyncTime(stamp: number | null): string {
@@ -332,11 +390,11 @@ type SheetId = "profile" | "look" | "tabs" | "notify" | "datetime" | "connection
 const SHEET_TITLES: Record<SheetId, string> = {
   profile: "Профиль",
   look: "Вид",
-  tabs: "Панель вкладок",
+  tabs: "Навигация",
   notify: "Уведомления",
   datetime: "Дата и время",
   connection: "Подключение",
-  archive: "Готово и архив",
+  archive: "Архив",
   backup: "Резервная копия",
   assistant: "Помощник",
   about: "О приложении",
@@ -364,7 +422,7 @@ function NavRow({
         <Icon className="size-4" strokeWidth={2} />
       </span>
       <span className="min-w-0 flex-1 truncate text-[0.9375rem] text-fg">{label}</span>
-      {value ? <span className="max-w-[45%] shrink-0 truncate text-sm text-muted">{value}</span> : null}
+      {value ? <span className="max-w-[62%] shrink-0 truncate text-sm text-muted">{value}</span> : null}
       <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
     </button>
   );
@@ -418,13 +476,28 @@ function LookSection() {
   );
 }
 
-/** «Панель вкладок»: which sections sit in the bottom bar on a phone, and in what order (drag ≡). */
-function TabsSection() {
+/**
+ * «Навигация»: every section has one place — the bottom bar on a phone (2–5,
+ * ordered by dragging ≡), the side menu, or hidden. Items in the bar never
+ * repeat in the menu.
+ */
+function NavigationSection() {
   const tabs = usePlanner((s) => s.tabBar) ?? DEFAULT_TABS;
+  const hidden = usePlanner((s) => s.drawerHidden) ?? [];
+  const setNav = usePlanner((s) => s.setNav);
   const setTabs = usePlanner((s) => s.setTabBar);
-  const off = TAB_OPTIONS.filter((tab) => !tabs.includes(tab.id));
+  const profile = useProfile();
+  const share = useShareScope();
+  const [help, setHelp] = useState(false);
   const [drag, setDrag] = useState<{ id: TabId; order: TabId[] } | null>(null);
+  const prefs: NavPrefs = { tabBar: tabs, drawerHidden: hidden };
   const shown = drag?.order ?? tabs;
+  // Sections this profile does not have are not offered.
+  const available = NAV_ITEMS.filter((item) => (item.id !== "assist" || profile.assistant) && (item.id !== "shared" || share));
+  const addable = available.filter((item) => item.tab && placementOf(item.id, prefs) !== "bottom");
+  const menu = available.filter((item) => placementOf(item.id, prefs) !== "bottom");
+  const full = tabs.length >= MAX_TABS;
+  const move = (id: NavId, to: Placement) => setNav(setPlacement(prefs, id, to));
 
   function beginDrag(event: ReactPointerEvent<HTMLElement>, id: TabId) {
     if (event.button !== 0) return;
@@ -433,7 +506,7 @@ function TabsSection() {
     handle.setPointerCapture(event.pointerId);
     let order = tabs;
     setDrag({ id, order });
-    const move = (ev: PointerEvent) => {
+    const onMove = (ev: PointerEvent) => {
       const rows = [...document.querySelectorAll<HTMLElement>("[data-tab-row]")];
       const index = rows.findIndex((row) => {
         const rect = row.getBoundingClientRect();
@@ -443,47 +516,70 @@ function TabsSection() {
       setDrag({ id, order });
     };
     const finish = () => {
-      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointermove", onMove);
       handle.removeEventListener("pointerup", finish);
       handle.removeEventListener("pointercancel", finish);
       setDrag(null);
       if (order.join() !== tabs.join()) setTabs(order);
     };
-    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", finish);
     handle.addEventListener("pointercancel", finish);
   }
 
+  const label = (id: string) => NAV_ITEMS.find((item) => item.id === id)?.label ?? TAB_OPTIONS.find((tab) => tab.id === id)?.label ?? id;
+  const heading = "mt-4 mb-1 px-1 text-[0.6875rem] font-semibold tracking-wide text-subtle uppercase";
+
   return (
-    <div>
-      <p className="px-1 text-xs text-muted">
-        {MIN_TABS}–{MAX_TABS} вкладок внизу экрана. Порядок — потяните за точки справа. Остальное — в меню ☰.
+    <div className="text-sm">
+      <div className="flex items-center gap-1 px-1">
+        <p className="min-w-0 flex-1 text-xs text-muted">Что видно внизу и в боковом меню</p>
+        <button
+          type="button"
+          aria-expanded={help}
+          aria-label="Подсказка"
+          onClick={() => setHelp((value) => !value)}
+          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-muted"
+        >
+          ?
+        </button>
+      </div>
+      {help ? (
+        <p className="mt-1 rounded-lg bg-elevated px-3 py-2 text-xs text-muted">
+          Внизу — от {MIN_TABS} до {MAX_TABS} вкладок, порядок меняется перетаскиванием за ≡. Пункт стоит в одном месте: что внизу, того нет в меню.
+          Выключенное в меню можно открыть, вернув переключатель. На компьютере нижней панели нет — там видно всё, кроме скрытого.
+        </p>
+      ) : null}
+
+      <p className={heading}>
+        Нижняя панель · {tabs.length} из {MAX_TABS}
       </p>
-      <p className="mt-3 mb-1 px-1 text-xs font-medium text-subtle uppercase">На панели · {tabs.length} из {MAX_TABS}</p>
       <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
         {shown.map((id, index) => {
           const Icon = TAB_ICONS[id];
-          const label = TAB_OPTIONS.find((tab) => tab.id === id)?.label ?? id;
+          const name = label(id);
+          // «Настройки» from 1.6 can only leave the bar (the gear is in the menu header now).
+          const toMenu = isNavId(id) ? () => move(id, "menu") : () => setTabs(toggleTab(tabs, id));
           return (
             <li key={id} data-tab-row="" className={cn("flex min-h-11 items-center gap-2 pr-1", drag?.id === id && "bg-surface shadow-md")}>
               <button
                 type="button"
-                aria-label={`Убрать «${label}» с панели`}
+                aria-label={`Убрать «${name}» с панели в меню`}
                 disabled={tabs.length <= MIN_TABS}
-                onClick={() => setTabs(toggleTab(tabs, id))}
+                onClick={toMenu}
                 className="flex size-11 shrink-0 items-center justify-center text-danger disabled:opacity-30"
               >
                 <MinusCircle className="size-5" />
               </button>
               <Icon className="size-5 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{label}</span>
+              <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{name}</span>
               {/* Keyboard / screen-reader fallback for the drag handle. */}
-              <button type="button" aria-label={`${label}: левее`} disabled={index === 0} onClick={() => setTabs(moveTab(tabs, id, -1))} className="sr-only focus:not-sr-only">
+              <button type="button" aria-label={`${name}: левее`} disabled={index === 0} onClick={() => setTabs(moveTab(tabs, id, -1))} className="sr-only focus:not-sr-only">
                 <ArrowUp className="size-4" />
               </button>
               <button
                 type="button"
-                aria-label={`${label}: правее`}
+                aria-label={`${name}: правее`}
                 disabled={index === shown.length - 1}
                 onClick={() => setTabs(moveTab(tabs, id, 1))}
                 className="sr-only focus:not-sr-only"
@@ -502,33 +598,59 @@ function TabsSection() {
           );
         })}
       </ul>
-      <p className="mt-4 mb-1 px-1 text-xs font-medium text-subtle uppercase">Можно добавить</p>
+
+      {addable.length > 0 ? (
+        <>
+          <p className={heading}>Можно добавить в панель</p>
+          <ul className="grid grid-cols-3 gap-1.5">
+            {addable.map((item) => (
+              <li key={item.id} className="min-w-0">
+                <button
+                  type="button"
+                  aria-label={`Добавить «${item.label}» на панель`}
+                  disabled={full}
+                  onClick={() => move(item.id, "bottom")}
+                  className="card-lift flex h-10 w-full min-w-0 items-center gap-1.5 rounded-xl bg-elevated px-2.5 text-left text-[0.875rem] disabled:opacity-40"
+                >
+                  <Plus className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                  <span className="min-w-0 truncate">{item.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {full ? <p className="mt-1 px-1 text-xs text-muted">Панель заполнена — уберите вкладку, чтобы добавить другую.</p> : null}
+        </>
+      ) : null}
+
+      <p className={heading}>Боковое меню</p>
       <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
-        {off.map((tab) => {
-          const Icon = TAB_ICONS[tab.id];
+        {menu.map((item) => {
+          const Icon = NAV_ICONS[item.id];
+          const on = placementOf(item.id, prefs) === "menu";
           return (
-            <li key={tab.id}>
-              <button
-                type="button"
-                aria-label={`Добавить «${tab.label}» на панель`}
-                disabled={tabs.length >= MAX_TABS}
-                onClick={() => setTabs(toggleTab(tabs, tab.id))}
-                className="flex min-h-11 w-full items-center gap-2 pl-3 text-left disabled:opacity-40"
-              >
-                <Icon className="size-5 shrink-0 text-subtle" strokeWidth={1.75} aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{tab.label}</span>
-                <span className="flex size-11 items-center justify-center text-ok">
-                  <PlusCircle className="size-5" />
-                </span>
-              </button>
+            <li key={item.id}>
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3">
+                <Icon className="size-[1.125rem] shrink-0 text-subtle" strokeWidth={1.75} aria-hidden="true" />
+                <span className={cn("min-w-0 flex-1 truncate text-[0.9375rem]", on ? "text-fg" : "text-muted")}>{item.label}</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={on}
+                  aria-label={`«${item.label}» в меню`}
+                  onChange={(event) => move(item.id, event.target.checked ? "menu" : "hidden")}
+                  className="ios-switch shrink-0"
+                />
+              </label>
             </li>
           );
         })}
       </ul>
-      {tabs.length >= MAX_TABS ? <p className="mt-2 px-1 text-xs text-muted">Панель заполнена — сначала уберите одну вкладку.</p> : null}
-      <button type="button" onClick={() => setTabs([...DEFAULT_TABS])} className="mt-3 h-11 px-1 text-sm text-accent">
-        Вернуть как было
-      </button>
+      <div className="mt-2 flex items-center justify-between gap-2 px-1">
+        <p className="text-xs text-muted">Пункты из нижней панели в меню не повторяются.</p>
+        <button type="button" onClick={() => setNav({ tabBar: [...DEFAULT_TABS], drawerHidden: [] })} className="h-9 shrink-0 text-sm text-accent">
+          Сбросить
+        </button>
+      </div>
     </div>
   );
 }
@@ -627,12 +749,12 @@ function AboutSection() {
   );
 }
 
-export function SettingsView() {
+export function SettingsView({ onView }: { onView?: (view: View) => void }) {
   const profile = useProfile();
   const theme = usePlanner((s) => s.theme);
   const accent = usePlanner((s) => s.accent);
   const tabs = usePlanner((s) => s.tabBar) ?? DEFAULT_TABS;
-  const archiveDays = usePlanner((s) => s.archiveDays);
+  const doneCounts = useDoneCounts();
   const status = useServerSyncStatus();
   const [open, setOpen] = useState<SheetId | null>(null);
   const accentName = ACCENTS.find((item) => item.id === accent)?.name ?? "";
@@ -658,7 +780,7 @@ export function SettingsView() {
 
       <Group>
         <NavRow id="look" icon={Palette} color="#8b5cf6" label="Вид" value={`${theme === "dark" ? "Тёмная" : "Светлая"} · ${accentName}`} onOpen={setOpen} />
-        <NavRow id="tabs" icon={PanelBottom} color="#3b82f6" label="Панель вкладок" value={`${tabs.length} ${tabs.length < 5 ? "вкладки" : "вкладок"}`} onOpen={setOpen} />
+        <NavRow id="tabs" icon={PanelBottom} color="#3b82f6" label="Навигация" value={`${tabs.length} ${tabs.length < 5 ? "вкладки" : "вкладок"}`} onOpen={setOpen} />
         <NavRow id="notify" icon={Bell} color="#ef4444" label="Уведомления" onOpen={setOpen} />
         <NavRow id="datetime" icon={CalendarClock} color="#f59e0b" label="Дата и время" onOpen={setOpen} />
       </Group>
@@ -670,7 +792,7 @@ export function SettingsView() {
           icon={Archive}
           color="#a16207"
           label="Архив"
-          value={archiveDays === 0 ? "Никогда" : `через ${archiveDays} ${archiveDays === 1 ? "день" : archiveDays < 5 ? "дня" : "дней"}`}
+          value={`Выполненные ${doneCounts.done} · Архив ${doneCounts.archived}`}
           onOpen={setOpen}
         />
         <NavRow id="backup" icon={HardDriveDownload} color="#14b8a6" label="Резервная копия" onOpen={setOpen} />
@@ -685,11 +807,11 @@ export function SettingsView() {
         <div className="pb-2">
           {open === "profile" ? <ProfileSection /> : null}
           {open === "look" ? <LookSection /> : null}
-          {open === "tabs" ? <TabsSection /> : null}
+          {open === "tabs" ? <NavigationSection /> : null}
           {open === "notify" ? <NotifySection /> : null}
           {open === "datetime" ? <DateTimeSection /> : null}
           {open === "connection" ? <ConnectionSection /> : null}
-          {open === "archive" ? <ArchiveSection /> : null}
+          {open === "archive" ? <ArchiveSection onView={onView} /> : null}
           {open === "backup" ? <BackupSection /> : null}
           {open === "assistant" ? <AssistantSection /> : null}
           {open === "about" ? <AboutSection /> : null}

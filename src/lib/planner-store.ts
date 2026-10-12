@@ -8,7 +8,21 @@ import { parseQuick } from "@/lib/quick-add";
 import { stageRange } from "@/lib/stage-range";
 import { clearDate, clearTime, duplicateTask as duplicateTaskData, listInNotes, splitLines } from "@/lib/task-tools";
 import { isAccent, type AccentId } from "@/lib/accents";
-import { DEFAULT_TABS, normalizeCalendarMode, normalizeTabs, type CalendarMode, type TabId } from "@/lib/ui-prefs";
+import {
+  DEFAULT_TABS,
+  normalizeCalendarMode,
+  normalizeDrawerTab,
+  normalizeHidden,
+  migrateNav,
+  normalizeTabs,
+  togglePin,
+  type CalendarMode,
+  type DrawerTab,
+  type NavId,
+  type NavPrefs,
+  type PinKey,
+  type TabId,
+} from "@/lib/ui-prefs";
 import { sectionOf, sortHabits, tapDay, withEntry } from "@/lib/habit-plan";
 import { normalizeArchiveDays, restoreFromArchive, toggleTaskDone, undoRepeatTick } from "@/lib/task-done";
 import type {
@@ -88,13 +102,23 @@ type PlannerState = {
   scheduleDays: number;
   /** «Готово» group at the bottom of lists is folded (this device only). */
   doneFolded: boolean;
-  /** «Панель вкладок»: the tabs of the bottom bar on a phone (this device only). */
+  /** «Навигация»: the tabs of the bottom bar on a phone, in order (this device only). */
   tabBar: TabId[];
+  /** «Навигация»: items switched off («Скрыть»); the rest of the non-bar items are in the menu (this device only). */
+  drawerHidden: NavId[];
+  /** Side menu: the last open group «Списки / Проекты / Теги» (this device only). */
+  drawerTab: DrawerTab;
+  /** Side menu: «Закреплённые» lists and projects, in pin order (this device only). */
+  pins: PinKey[];
   /** «Календарь»: Список / Месяц / Неделя / 3 дня / День (this device only). */
   calendarMode: CalendarMode;
   /** «Номера недель» in the month grid (this device only). */
   weekNumbers: boolean;
   setTabBar: (tabs: TabId[]) => void;
+  /** Bar and menu together, so one move never leaves an item in two places. */
+  setNav: (prefs: NavPrefs) => void;
+  setDrawerTab: (tab: DrawerTab) => void;
+  togglePin: (key: PinKey) => void;
   setCalendarMode: (mode: CalendarMode) => void;
   setWeekNumbers: (on: boolean) => void;
   setArchiveDays: (days: number) => void;
@@ -218,6 +242,9 @@ function seed(): Pick<
   | "scheduleDays"
   | "doneFolded"
   | "tabBar"
+  | "drawerHidden"
+  | "drawerTab"
+  | "pins"
   | "calendarMode"
   | "weekNumbers"
 > {
@@ -252,6 +279,9 @@ function seed(): Pick<
     scheduleDays: 1,
     doneFolded: false,
     tabBar: [...DEFAULT_TABS],
+    drawerHidden: [],
+    drawerTab: "lists",
+    pins: [],
     calendarMode: "month",
     weekNumbers: false,
     lists: [
@@ -1022,7 +1052,17 @@ renameList: (id, name) =>
       ackReminder: (key, stamp) =>
         set((s) => ({ remindAck: { ...(s.remindAck ?? {}), [key]: stamp } })),
       setTheme: (theme) => set({ theme }),
-      setTabBar: (tabs) => set({ tabBar: normalizeTabs(tabs) }),
+      setTabBar: (tabs) =>
+        set((s) => {
+          const tabBar = normalizeTabs(tabs);
+          return { tabBar, drawerHidden: normalizeHidden(s.drawerHidden, tabBar) };
+        }),
+      setNav: (prefs) => {
+        const tabBar = normalizeTabs(prefs.tabBar);
+        set({ tabBar, drawerHidden: normalizeHidden(prefs.drawerHidden, tabBar) });
+      },
+      setDrawerTab: (tab) => set({ drawerTab: normalizeDrawerTab(tab) }),
+      togglePin: (key) => set((s) => ({ pins: togglePin(s.pins ?? [], key) })),
       setCalendarMode: (mode) => set({ calendarMode: normalizeCalendarMode(mode) }),
       setWeekNumbers: (on) => set({ weekNumbers: on }),
       setAccent: (accent) => set({ accent }),
@@ -1130,7 +1170,7 @@ renameList: (id, name) =>
           archiveDays: normalizeArchiveDays(saved.archiveDays),
           scheduleDays: [1, 2, 3, 5, 7].includes(saved.scheduleDays as number) ? (saved.scheduleDays as number) : 1,
           doneFolded: saved.doneFolded === true,
-          tabBar: normalizeTabs(saved.tabBar),
+          ...migrateNav(saved),
           calendarMode: normalizeCalendarMode(saved.calendarMode),
           weekNumbers: saved.weekNumbers === true,
           theme: saved.theme === "dark" ? "dark" : "light",
@@ -1143,4 +1183,5 @@ renameList: (id, name) =>
     },
   ),
 );
+
 

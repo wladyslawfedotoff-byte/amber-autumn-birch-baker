@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CalendarRange, ChevronLeft, ChevronRight, MoreHorizontal, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineHint } from "@/components/ui/hint";
@@ -18,9 +18,19 @@ function spanLabel(project: Project): string {
   return "Без дат";
 }
 
-export function ProjectsView({ initialId = null }: { initialId?: string | null }) {
+export function ProjectsView({
+  initialId = null,
+  onOpenChange,
+}: {
+  initialId?: string | null;
+  /** The project on screen (null — the list); «Помощник» uses it for «Разбей проект на шаги». */
+  onOpenChange?: (id: string | null) => void;
+}) {
   const projects = usePlanner((s) => s.projects) ?? [];
   const [openId, setOpenId] = useState<string | null>(initialId);
+  useEffect(() => {
+    onOpenChange?.(openId);
+  }, [openId, onOpenChange]);
   const [creating, setCreating] = useState(false);
   const project = projects.find((item) => item.id === openId) ?? null;
 
