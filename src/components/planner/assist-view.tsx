@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, Check, Zap, Clock, Cloud, Cpu, Menu, Mic, MicOff, Plus, RotateCw, ShieldCheck, Sparkles, Square, Trash2, X } from "lucide-react";
-import { Sheet } from "@/components/ui/sheet";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { ArrowLeft, ArrowUp, Check, Zap, Clock, Cloud, Cpu, History, Mic, MicOff, RotateCw, Search, ShieldCheck, Sparkles, Square, SquarePen, Trash2, X } from "lucide-react";
 import { AssistMarkdown } from "@/components/planner/assist-markdown";
 import { AnswerViewCard, ChipRow, DiffRows, PlanTimeline } from "@/components/planner/assist-cards";
 import { diffLines, withoutPlanLines } from "@/lib/assistant/view";
 import { cn } from "@/lib/cn";
-import { dueLabel, formatShortDay, todayIso } from "@/lib/dates";
+import { dueLabel, formatShortDay, shiftIso, todayIso } from "@/lib/dates";
+import { countInbox, countToday } from "@/lib/queries";
+import { isLongText, suggestChips } from "@/lib/assistant/suggest";
+import { groupHistory } from "@/lib/assistant/history";
 import { usePlanner } from "@/lib/planner-store";
 import { applyItems, itemTitle, withTitle } from "@/lib/assistant/apply";
 import { assistantApi, streamChat } from "@/lib/assistant/client";
 import type { AiWhich, AnswerSource, AssistantStatus, ChatEvent, ChatMessage, Chip, ConversationSummary, Proposal, ProposalItem } from "@/lib/assistant/types";
 
-const SUGGESTIONS = ["Спланируй мой день", "Разбей задачу на шаги", "Добавь дела из текста", "Что у меня просрочено?"];
 const PRIORITY = ["", "низкий", "средний", "высокий"];
 
 function nowHm(): string {
@@ -245,6 +247,14 @@ function hm(ms: number): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+/** «Сегодня» / «Вчера» / «12 окт» for a group of conversations. */
+function dayTitle(day: string): string {
+  const today = todayIso();
+  if (day === today) return "Сегодня";
+  if (day === shiftIso(today, -1)) return "Вчера";
+  return formatShortDay(day, true);
+}
+
 function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { message: ChatMessage; canQueue: boolean; onRetry: () => void; onPostpone: () => void; onCancel: () => void }) {
   if (message.queued) {
     return (
@@ -275,7 +285,20 @@ function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { m
 
 /* ---- view --------------------------------------------------------------- */
 
-export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string) => void; /** From the bell: «<conversation id>#<stamp>». */ openConversationId?: string | null }) {
+export function AssistView({
+  onOpen,
+  openConversationId,
+  headerSlot,
+  projectId,
+}: {
+  onOpen: (id: string) => void;
+  /** From the bell: «<conversation id>#<stamp>». */
+  openConversationId?: string | null;
+  /** Place in the app header for «История» and «Новая беседа» (one header, no second row). */
+  headerSlot?: HTMLElement | null;
+  /** Opened from this project: offers «Разбей проект на шаги». */
+  projectId?: string | null;
+}) {
   const [status, setStatus] = useState<AssistantStatus | null>(null);
   const [statusError, setStatusError] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -286,8 +309,8 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<ConversationSummary[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [historyQuery, setHistoryQuery] = useState("");
   const [listening, setListening] = useState(false);
-  const [lastProvider, setLastProvider] = useState<{ which: AnswerSource; source?: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const recognition = useRef<Recognition | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -343,11 +366,25 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
       .catch(() => setHistory([]));
   }, []);
 
+  // Esc closes «История» (the panel covers the whole screen).
+  useEffect(() => {
+    if (!historyOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHistoryOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [historyOpen]);
+
+  // Only to know whether «История» has anything (the icon is hidden otherwise).
+  useEffect(() => {
+    if (status) loadHistory();
+  }, [status, loadHistory]);
+
   function newConversation() {
     abort.current?.abort();
     setConversationId(null);
     setMessages([]);
-    setLastProvider(null);
     setBusy(false);
     setHistoryOpen(false);
   }
@@ -360,8 +397,6 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
       setConversationId(conv.id);
       setMessages(conv.messages);
       void assistantApi.readNotices({ conversationId: conv.id }).catch(() => undefined);
-      const last = [...conv.messages].reverse().find((m) => m.provider);
-      setLastProvider(last?.provider ? { which: last.provider, source: last.source } : null);
     } catch {
       // keep the current one
     }
@@ -385,7 +420,6 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
         switch (event.type) {
           case "start":
             setConversationId(event.conversationId);
-            setLastProvider({ which: event.provider, source: event.source });
             patchAnswer((m) => ({ ...m, provider: event.provider, source: event.source, text: "", proposals: undefined }));
             break;
           case "delta":
@@ -409,8 +443,6 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
               setMessages((list) => list.map((m) => (m.id === localUser.id ? { ...m, id: stored } : m)));
             }
             patchAnswer((m) => ({ ...m, id: event.messageId ?? m.id, text: event.message, error: true, ...(event.retryable ? { retryable: true } : {}) }));
-            // The badge names who answered; a failed attempt did not.
-            setLastProvider(null);
             break;
         }
       },
@@ -418,6 +450,8 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
     );
     setBusy(false);
     if (abort.current === controller) abort.current = null;
+    // A new conversation now exists on the server: «История» gets its icon.
+    loadHistory();
   }
 
   async function acceptConsent() {
@@ -519,53 +553,74 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
     rec.start();
   }
 
+  const tasks = usePlanner((st) => st.tasks);
+  const project = usePlanner((st) => (projectId ? st.projects?.find((item) => item.id === projectId) : undefined));
+  const isLongDraft = isLongText(draft);
+  // Rebuilt when the data or the draft changes; the hour is read on render (good enough for «вечер»).
+  const suggestions = useMemo(() => {
+    const today = todayIso();
+    return suggestChips({
+      overdue: tasks.filter((t) => !t.done && t.due != null && t.due < today).length,
+      today: countToday(tasks, today),
+      inbox: countInbox(tasks),
+      hour: new Date().getHours(),
+      draft,
+      project: project ? project.title || "Без названия" : null,
+    });
+  }, [tasks, draft, project]);
+  const historyGroups = useMemo(() => groupHistory(history ?? [], historyQuery), [history, historyQuery]);
+
   if (statusError) return <p className="py-10 text-center text-sm text-muted">Помощник сейчас недоступен. Проверьте связь с сервером.</p>;
   if (!status) return <p className="py-10 text-center text-sm text-muted">Загружаем…</p>;
   if (consent) return <ConsentScreen status={status} provider={consent.provider} onAccept={acceptConsent} onCancel={() => setConsent(null)} />;
 
   const empty = messages.length === 0;
+  const hasHistory = (history?.length ?? 0) > 0;
+  const chips = empty || isLongDraft ? suggestions : [];
 
-  return (
-    <div className="mx-auto flex min-h-full max-w-2xl flex-col">
-      <div className="sticky top-0 z-10 -mx-4 flex h-11 items-center gap-1 bg-surface px-2 md:mx-0 md:px-0">
+  const headerButtons = (
+    <>
+      {hasHistory ? (
         <button
           type="button"
-          aria-label="Беседы"
+          aria-label="История бесед"
+          title="История"
           onClick={() => {
             setHistoryOpen(true);
+            setHistoryQuery("");
             setConfirmDelete(null);
             loadHistory();
           }}
-          className="flex size-10 items-center justify-center rounded-full text-muted"
+          className="flex size-11 items-center justify-center rounded-full text-fg"
         >
-          <Menu className="size-5" />
+          <History className="size-5" strokeWidth={1.75} />
         </button>
-        <span className="min-w-0 flex-1 truncate text-center text-sm text-muted">{empty ? "Новая беседа" : (messages.find((m) => m.role === "user")?.text ?? "")}</span>
-        {lastProvider ? <ProviderBadge which={lastProvider.which} source={lastProvider.source} /> : null}
-        <button type="button" aria-label="Новая беседа" onClick={newConversation} className="flex size-10 items-center justify-center rounded-full text-muted">
-          <Plus className="size-5" />
+      ) : null}
+      {!empty ? (
+        <button type="button" aria-label="Новая беседа" title="Новая беседа" onClick={newConversation} className="flex size-11 items-center justify-center rounded-full text-fg">
+          <SquarePen className="size-5" strokeWidth={1.75} />
         </button>
-      </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <div className="mx-auto flex min-h-full max-w-2xl flex-col">
+      {/* Embedded without the app header (no slot given): the buttons get their own row. */}
+      {headerSlot === undefined ? <div className="flex h-11 items-center justify-end">{headerButtons}</div> : headerSlot ? createPortal(headerButtons, headerSlot) : null}
 
       <div className="flex-1 pb-3">
         {empty ? (
-          <div className="flex flex-col items-center px-2 pt-10 text-center">
-            <span className="flex size-12 items-center justify-center rounded-2xl bg-accent/12 text-accent">
-              <Sparkles className="size-6" aria-hidden="true" />
+          <div className="flex flex-col items-center px-2 pt-8 text-center">
+            <span className="flex size-10 items-center justify-center rounded-2xl bg-accent/12 text-accent">
+              <Sparkles className="size-5" aria-hidden="true" />
             </span>
-            <p className="mt-3 text-[0.9375rem] font-semibold">Чем помочь?</p>
-            <p className="mt-1 max-w-xs text-[0.8125rem] text-muted">Спросите про свои дела или вставьте текст — предложу задачи. Без вашего «Применить» ничего не изменится.</p>
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map((s) => (
-                <button key={s} type="button" onClick={() => void send(s)} className="h-9 rounded-full bg-elevated px-3 text-[0.8125rem]">
-                  {s}
-                </button>
-              ))}
-            </div>
+            <p className="mt-2 max-w-xs text-[0.875rem] text-muted" title="Без вашего «Применить» ничего не изменится">
+              Спросите про дела или вставьте текст — предложу задачи.
+            </p>
           </div>
         ) : (
-          <ul className="space-y-3 pt-2" aria-live="polite">
-            {messages.map((m) =>
+          <ul className="space-y-3 pt-2" aria-live="polite">            {messages.map((m) =>
               m.role === "user" ? (
                 <li key={m.id} className="flex justify-end">
                   <p className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-3 py-2 text-[0.9375rem] whitespace-pre-wrap text-accent-fg">{m.text}</p>
@@ -607,12 +662,30 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
       </div>
 
       <form
-        className="sticky bottom-0 -mx-4 border-t border-line/60 bg-surface px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:mx-0 md:px-0"
+        // Phone: the tab bar under the form already keeps clear of the home indicator.
+        className="sticky bottom-0 -mx-4 bg-surface px-3 pt-1.5 pb-2 md:mx-0 md:px-0 md:pb-[max(0.5rem,var(--safe-b))]"
         onSubmit={(event) => {
           event.preventDefault();
           void send(draft);
         }}
       >
+        {chips.length > 0 && !busy ? (
+          <div className="mb-1.5 flex flex-wrap gap-1.5" aria-label="Подсказки">
+            {chips.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={() => void send(chip.ask)}
+                className={cn(
+                  "h-8 max-w-full truncate rounded-full px-3 text-[0.8125rem]",
+                  chip.id === "from-text" || chip.id === "overdue" ? "bg-accent/12 text-accent" : "card-lift bg-elevated text-fg",
+                )}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="flex items-end gap-1.5 rounded-3xl bg-elevated py-1 pr-1 pl-3">
           <textarea
             ref={field}
@@ -652,43 +725,79 @@ export function AssistView({ onOpen, openConversationId }: { onOpen: (id: string
         </div>
       </form>
 
-      <Sheet open={historyOpen} title="Беседы" onClose={() => setHistoryOpen(false)} action={{ label: "Новая", onClick: newConversation }}>
-        {history === null ? (
-          <p className="py-6 text-center text-sm text-muted">Загружаем…</p>
-        ) : history.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">Бесед пока нет.</p>
-        ) : (
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-elevated">
-            {history.map((c) => (
-              <li key={c.id} className="flex items-center">
-                <button type="button" onClick={() => void openConversation(c.id)} className={cn("min-w-0 flex-1 px-3 py-2.5 text-left", c.id === conversationId && "text-accent")}>
-                  <span className="block truncate text-[0.9375rem]">{c.title}</span>
-                  <span className="block text-xs text-muted">{formatShortDay(new Date(c.updatedAt).toISOString().slice(0, 10))}</span>
+      {historyOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="app-frame vv-frame panel-right z-[65] flex flex-col bg-surface" role="dialog" aria-modal="true" aria-label="История бесед">
+              <div className="flex shrink-0 items-center gap-1 px-2 py-1.5">
+                <button type="button" aria-label="Назад" onClick={() => setHistoryOpen(false)} className="flex size-11 items-center justify-center rounded-full text-fg">
+                  <ArrowLeft className="size-5" />
                 </button>
-                {confirmDelete === c.id ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void assistantApi.remove(c.id).finally(loadHistory);
-                      if (c.id === conversationId) newConversation();
-                      setHistoryOpen(true);
-                      setConfirmDelete(null);
-                    }}
-                    className="mr-2 h-8 rounded-full bg-danger px-3 text-xs font-medium text-on-danger"
-                  >
-                    Удалить
-                  </button>
+                <h2 className="min-w-0 flex-1 truncate text-xl font-semibold tracking-tight">История</h2>
+                <button type="button" aria-label="Новая беседа" title="Новая беседа" onClick={newConversation} className="flex size-11 items-center justify-center rounded-full text-fg">
+                  <SquarePen className="size-5" strokeWidth={1.75} />
+                </button>
+              </div>
+              <div className="shrink-0 px-4 pb-2">
+                <label className="relative block">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle" aria-hidden="true" />
+                  <input
+                    value={historyQuery}
+                    onChange={(event) => setHistoryQuery(event.target.value)}
+                    placeholder="Найти беседу"
+                    aria-label="Найти беседу"
+                    className="h-10 w-full rounded-xl bg-elevated pr-3 pl-9 text-base outline-none placeholder:text-subtle"
+                  />
+                </label>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,var(--safe-b))]">
+                {history === null ? (
+                  <p className="py-6 text-center text-sm text-muted">Загружаем…</p>
+                ) : historyGroups.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted">{history.length === 0 ? "Бесед пока нет." : "Ничего не нашлось."}</p>
                 ) : (
-                  <button type="button" aria-label={`Удалить беседу «${c.title}»`} onClick={() => setConfirmDelete(c.id)} className="flex size-11 shrink-0 items-center justify-center text-subtle">
-                    <Trash2 className="size-4" />
-                  </button>
+                  historyGroups.map((group) => (
+                    <section key={group.day} className="mb-3">
+                      <p className="mb-1 px-1 text-[0.6875rem] font-semibold tracking-wide text-subtle uppercase">{dayTitle(group.day)}</p>
+                      <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+                        {group.items.map((c) => (
+                          <li key={c.id} className="flex items-center">
+                            <button type="button" onClick={() => void openConversation(c.id)} className={cn("min-w-0 flex-1 px-3 py-2.5 text-left", c.id === conversationId && "text-accent")}>
+                              <span className="block truncate text-[0.9375rem]">{c.title}</span>
+                              <span className="block text-xs text-muted tabular-nums">{hm(c.updatedAt)}</span>
+                            </button>
+                            {confirmDelete === c.id ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void assistantApi.remove(c.id).finally(loadHistory);
+                                  if (c.id === conversationId) {
+                                    abort.current?.abort();
+                                    setConversationId(null);
+                                    setMessages([]);
+                                  }
+                                  setConfirmDelete(null);
+                                }}
+                                className="mr-2 h-8 rounded-full bg-danger px-3 text-xs font-medium text-on-danger"
+                              >
+                                Удалить
+                              </button>
+                            ) : (
+                              <button type="button" aria-label={`Удалить беседу «${c.title}»`} onClick={() => setConfirmDelete(c.id)} className="flex size-11 shrink-0 items-center justify-center text-subtle">
+                                <Trash2 className="size-4" />
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))
                 )}
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-2 px-1 text-xs text-subtle">Беседы хранятся на вашем сервере и видны только вам.</p>
-      </Sheet>
+                <p className="mt-1 px-1 text-xs text-subtle">Беседы хранятся на вашем сервере и видны только вам.</p>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

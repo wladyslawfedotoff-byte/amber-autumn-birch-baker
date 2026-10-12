@@ -1,7 +1,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_TABS, MAX_TABS, moveTab, normalizeCalendarMode, normalizeTabs, toggleTab, modeDays, drawerItems, placeTab, canBoard } from "./ui-prefs.ts";
-import { keyboardFrame, revealDelta } from "./viewport.ts";
+import {
+  DEFAULT_TABS,
+  DRAWER_SEARCH_FROM,
+  MAX_TABS,
+  NAV_ITEMS,
+  TAB_OPTIONS,
+  canBeTab,
+  canBoard,
+  canPlace,
+  drawerItems,
+  livePins,
+  matchName,
+  migrateNav,
+  modeDays,
+  moveTab,
+  normalizeCalendarMode,
+  normalizeDrawerTab,
+  normalizeHidden,
+  normalizeTabs,
+  pickDrawerTab,
+  placeTab,
+  placementOf,
+  setPlacement,
+  toggleTab,
+  togglePin,
+  type NavId,
+  type NavPrefs,
+  type TabId,
+} from "./ui-prefs.ts";
+import { frameEndsAboveScreen, keyboardFrame, revealDelta } from "./viewport.ts";
 import { dotsFor, isoWeek, layoutDay, minutesOf, mondayOf, rangeStart, timeRange } from "./calendar-layout.ts";
 
 test("tab bar: saved value is normalised", () => {
@@ -85,19 +113,89 @@ test("schedule board: tap → half-hour slot, opens at «now»", async () => {
 });
 
 test("drawer does not repeat the tab bar (phone only)", () => {
-  const items = ["inbox", "today", "tomorrow", "week", "checklist", "calendar", "schedule", "projects", "focus", "settings"].map((id) => ({ id }));
+  const items = ["inbox", "today", "tomorrow", "week", "checklist", "calendar", "schedule", "projects", "focus", "lists"].map((id) => ({ id }));
   const ids = (list: { id: string }[]) => list.map((item) => item.id);
-  assert.deepEqual(ids(drawerItems(items, ["today", "calendar", "schedule", "habits", "focus"], true)), [
-    "inbox",
+  const prefs = { tabBar: ["today", "calendar", "schedule", "habits", "focus"] as TabId[], drawerHidden: [] as NavId[] };
+  assert.deepEqual(ids(drawerItems(items, prefs, true)), ["inbox", "tomorrow", "week", "checklist", "projects", "lists"]);
+  // Smart lists in the bar leave the menu too: one place per item.
+  assert.deepEqual(ids(drawerItems(items, { tabBar: ["inbox", "checklist", "projects"], drawerHidden: [] }, true)), [
+    "today",
     "tomorrow",
     "week",
-    "checklist",
-    "projects",
-    "settings",
+    "calendar",
+    "schedule",
+    "focus",
+    "lists",
   ]);
-  // Core smart lists stay even when pinned to the bar.
-  assert.deepEqual(ids(drawerItems(items, ["inbox", "checklist", "projects"], true)), ["inbox", "today", "tomorrow", "week", "checklist", "calendar", "schedule", "focus", "settings"]);
-  assert.equal(drawerItems(items, ["today"], false).length, items.length);
+  // Desktop has no bar: bar items stay in the sidebar, only «Скрыть» hides.
+  assert.equal(drawerItems(items, prefs, false).length, items.length);
+  assert.deepEqual(ids(drawerItems(items, { ...prefs, drawerHidden: ["lists", "week"] }, false)).includes("lists"), false);
+});
+
+test("navigation: placement of every item", () => {
+  const prefs: NavPrefs = { tabBar: ["today", "calendar", "schedule", "habits", "assist"], drawerHidden: ["tags"] };
+  assert.equal(placementOf("today", prefs), "bottom");
+  assert.equal(placementOf("tags", prefs), "hidden");
+  assert.equal(placementOf("matrix", prefs), "menu");
+  assert.equal(placementOf("pinned", prefs), "menu", "new items land in the menu");
+});
+
+test("navigation: moves keep 2…5 tabs and one place per item", () => {
+  const full: NavPrefs = { tabBar: ["today", "calendar", "schedule", "habits", "assist"], drawerHidden: ["matrix"] };
+  assert.equal(setPlacement(full, "focus", "bottom"), full, "bar is full");
+  assert.equal(canPlace(full, "focus", "bottom"), false);
+  const freed = setPlacement(full, "assist", "menu");
+  assert.deepEqual(freed, { tabBar: ["today", "calendar", "schedule", "habits"], drawerHidden: ["matrix"] });
+  // Hidden → bottom: leaves the hidden set.
+  const back = setPlacement(freed, "matrix", "bottom");
+  assert.deepEqual(back, { tabBar: ["today", "calendar", "schedule", "habits", "matrix"], drawerHidden: [] });
+  // Bottom → hidden: leaves the bar.
+  assert.deepEqual(setPlacement(back, "habits", "hidden"), { tabBar: ["today", "calendar", "schedule", "matrix"], drawerHidden: ["habits"] });
+  // Groups never go to the bar.
+  assert.equal(setPlacement(freed, "lists", "bottom"), freed);
+  assert.equal(canBeTab("pinned"), false);
+  // Cannot drop below two tabs.
+  const two: NavPrefs = { tabBar: ["today", "calendar"], drawerHidden: [] };
+  assert.equal(setPlacement(two, "today", "hidden"), two);
+  assert.equal(canPlace(two, "today", "bottom"), true, "staying put is always allowed");
+  // Menu ↔ hidden.
+  assert.deepEqual(setPlacement(two, "tags", "hidden").drawerHidden, ["tags"]);
+  assert.deepEqual(setPlacement({ tabBar: two.tabBar, drawerHidden: ["tags"] }, "tags", "menu").drawerHidden, []);
+});
+
+test("navigation: migration from 1.6 keeps the bar exactly", () => {
+  const old = { tabBar: ["today", "calendar", "schedule", "habits", "assist"] };
+  const next = migrateNav(old);
+  assert.deepEqual(next.tabBar, ["today", "calendar", "schedule", "habits", "assist"]);
+  assert.deepEqual(next.drawerHidden, []);
+  assert.equal(next.drawerTab, "lists");
+  assert.deepEqual(next.pins, []);
+  // An old bar with «Настройки» stays valid (it is just not offered any more).
+  assert.deepEqual(migrateNav({ tabBar: ["today", "settings"] }).tabBar, ["today", "settings"]);
+  assert.equal(TAB_OPTIONS.some((tab) => tab.id === "settings"), true);
+  assert.equal(NAV_ITEMS.some((item) => item.id === ("settings" as NavId)), false, "not addable from «Навигация»");
+  // Nothing saved → defaults.
+  assert.deepEqual(migrateNav({}).tabBar, DEFAULT_TABS);
+  // Junk and conflicts are cleaned: a bar item is never also hidden.
+  const messy = migrateNav({ tabBar: ["today", "calendar"], drawerHidden: ["today", "tags", "tags", "nope"], drawerTab: "x", pins: ["list:a", "list:a", "bad", 5] });
+  assert.deepEqual(messy.drawerHidden, ["tags"]);
+  assert.equal(messy.drawerTab, "lists");
+  assert.deepEqual(messy.pins, ["list:a"]);
+  assert.deepEqual(normalizeHidden("nope"), []);
+});
+
+test("side menu: remembered group, pins, search", () => {
+  assert.equal(pickDrawerTab("projects", ["lists", "projects", "tags"]), "projects");
+  assert.equal(pickDrawerTab("projects", ["lists", "tags"]), "lists", "hidden group → first visible");
+  assert.equal(pickDrawerTab("tags", []), null);
+  assert.equal(normalizeDrawerTab("tags"), "tags");
+  assert.deepEqual(togglePin(["list:a"], "project:b"), ["list:a", "project:b"]);
+  assert.deepEqual(togglePin(["list:a", "project:b"], "list:a"), ["project:b"]);
+  assert.deepEqual(livePins(["list:a", "project:gone", "project:b"], [{ id: "a" }], [{ id: "b" }]), ["list:a", "project:b"]);
+  assert.equal(matchName("Лиственная 9", "лист"), true);
+  assert.equal(matchName("Продукты", "  "), true);
+  assert.equal(matchName("Продукты", "дом"), false);
+  assert.equal(DRAWER_SEARCH_FROM, 8);
 });
 
 test("tab bar: drag to a new place", () => {
@@ -111,4 +209,21 @@ test("tab bar: drag to a new place", () => {
 test("board icon only on lists that can be a board", () => {
   for (const view of ["inbox", "tomorrow", "week", "list:abc", "tag:дом"]) assert.equal(canBoard(view), true, view);
   for (const view of ["today", "checklist", "schedule", "day:2026-10-11"]) assert.equal(canBoard(view), false, view);
+});
+
+test("bottom inset: a short Home Screen frame does not add it again", () => {
+  const phone = { innerWidth: 393, screenWidth: 393, screenHeight: 852, keyboard: false };
+  // Page starts under the status bar but is a status bar shorter than the screen → strip below the page.
+  assert.equal(frameEndsAboveScreen({ ...phone, standalone: true, innerHeight: 793, safeTop: 59 }), true);
+  // Full-screen frame: the inset is needed.
+  assert.equal(frameEndsAboveScreen({ ...phone, standalone: true, innerHeight: 852, safeTop: 59 }), false);
+  // Frame below an opaque status bar reaches the home indicator: the inset is needed.
+  assert.equal(frameEndsAboveScreen({ ...phone, standalone: true, innerHeight: 793, safeTop: 0 }), false);
+  // A Safari tab: toolbars are real, never touched.
+  assert.equal(frameEndsAboveScreen({ ...phone, standalone: false, innerHeight: 660, safeTop: 59 }), false);
+  // Keyboard open: not a short frame.
+  assert.equal(frameEndsAboveScreen({ ...phone, standalone: true, innerHeight: 793, safeTop: 59, keyboard: true }), false);
+  // Landscape compares with the short side of the screen.
+  assert.equal(frameEndsAboveScreen({ standalone: true, innerWidth: 852, innerHeight: 393, screenWidth: 393, screenHeight: 852, safeTop: 0, keyboard: false }), false);
+  assert.equal(frameEndsAboveScreen({ standalone: true, innerWidth: 852, innerHeight: 393, screenWidth: 393, screenHeight: 852, safeTop: 20, keyboard: false }), false);
 });
