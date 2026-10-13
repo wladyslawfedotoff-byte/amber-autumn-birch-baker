@@ -5,7 +5,11 @@ import type { AssistantNotice } from "./types";
 
 const POLL_MS = 60_000;
 
-export function useAssistantNotices(enabled: boolean): { notices: AssistantNotice[]; dismiss: (filter: { ids?: string[]; conversationId?: string }) => void } {
+export function useAssistantNotices(enabled: boolean): {
+  notices: AssistantNotice[];
+  dismiss: (filter: { ids?: string[]; conversationId?: string }) => void;
+  refresh: () => void;
+} {
   const [notices, setNotices] = useState<AssistantNotice[]>([]);
   const seen = useRef<Set<string> | null>(null);
 
@@ -40,5 +44,5 @@ export function useAssistantNotices(enabled: boolean): { notices: AssistantNotic
     void assistantApi.readNotices(filter).catch(() => undefined);
   }, []);
 
-  return { notices: enabled ? notices : [], dismiss };
+  return { notices: enabled ? notices : [], dismiss, refresh: load };
 }

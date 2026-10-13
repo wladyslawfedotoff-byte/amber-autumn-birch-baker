@@ -4,6 +4,7 @@ import { Row, RowGroup } from "@/components/ui/rows";
 import { Hint } from "@/components/ui/hint";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { REMIND_LEADS, leadShort, normalizeLead } from "@/lib/reminders";
 import { DateMultiPicker } from "@/components/planner/date-multi-picker";
 import { TaskShareControls } from "@/components/planner/sharing";
 import { ColorPicker } from "@/components/planner/color-picker";
@@ -153,7 +154,12 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
               Без времени (весь день)
             </Button>
           </Row>
-          <Row label="Напомнить" value={task.remindAt ?? "Нет"} open={open === "remind"} onClick={() => toggle("remind")}>
+          <Row
+            label="Напомнить"
+            value={task.remindAt ? `${task.remindAt}${normalizeLead(task.remindLead) ? ` · ${leadShort(normalizeLead(task.remindLead))}` : ""}` : "Нет"}
+            open={open === "remind"}
+            onClick={() => toggle("remind")}
+          >
             <PickerInput
               type="time"
               value={task.remindAt ?? ""}
@@ -165,6 +171,24 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
               }}
               className={field}
             />
+            <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Когда напомнить" data-testid="remind-lead">
+              {REMIND_LEADS.map((lead) => {
+                const on = normalizeLead(task.remindLead) === lead;
+                return (
+                  <button
+                    key={lead}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    disabled={!task.remindAt}
+                    onClick={() => updateTask(task.id, { remindLead: lead })}
+                    className={cn("h-8 rounded-full px-3 text-[0.8125rem] disabled:opacity-40", on ? "bg-accent text-accent-fg" : "bg-surface text-fg")}
+                  >
+                    {leadShort(lead)}
+                  </button>
+                );
+              })}
+            </div>
           </Row>
           <Row label="Повтор" value={task.repeat ? repeatLabel(task.repeat, task.repeatDates) : "Нет"} open={open === "repeat"} onClick={() => toggle("repeat")}>
             <select

@@ -18,6 +18,21 @@ export type ReminderHit = {
   status: "due" | "later";
 };
 
+/** «Напомнить заранее» (minutes before the reminder time): 1440 = the day before. */
+export const REMIND_LEADS = [0, 5, 15, 30, 60, 1440] as const;
+
+export function normalizeLead(value: unknown): number {
+  return typeof value === "number" && (REMIND_LEADS as readonly number[]).includes(value) ? value : 0;
+}
+
+/** «в момент», «за 5 мин», «за час», «за день». */
+export function leadShort(lead: number): string {
+  if (lead === 0) return "в момент";
+  if (lead === 60) return "за час";
+  if (lead === 1440) return "за день";
+  return `за ${lead} мин`;
+}
+
 export function localStamp(day: string, time: string): number {
   const [y, m, d] = day.split("-").map(Number);
   const [h, min] = time.split(":").map(Number);
@@ -48,9 +63,11 @@ export function collectReminders(input: {
 
   for (const task of input.tasks) {
     if (task.done || !validTime(task.remindAt) || !task.due) continue;
-    const at = localStamp(task.due, task.remindAt);
-    if (task.due > shiftIso(today, 1)) continue;
-    const stamp = `${task.due}T${task.remindAt}`;
+    const lead = normalizeLead(task.remindLead);
+    const at = localStamp(task.due, task.remindAt) - lead * 60_000;
+    if (at > tomorrowEnd) continue;
+    // Same moment key as the server's push reminder (date, time and lead).
+    const stamp = lead ? `${task.due}T${task.remindAt}-${lead}` : `${task.due}T${task.remindAt}`;
     const key = `task:${task.id}`;
     const status = at <= input.now ? "due" : "later";
     if (status === "due" && ack[key] === stamp) continue;
@@ -61,7 +78,7 @@ export function collectReminders(input: {
       refId: task.id,
       title: task.title,
       time: task.remindAt,
-      whenLabel: `${dueLabel(task.due, today)} в ${task.remindAt}`,
+      whenLabel: `${dueLabel(task.due, today)} в ${task.remindAt}${lead ? ` · ${leadShort(lead)}` : ""}`,
       at,
       status,
     });

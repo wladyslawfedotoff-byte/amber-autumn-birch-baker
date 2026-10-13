@@ -1,10 +1,12 @@
 import { create, type StateCreator } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { plannerStorage } from "@/lib/offline/device-store";
 import { syncNow } from "@/lib/sync/clock";
 import { COLLECTIONS, emptyTombstones, stampCollection, type Tombstones } from "@/lib/sync/merge";
 import { cleanDates, firstChosenDate, shiftIso, todayIso } from "@/lib/dates";
 import { currentLogin } from "@/lib/use-capabilities";
 import { parseQuick } from "@/lib/quick-add";
+import { normalizeLead } from "@/lib/reminders";
 import { stageRange } from "@/lib/stage-range";
 import { clearDate, clearTime, duplicateTask as duplicateTaskData, listInNotes, splitLines } from "@/lib/task-tools";
 import { isAccent, type AccentId } from "@/lib/accents";
@@ -114,6 +116,8 @@ type PlannerState = {
   calendarMode: CalendarMode;
   /** «Номера недель» in the month grid (this device only). */
   weekNumbers: boolean;
+  /** «Напоминать по умолчанию» for new reminders on this device (minutes before; 0 = at the time). */
+  remindLeadDefault: number;
   setTabBar: (tabs: TabId[]) => void;
   /** Bar and menu together, so one move never leaves an item in two places. */
   setNav: (prefs: NavPrefs) => void;
@@ -121,6 +125,7 @@ type PlannerState = {
   togglePin: (key: PinKey) => void;
   setCalendarMode: (mode: CalendarMode) => void;
   setWeekNumbers: (on: boolean) => void;
+  setRemindLeadDefault: (lead: number) => void;
   setArchiveDays: (days: number) => void;
   setScheduleDays: (days: number) => void;
   setDoneFolded: (folded: boolean) => void;
@@ -247,6 +252,7 @@ function seed(): Pick<
   | "pins"
   | "calendarMode"
   | "weekNumbers"
+  | "remindLeadDefault"
 > {
   const today = todayIso();
   const stamp = Date.now();
@@ -284,6 +290,7 @@ function seed(): Pick<
     pins: [],
     calendarMode: "month",
     weekNumbers: false,
+    remindLeadDefault: 0,
     lists: [
       { id: "work", name: "Работа" },
       { id: "home", name: "Дом" },
@@ -644,13 +651,21 @@ export const usePlanner = create<PlannerState>()(
           startAt: timed ? parsed.startAt : (input.startAt ?? null),
           endAt: timed ? parsed.endAt : (input.endAt ?? null),
         };
+        const lead = get().remindLeadDefault;
+        if (task.remindAt && lead) task.remindLead = lead;
         const final = input.noDate ? clearDate(task) : input.noTime ? clearTime(task) : task;
         set((s) => ({ tasks: [final, ...s.tasks] }));
         return id;
       },
       updateTask: (id, patch) =>
         set((s) => ({
-          tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+          tasks: s.tasks.map((t) => {
+            if (t.id !== id) return t;
+            const next = { ...t, ...patch };
+            // A new reminder gets the default «заранее» of this device.
+            if (patch.remindAt && !t.remindAt && patch.remindLead === undefined && s.remindLeadDefault) next.remindLead = s.remindLeadDefault;
+            return next;
+          }),
         })),
       toggleTask: (id) =>
         set((s) => ({
@@ -1065,6 +1080,7 @@ renameList: (id, name) =>
       togglePin: (key) => set((s) => ({ pins: togglePin(s.pins ?? [], key) })),
       setCalendarMode: (mode) => set({ calendarMode: normalizeCalendarMode(mode) }),
       setWeekNumbers: (on) => set({ weekNumbers: on }),
+      setRemindLeadDefault: (lead) => set({ remindLeadDefault: normalizeLead(lead) }),
       setAccent: (accent) => set({ accent }),
       bumpPomo: () =>
         set((s) => {
@@ -1173,13 +1189,13 @@ renameList: (id, name) =>
           ...migrateNav(saved),
           calendarMode: normalizeCalendarMode(saved.calendarMode),
           weekNumbers: saved.weekNumbers === true,
+          remindLeadDefault: normalizeLead(saved.remindLeadDefault),
           theme: saved.theme === "dark" ? "dark" : "light",
           accent: isAccent(saved.accent) ? saved.accent : current.accent,
         };
       },
-      storage: createJSONStorage(() =>
-        typeof window === "undefined" ? memoryStorage : window.localStorage,
-      ),
+      // This user's partition in IndexedDB (src/lib/offline/device-store.ts).
+      storage: createJSONStorage(() => (typeof window === "undefined" ? memoryStorage : plannerStorage)),
     },
   ),
 );

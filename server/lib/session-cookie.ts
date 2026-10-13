@@ -59,6 +59,17 @@ export function lastLoginCookie(event: ServerEvent, login: string): string {
   return serializeCookie(LAST_LOGIN_COOKIE, login, { maxAge: 365 * 24 * 60 * 60, secure: isSecureRequest(event) });
 }
 
+/**
+ * `pora_user=<login>`, readable by the page (not a secret, grants nothing):
+ * the app picks this user's local copy on the device before it reads
+ * anything, so another profile never sees it even for a moment, offline too.
+ */
+export const USER_HINT_COOKIE = "pora_user";
+
+export function userHintCookie(event: ServerEvent, login: string, maxAge: number): string {
+  return serializeCookie(USER_HINT_COOKIE, login, { maxAge, secure: isSecureRequest(event), httpOnly: false });
+}
+
 export function lastLogin(event: ServerEvent): string {
   const value = parseCookies(event.req.headers.get("cookie"))[LAST_LOGIN_COOKIE] ?? "";
   return /^[a-z0-9_-]{1,32}$/.test(value) ? value : "";
@@ -70,7 +81,7 @@ export function lastLogin(event: ServerEvent): string {
  */
 export function clearedSessionCookies(event: ServerEvent): string[] {
   const secure = isSecureRequest(event);
-  const out = [serializeCookie(sessionCookieName(event), "", { maxAge: 0, secure })];
+  const out = [serializeCookie(sessionCookieName(event), "", { maxAge: 0, secure }), userHintCookie(event, "", 0)];
   if (secure) out.push(serializeCookie(SESSION_COOKIE, "", { maxAge: 0, secure }));
   return out;
 }

@@ -1206,3 +1206,28 @@ test("max_tokens: rejected parameter → asked again without it (and remembered)
   const reply = await chatClient({ ...ep, provider: "thinker", model: "m-think" }, 5000, fn2)({ messages: [{ role: "user", content: "?" }], tools: null });
   assert.deepEqual([reply.content, reply.tokens, cut[0]?.max_tokens, cut[1]?.max_tokens], ["Полный ответ", 1600, 600, undefined]);
 });
+
+test("a question asked without network is queued once and answered in the background", async () => {
+  const clock = 2_000_000;
+  const { assistant, store, dir } = makeAssistant(FREE_ONLY, { chat: [() => sse({ text: "Ответ без спешки." })] }, seed(), () => clock);
+  try {
+    await store.setSettings("user1", { consent: "cloud" });
+    const first = await assistant.enqueueQuestion(user1, { text: "Что у меня завтра?", conversationId: null, clientId: "abc123def456" });
+    assert.ok(first && first !== "known");
+    assert.equal(first.nextAt, clock, "asked at the next pass, not in 5 minutes");
+    const again = await assistant.enqueueQuestion(user1, { text: "Что у меня завтра?", conversationId: null, clientId: "abc123def456" });
+    assert.equal(again !== "known" && again?.id, first.id, "a repeated upload does not ask twice");
+    assert.equal((await store.queue("user1")).length, 1);
+    assert.deepEqual(await assistant.processQueue(), { answered: 1, retried: 0, expired: 0 });
+    const conv = await store.get("user1", first.conversationId);
+    assert.deepEqual(conv?.messages.map((m) => [m.role, m.text]), [
+      ["user", "Что у меня завтра?"],
+      ["assistant", "Ответ без спешки."],
+    ]);
+    assert.equal((await store.notices("user1"))[0]?.text, "Помощник ответил");
+    assert.equal(await assistant.enqueueQuestion(user1, { text: "Что у меня завтра?", conversationId: first.conversationId, clientId: "abc123def456" }), "known");
+    assert.deepEqual(await store.queue("user2"), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

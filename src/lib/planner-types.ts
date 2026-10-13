@@ -42,6 +42,8 @@ export type Task = {
   urgent?: boolean;
   /** HH:mm on the due date. Empty means no alarm. */
   remindAt?: string | null;
+  /** Remind this many minutes before `remindAt` (5, 15, 30, 60, 1440 = the day before). Missing = at the time. */
+  remindLead?: number;
   /** HH:mm when the task starts on the due date. */
   startAt?: string | null;
   /** HH:mm when the task ends. Empty means the board draws one hour. */
