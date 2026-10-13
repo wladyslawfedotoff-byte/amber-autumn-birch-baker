@@ -23,6 +23,9 @@ export const assistantApi = {
     call(`conversations/${conversationId}/proposals/${proposalId}`, { method: "POST", body: JSON.stringify({ status, items }) }),
   /** «Отложить»: the server keeps asking until a model answers. */
   enqueue: (conversationId: string, messageId: string) => call<QueuedRequest>("queue", { method: "POST", body: JSON.stringify({ conversationId, messageId }) }),
+  /** A question asked without network: the server queues it and answers in the background. */
+  enqueueQuestion: (text: string, conversationId: string | null, clientId: string) =>
+    call<QueuedRequest>("queue", { method: "POST", body: JSON.stringify({ text, conversationId, clientId }) }),
   cancelQueued: (id: string) => call<{ ok: boolean }>(`queue/${id}`, { method: "DELETE" }),
   notices: () => call<{ notices: AssistantNotice[] }>("notices").then((r) => r.notices),
   readNotices: (filter: { ids?: string[]; conversationId?: string }) => call<{ removed: number }>("notices/read", { method: "POST", body: JSON.stringify(filter) }),

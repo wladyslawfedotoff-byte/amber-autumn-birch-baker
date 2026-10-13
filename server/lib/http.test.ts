@@ -93,3 +93,11 @@ test("throttled log lines: at most one per minute per key", () => {
     resetLogThrottle();
   }
 });
+
+test("serializeCookie: HttpOnly by default, readable only when asked", async () => {
+  const { serializeCookie } = await import("./http.ts");
+  assert.ok(serializeCookie("a", "b", { maxAge: 10, secure: false }).includes("HttpOnly"));
+  const hint = serializeCookie("pora_user", "user1", { maxAge: 10, secure: true, httpOnly: false });
+  assert.ok(!hint.includes("HttpOnly"));
+  assert.ok(hint.includes("Secure") && hint.includes("SameSite=Lax"));
+});

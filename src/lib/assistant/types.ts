@@ -82,7 +82,9 @@ export type ChatMessage = {
   /** Every model was unavailable: «Повторить» / «Отложить» are offered. */
   retryable?: boolean;
   /** «Отложить»: the server keeps trying; this is the next attempt. */
-  queued?: { id: string; nextAt: number };
+  queued?: { id: string; nextAt: number; offline?: boolean };
+  /** Asked without network (never reached the server). */
+  offline?: boolean;
 };
 
 /** A question kept on the server until some model answers (at most a day). */

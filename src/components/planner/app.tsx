@@ -25,7 +25,12 @@ import type { View } from "@/lib/planner-types";
 import { scopeTasks } from "@/lib/queries";
 import { useProfile } from "@/lib/use-capabilities";
 import { bindServerSync } from "@/lib/server-sync";
-import { SyncIndicator } from "@/components/planner/sync-status";
+import { hasSavedPlanner, initScope, markLoaded } from "@/lib/offline/device-store";
+import { registerServiceWorker } from "@/lib/offline/sw-client";
+import { refreshPushSubscription } from "@/lib/offline/push-client";
+import { flushOfflineQuestions } from "@/lib/offline/assist-queue";
+import { SyncIndicator, SyncPill } from "@/components/planner/sync-status";
+import { useServerSyncStatus } from "@/lib/use-server-sync";
 import { DoneToastBar } from "@/components/planner/done-toast";
 import { Fab, QuickComposer } from "@/components/planner/quick-composer";
 import { TAB_ICONS } from "@/components/planner/tab-icons";
@@ -114,20 +119,61 @@ export function PlannerApp() {
   useEffect(() => {
     let stop = () => {};
     let cancelled = false;
-    let pristine = false;
-    try {
-      pristine = window.localStorage.getItem("srok-planner") === null;
-    } catch {
-      pristine = false;
-    }
-    void Promise.resolve(usePlanner.persist.rehydrate()).then(() => {
-      if (!cancelled) stop = bindServerSync({ pristine });
-    });
+    // This user's local copy (IndexedDB), chosen before anything is read.
+    const switched = initScope();
+    void (async () => {
+      const pristine = !(await hasSavedPlanner("srok-planner"));
+      await usePlanner.persist.rehydrate();
+      markLoaded();
+      if (!cancelled) stop = bindServerSync({ pristine, switched });
+      void registerServiceWorker().then(() => refreshPushSubscription());
+    })();
     return () => {
       cancelled = true;
       stop();
     };
   }, []);
+
+  // A tapped reminder: «/?task=<id>» on launch, or a message from the service worker.
+  const pendingTask = useRef<string | null>(null);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const fromUrl = url.searchParams.get("task");
+    if (fromUrl) {
+      pendingTask.current = fromUrl;
+      url.searchParams.delete("task");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; taskId?: unknown } | null;
+      if (data?.type !== "open-task" || typeof data.taskId !== "string") return;
+      if (usePlanner.getState().tasks.some((item) => item.id === data.taskId)) {
+        setBell(false);
+        setSelectedId(data.taskId);
+      } else pendingTask.current = data.taskId;
+    };
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
+  }, []);
+  useEffect(() => {
+    const id = pendingTask.current;
+    if (!id || !tasks.some((item) => item.id === id)) return;
+    pendingTask.current = null;
+    setBell(false);
+    setSelectedId(id);
+  }, [tasks]);
+
+  // Questions to the assistant asked without network go to the server queue
+  // once the server is reachable again (on start, «online», after a sync recovers).
+  const reachable = !useServerSyncStatus().offline;
+  const refreshNotices = assistantNotices.refresh;
+  useEffect(() => {
+    if (!profile.assistant || !reachable) return;
+    const flush = () => void flushOfflineQuestions().then((sent) => sent && refreshNotices());
+    flush();
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
+  }, [profile.assistant, reachable, refreshNotices]);
 
   useEffect(() => {
     if (!focus.running || !tickFocus) return;
@@ -343,6 +389,7 @@ export function PlannerApp() {
             <SyncIndicator onOpen={() => openView("settings")} />
             <ReminderBell dueCount={dueHits.length + assistantNotices.notices.length} open={bell} onToggle={() => setBell((open) => !open)} />
           </div>
+          <SyncPill />
           {showSearch ? (
             <label className="relative mt-1.5 block">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle" />

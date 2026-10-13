@@ -3,7 +3,7 @@ import { BodyTooLargeError, clientIpInfo, json, readBodyLimited, redirect, type 
 import { log, logThrottled } from "../../lib/log.ts";
 import { safeNext } from "../../lib/pages.ts";
 import { LoginLimiter } from "../../lib/rate-limit.ts";
-import { lastLoginCookie, legacyCookieCleanup, sessionCookie, withCookies } from "../../lib/session-cookie.ts";
+import { lastLoginCookie, legacyCookieCleanup, sessionCookie, userHintCookie, withCookies } from "../../lib/session-cookie.ts";
 import { verifyCredentials } from "../../lib/user-store.ts";
 
 const limiter = new LoginLimiter();
@@ -91,7 +91,7 @@ export default async function login(event: ServerEvent): Promise<Response> {
 
   limiter.success(ip);
   log("info", "login.ok", { ip, ipSource, user: account.login });
-  const cookies = [sessionCookie(event, account), lastLoginCookie(event, account.login), ...legacyCookieCleanup(event)];
+  const cookies = [sessionCookie(event, account), lastLoginCookie(event, account.login), userHintCookie(event, account.login, 400 * 24 * 60 * 60), ...legacyCookieCleanup(event)];
   if (creds.form) return withCookies(redirect(creds.next, 303), cookies);
   return withCookies(json(200, { ok: true, next: creds.next }), cookies);
 }

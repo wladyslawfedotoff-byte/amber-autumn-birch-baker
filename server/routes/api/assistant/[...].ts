@@ -76,6 +76,14 @@ export default async function assistantApi(event: ServerEvent): Promise<Response
       const b = await body(event);
       const conversationId = typeof b?.conversationId === "string" && ID.test(b.conversationId) ? b.conversationId : null;
       const messageId = typeof b?.messageId === "string" && ID.test(b.messageId) ? b.messageId : null;
+      // A question asked without network: { text, clientId, conversationId? }.
+      const text = typeof b?.text === "string" ? b.text.trim().slice(0, 4000) : "";
+      const clientId = typeof b?.clientId === "string" && /^[A-Za-z0-9-]{6,48}$/.test(b.clientId) ? b.clientId : null;
+      if (!messageId && text && clientId) {
+        const item = await assistant.enqueueQuestion(user, { text, clientId, conversationId });
+        if (item === "known") return json(200, { ok: true, known: true });
+        return item ? json(200, item) : json(409, { error: "not_queueable" });
+      }
       if (!conversationId || !messageId) return json(400, { error: "bad_request" });
       const item = await assistant.enqueue(user, conversationId, messageId);
       return item ? json(200, item) : json(409, { error: "not_queueable" });

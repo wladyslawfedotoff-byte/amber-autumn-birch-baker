@@ -174,9 +174,9 @@ export function parseCookies(header: string | null): Cookies {
 export function serializeCookie(
   name: string,
   value: string,
-  options: { maxAge: number; secure: boolean },
+  options: { maxAge: number; secure: boolean; httpOnly?: boolean },
 ): string {
-  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${options.maxAge}`];
+  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", ...(options.httpOnly === false ? [] : ["HttpOnly"]), "SameSite=Lax", `Max-Age=${options.maxAge}`];
   if (options.maxAge <= 0) parts.push("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
   if (options.secure) parts.push("Secure");
   return parts.join("; ");

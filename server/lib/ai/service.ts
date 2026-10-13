@@ -340,6 +340,28 @@ export class Assistant {
   }
 
   /**
+   * A question asked without network («Отложить» offline): stored as a
+   * question with a placeholder answer and queued right away, so the
+   * background worker answers it like any postponed one (answer in the bell).
+   * `clientId` makes a repeated upload of the same question harmless.
+   */
+  async enqueueQuestion(user: Principal, input: { text: string; conversationId: string | null; clientId: string }): Promise<QueuedRequest | "known" | null> {
+    const { store } = this.deps;
+    const messageId = `offline-${input.clientId}`;
+    const queued = (await store.queue(user.login)).find((q) => q.messageId === messageId);
+    if (queued) return queued;
+    const previous = input.conversationId ? await store.get(user.login, input.conversationId) : null;
+    // Already uploaded and answered (the reply to the first upload was lost).
+    if (previous?.messages.some((m) => m.id === `${messageId}-q`)) return "known";
+    const conversationId = previous?.id ?? randomUUID();
+    const now = this.now();
+    const question: ChatMessage = { id: `${messageId}-q`, role: "user", text: input.text, at: now };
+    const waiting: ChatMessage = { id: messageId, role: "assistant", text: "Вопрос задан без сети. Отвечу, как только получится.", at: now, error: true, retryable: true };
+    await store.append(user.login, conversationId, [question, waiting], titleFrom(input.text));
+    return store.enqueue(user.login, conversationId, messageId, now, now);
+  }
+
+  /**
    * One pass of the background worker: every due question is asked again
    * (consented providers only). An answer replaces the failed message and
    * lands in the bell; proposals in it still wait for «Применить».
