@@ -10,11 +10,11 @@
  * A valid session stores its login in event.context (server/lib/principal.ts).
  */
 import { getAuthConfig } from "../lib/auth.ts";
-import { NO_LOG_HEADER, html, isSameOrigin, json, redirect, wantsHtml, type ServerEvent } from "../lib/http.ts";
+import { NO_LOG_HEADER, html, isSameOrigin, json, parseCookies, redirect, wantsHtml, type ServerEvent } from "../lib/http.ts";
 import { log, logThrottled } from "../lib/log.ts";
 import { notConfiguredPage } from "../lib/pages.ts";
 import { setPrincipalLogin } from "../lib/principal.ts";
-import { readSession, sessionCookie, shouldRenew } from "../lib/session-cookie.ts";
+import { USER_HINT_COOKIE, readSession, sessionCookie, shouldRenew, userHintCookie } from "../lib/session-cookie.ts";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -92,6 +92,10 @@ export default function auth(event: ServerEvent): Response | undefined {
   }
   if (shouldRenew(session) && method !== "HEAD") {
     event.res.headers.append("set-cookie", sessionCookie(event, { login: session.login }, session));
+  }
+  // Sessions from before 1.8 get the user hint for the per-user local copy.
+  if (method !== "HEAD" && parseCookies(event.req.headers.get("cookie"))[USER_HINT_COOKIE] !== session.login) {
+    event.res.headers.append("set-cookie", userHintCookie(event, session.login, 400 * 24 * 60 * 60));
   }
   setPrincipalLogin(event, session.login);
   return undefined;

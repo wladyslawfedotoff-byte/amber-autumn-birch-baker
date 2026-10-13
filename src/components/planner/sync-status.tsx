@@ -1,31 +1,86 @@
-import { CloudAlert, CloudOff, LogIn } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { Check, CloudAlert, CloudOff, LogIn, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
+import { applyUpdate, subscribeUpdate, updateReady } from "@/lib/offline/sw-client";
 import { useServerSyncStatus } from "@/lib/use-server-sync";
+import { pendingLabel } from "@/lib/offline/labels";
 
 /**
- * Header indicator: invisible while everything syncs fine; shows a small cloud
- * icon when offline / failing so the user knows edits are only on this device.
+ * Header indicator for sync errors: the old cloud icon (opens «Подключение»).
+ * Offline state, «Синхронизировано» and «Обновить» are the pill below.
  */
 export function SyncIndicator({ onOpen }: { onOpen: () => void }) {
   const status = useServerSyncStatus();
-  if (status.phase === "idle" || status.phase === "syncing") return null;
-  const Icon = status.phase === "offline" ? CloudOff : status.phase === "unauthorized" ? LogIn : CloudAlert;
-  const label =
-    status.phase === "offline"
-      ? status.dirty
-        ? "Офлайн: изменения сохранены на устройстве и уйдут на сервер позже"
-        : "Офлайн"
-      : `Синхронизация: ${status.lastError ?? "ошибка"}`;
-  return (
+  const failing = status.phase === "error" || status.phase === "unavailable" || status.phase === "unauthorized";
+  return failing ? (
     <Button
       size="icon"
       variant="ghost"
-      aria-label={label}
-      title={label}
+      aria-label={`Синхронизация: ${status.lastError ?? "ошибка"}`}
+      title={`Синхронизация: ${status.lastError ?? "ошибка"}`}
       onClick={onOpen}
-      className={status.phase === "offline" ? "text-subtle" : "text-danger"}
+      className="text-danger"
     >
-      <Icon className="size-5" />
+      {status.phase === "unauthorized" ? <LogIn className="size-5" /> : <CloudAlert className="size-5" />}
     </Button>
-  );
+  ) : null;
+}
+
+/** The pill row under the header (takes room only while it is shown). */
+export function SyncPill() {
+  const status = useServerSyncStatus();
+  const update = useSyncExternalStore(subscribeUpdate, updateReady, () => false);
+  const [hint, setHint] = useState(false);
+  const offline = status.offline || status.phase === "offline";
+
+  useEffect(() => {
+    if (!offline) setHint(false);
+  }, [offline]);
+
+  let pill: React.ReactNode = null;
+  if (offline) {
+    pill = (
+      <div className="flex flex-col items-center">
+        <div role="status" className="flex h-7 items-center gap-1.5 rounded-full bg-elevated pr-0.5 pl-2.5 text-xs text-muted shadow-sm" data-testid="offline-pill">
+          <CloudOff className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="whitespace-nowrap">
+            Нет сети{status.pending > 0 ? ` · ${pendingLabel(status.pending)}` : ""}
+          </span>
+          <button
+            type="button"
+            aria-expanded={hint}
+            aria-label="Что это значит"
+            onClick={() => setHint((open) => !open)}
+            className={cn("flex size-6 items-center justify-center rounded-full", hint ? "text-accent" : "text-subtle")}
+          >
+            <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full border border-current text-[10px] leading-none font-semibold">
+              ?
+            </span>
+          </button>
+        </div>
+        {hint ? (
+          <p className="mt-1 max-w-[17rem] rounded-xl bg-elevated px-3 py-2 text-center text-xs leading-snug text-muted shadow-sm">
+            Всё, что вы делаете без сети, сохраняется на этом устройстве и само уйдёт на сервер, когда связь появится. Помощник работает только при подключении.
+          </p>
+        ) : null}
+      </div>
+    );
+  } else if (status.justSynced) {
+    pill = (
+      <div role="status" className="flex h-7 items-center gap-1.5 rounded-full bg-elevated px-2.5 text-xs text-ok shadow-sm" data-testid="synced-pill">
+        <Check className="size-3.5" aria-hidden="true" />
+        Синхронизировано
+      </div>
+    );
+  } else if (update) {
+    pill = (
+      <button type="button" onClick={applyUpdate} className="flex h-7 items-center gap-1.5 rounded-full bg-elevated px-2.5 text-xs text-accent shadow-sm">
+        <RefreshCw className="size-3.5" aria-hidden="true" />
+        Новая версия · Обновить
+      </button>
+    );
+  }
+
+  return pill ? <div className="flex justify-center pt-1">{pill}</div> : null;
 }

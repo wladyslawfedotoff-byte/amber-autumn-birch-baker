@@ -43,6 +43,9 @@ import {
 import { ACCENTS } from "@/lib/accents";
 import { addFromBackup, saveBackup } from "@/lib/backup";
 import { cn } from "@/lib/cn";
+import { disablePush, enablePush, pushState, testPush, type PushState } from "@/lib/offline/push-client";
+import { REMIND_LEADS, leadShort } from "@/lib/reminders";
+import { InlineHint } from "@/components/ui/hint";
 import { usePlanner } from "@/lib/planner-store";
 import { changePassword, dismissLegacyNote, logout, logoutEverywhere, syncServerNow } from "@/lib/server-sync";
 import { reloadProfile, useProfile } from "@/lib/use-capabilities";
@@ -656,37 +659,115 @@ function NavigationSection() {
 }
 
 function NotifySection() {
-  const [perm, setPerm] = useState<NotificationPermission | "off">("off");
-  useEffect(() => {
-    if (typeof Notification === "undefined") return;
-    setPerm(Notification.permission);
+  const [state, setState] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; tone: "ok" | "danger" } | null>(null);
+  const lead = usePlanner((s) => s.remindLeadDefault) ?? 0;
+  const setLead = usePlanner((s) => s.setRemindLeadDefault);
+
+  const refresh = useCallback(() => {
+    pushState()
+      .then(setState)
+      .catch(() => setState({ kind: "server-off" }));
   }, []);
+  useEffect(refresh, [refresh]);
+
+  async function run(action: () => Promise<string | null>) {
+    setBusy(true);
+    setNote(null);
+    try {
+      const text = await action();
+      if (text) setNote({ text, tone: "ok" });
+    } catch (error) {
+      setNote({ text: error instanceof Error ? error.message : "Не получилось.", tone: "danger" });
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  }
+
+  const label =
+    state === null
+      ? "…"
+      : state.kind === "on"
+        ? "Включены"
+        : state.kind === "denied"
+          ? "Запрещены"
+          : state.kind === "off"
+            ? "Выключены"
+            : state.kind === "server-off"
+              ? "Не настроены"
+              : "Недоступны";
+  const iosTab = state?.kind === "unsupported" && state.reason === "ios-tab";
+
   return (
-    <div className="text-sm">
+    <div className="text-sm" data-testid="notify-settings">
       <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
         <div className="flex min-h-11 items-center gap-3 px-3">
-          <span className="min-w-0 flex-1">Уведомления браузера</span>
-          <span className={cn("text-sm", perm === "granted" ? "text-ok" : perm === "denied" ? "text-danger" : "text-muted")}>
-            {perm === "granted" ? "Включены" : perm === "denied" ? "Запрещены" : perm === "default" ? "Не включены" : "Недоступны"}
-          </span>
+          <span className="min-w-0 flex-1">Напоминания на этом устройстве</span>
+          <span className={cn("text-sm", state?.kind === "on" ? "text-ok" : state?.kind === "denied" ? "text-danger" : "text-muted")}>{label}</span>
         </div>
       </div>
-      {perm === "default" ? (
+
+      {state?.kind === "on" ? (
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void run(async () => ((await testPush()) > 0 ? "Отправлено. Уведомление придёт через несколько секунд." : "Не удалось доставить — попробуйте включить заново."))}
+            className="h-11 flex-1 rounded-xl bg-accent text-sm text-accent-fg disabled:opacity-50"
+          >
+            Проверить
+          </button>
+          <button type="button" disabled={busy} onClick={() => void run(async () => (await disablePush(), null))} className="h-11 flex-1 rounded-xl bg-elevated text-sm text-danger disabled:opacity-50">
+            Выключить
+          </button>
+        </div>
+      ) : (
         <button
           type="button"
-          onClick={() => {
-            void Notification.requestPermission().then((next) => setPerm(next));
-          }}
-          className="mt-3 h-11 w-full rounded-xl bg-accent text-sm text-accent-fg"
+          disabled={busy || state?.kind !== "off"}
+          onClick={() => void run(async () => (await enablePush(), "Готово: напоминания будут приходить на это устройство."))}
+          className="mt-3 h-11 w-full rounded-xl bg-accent text-sm text-accent-fg disabled:opacity-40"
         >
           Включить уведомления
         </button>
+      )}
+
+      {note ? <p className={cn("mt-2 text-xs", note.tone === "ok" ? "text-ok" : "text-danger")}>{note.text}</p> : null}
+      {iosTab || (state?.kind === "unsupported" && state.reason === "ios-old") || state?.kind === "off" ? (
+        <p className="mt-2 text-xs text-muted">
+          {iosTab
+            ? "На iPhone уведомления работают только в приложении на экране «Домой»: в браузере нажмите «Поделиться» → «На экран „Домой“» и откройте «Пору» оттуда."
+            : state?.kind === "off"
+              ? "На iPhone — только в приложении, добавленном на экран «Домой» (iOS 16.4 и новее)."
+              : "Нужен iOS 16.4 или новее."}
+        </p>
       ) : null}
-      {perm === "denied" ? <p className="mt-2 text-xs text-muted">Разрешите уведомления для этого сайта в настройках браузера (на iPhone — «Настройки» → «Уведомления»).</p> : null}
-      <p className="mt-3 text-xs text-muted">
-        Время напоминания ставится в задаче («Напомнить»), привычке или дате. Звук играет, пока «Пора» открыта; на iPhone уведомления приходят, если
-        приложение добавлено на экран «Домой». Сработавшие напоминания — под колокольчиком вверху; полоску можно скрыть крестиком.
-      </p>
+      {state?.kind === "unsupported" && state.reason === "browser" ? <p className="mt-2 text-xs text-muted">Этот браузер не умеет получать уведомления.</p> : null}
+      {state?.kind === "server-off" ? <p className="mt-2 text-xs text-muted">На сервере не заданы ключи уведомлений (PUSH_VAPID_* в .env).</p> : null}
+      {state?.kind === "denied" ? <p className="mt-2 text-xs text-muted">Разрешите уведомления в настройках (на iPhone — «Настройки» → «Уведомления» → «Пора»).</p> : null}
+
+      <p className="mt-4 mb-1 px-1 text-xs font-medium text-subtle">Напоминать по умолчанию</p>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Напоминать по умолчанию">
+        {REMIND_LEADS.map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={lead === value}
+            onClick={() => setLead(value)}
+            className={cn("h-8 rounded-full px-3 text-[0.8125rem]", lead === value ? "bg-accent text-accent-fg" : "bg-elevated text-fg")}
+          >
+            {leadShort(value)}
+          </button>
+        ))}
+      </div>
+
+      <InlineHint label="Как это работает" className="mt-2">
+        Время ставится в задаче («Напомнить»), там же — насколько заранее. Сервер присылает напоминание, даже когда «Пора» закрыта; нажатие открывает задачу.
+        Напоминания, заданные без сети, начнут работать, как только изменения уйдут на сервер. Привычки и даты напоминают, пока приложение открыто.
+      </InlineHint>
     </div>
   );
 }

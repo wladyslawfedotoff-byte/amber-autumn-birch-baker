@@ -13,7 +13,12 @@
  *   imported wholesale;
  * - PUTs with If-Match: <base revision>; on 409 it merges the server copy and
  *   retries;
- * - on 401 sends the user to /login — local data stays in localStorage;
+ * - on 401 sends the user to /login — local data stays on the device;
+ * - offline (1.8): the planner lives per user in IndexedDB
+ *   (src/lib/offline/device-store.ts); every local change is also written to
+ *   a persisted journal «ждут отправки» (src/lib/offline/outbox.ts) that a
+ *   successful upload empties; failed uploads are retried with a growing
+ *   delay (2 s … 5 min) and at once when the network comes back;
  * - several profiles: the device remembers whose data it holds (`meta.login`).
  *   If somebody else signs in on it, the local copy is replaced by that
  *   person's server copy (never uploaded into their account): GET compares
@@ -24,6 +29,10 @@ import { usePlanner } from "@/lib/planner-store";
 import { DEFAULT_ARCHIVE_DAYS, normalizeArchiveDays } from "@/lib/task-done";
 import type { Habit, Milestone, Project, Task, TaskList } from "@/lib/planner-types";
 import { setClockOffset, syncNow } from "@/lib/sync/clock";
+import { activeScope, dropScope, onOtherTabSaved, readJson as readLocal, setScope, wipeActiveScope, writeJson } from "@/lib/offline/device-store";
+import { acknowledge, diffChanges, emptyOutbox, failed, parseOutbox, pendingCount, record, type Outbox } from "@/lib/offline/outbox";
+import { forgetCachedShell } from "@/lib/offline/sw-client";
+import { forgetPushOnLogout } from "@/lib/offline/push-client";
 import {
   COLLECTIONS,
   adoptOtherTab,
@@ -43,6 +52,12 @@ const LEGACY_NOTE_KEY = "pora-legacy-note";
 const PUSH_DELAY_MS = 700;
 const POLL_MS = 15_000;
 const KEEPALIVE_LIMIT = 60_000;
+const OUTBOX_KEY = "outbox";
+/** A request on a weak mobile signal can hang for minutes; give up and retry later. */
+const GET_TIMEOUT_MS = 20_000;
+/** Uploads get longer: a big document over a slow line is still progress. */
+const PUT_TIMEOUT_MS = 90_000;
+const SYNCED_FLASH_MS = 2_500;
 
 type Meta = {
   base: number | null;
@@ -66,6 +81,14 @@ export type ServerSyncStatus = {
   dirty: boolean;
   lastError: string | null;
   legacyNote: string | null;
+  /** Changes on this device that have not reached the server yet. */
+  pending: number;
+  /** «Синхронизировано» for a moment after the pending changes went out. */
+  justSynced: boolean;
+  /** Next automatic attempt after a failure (ms), null = none planned. */
+  retryAt: number | null;
+  /** No connection to the server (stays on while a retry is running). */
+  offline: boolean;
 };
 
 type RemoteDoc = {
@@ -128,7 +151,17 @@ let status: ServerSyncStatus = {
   dirty: false,
   lastError: null,
   legacyNote: null,
+  pending: 0,
+  justSynced: false,
+  retryAt: null,
+  offline: false,
 };
+
+let offline = false;
+
+let outbox: Outbox = emptyOutbox();
+let justSynced = false;
+let flashTimer = 0;
 
 function emit(): void {
   const meta = readMeta();
@@ -139,11 +172,17 @@ function emit(): void {
     dirty: meta.dirty,
     lastError: meta.lastError,
     legacyNote: storage()?.getItem(LEGACY_NOTE_KEY) ?? null,
+    pending: Math.max(pendingCount(outbox), meta.dirty ? 1 : 0),
+    justSynced,
+    retryAt: outbox.retryAt,
+    offline,
   };
   listeners.forEach((listener) => listener());
 }
 
 function setPhase(next: SyncPhase): void {
+  if (next === "offline") offline = true;
+  else if (next !== "syncing") offline = false;
   if (phase === next) return;
   phase = next;
   emit();
@@ -158,6 +197,28 @@ export function subscribeServerSync(listener: Listener): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+function setOutbox(next: Outbox): void {
+  if (next === outbox) return;
+  outbox = next;
+  void writeJson(OUTBOX_KEY, outbox);
+  emit();
+}
+
+/** Everything up to `seq` reached the server. */
+function delivered(seq: number): void {
+  const had = pendingCount(outbox) > 0;
+  setOutbox(acknowledge(outbox, seq));
+  if (had && pendingCount(outbox) === 0 && typeof window !== "undefined") {
+    justSynced = true;
+    emit();
+    window.clearTimeout(flashTimer);
+    flashTimer = window.setTimeout(() => {
+      justSynced = false;
+      emit();
+    }, SYNCED_FLASH_MS);
+  }
 }
 
 export function dismissLegacyNote(): void {
@@ -247,6 +308,30 @@ function integrate(remote: RemoteDoc, timing?: { t0: number; t1: number }): bool
     switched = true;
     meta = writeMeta({ ...DEFAULT_META, clockOffset: meta.clockOffset });
   }
+  // The local copy is kept per user: from now on this device writes into the
+  // signed-in user's partition. The previous user's copy (with any unsent
+  // edits) stays in theirs and is merged when they sign in here again.
+  if (remoteUser) {
+    const before = activeScope();
+    if (setScope(remoteUser)) {
+      if (before === "_" && !switched) {
+        // A copy from before 1.8 (no user known yet) that belongs to this
+        // user: move it into their partition.
+        applying++;
+        try {
+          usePlanner.setState({});
+        } finally {
+          applying--;
+        }
+        void writeJson(OUTBOX_KEY, outbox);
+        void dropScope(before);
+      } else {
+        switched = true;
+        outbox = emptyOutbox();
+        void writeJson(OUTBOX_KEY, outbox);
+      }
+    }
+  }
   if (forceReplace) {
     switched = true;
     forceReplace = false;
@@ -328,6 +413,7 @@ async function call(method: "GET" | "PUT", base?: number, body?: string, keepali
       cache: "no-store",
       credentials: "same-origin",
       keepalive,
+      ...(keepalive || typeof AbortSignal === "undefined" || !("timeout" in AbortSignal) ? {} : { signal: AbortSignal.timeout(method === "PUT" ? PUT_TIMEOUT_MS : GET_TIMEOUT_MS) }),
       headers: {
         Accept: "application/json",
         ...(method === "PUT" ? { "Content-Type": "application/json", "If-Match": `"${base ?? 0}"` } : {}),
@@ -355,6 +441,7 @@ async function runOnce(): Promise<void> {
     return;
   }
   setPhase("syncing");
+  const carried = outbox.seq;
   try {
     let settled = false;
     for (let attempt = 0; attempt < 5 && !settled; attempt++) {
@@ -393,11 +480,20 @@ async function runOnce(): Promise<void> {
       if (!settled) writeMeta({ dirty: true });
     }
     writeMeta({ lastSyncAt: Date.now(), lastError: null });
+    // The server now holds everything that was journalled before this run.
+    if (!readMeta().dirty) delivered(outbox.seq);
+    else if (settled) delivered(carried);
+    else setOutbox({ ...outbox, attempts: 0, retryAt: null });
     setPhase("idle");
     if (!settled) schedulePush();
   } catch (error) {
     const err = error instanceof SyncError ? error : new SyncError("error", error instanceof Error ? error.message : "Не удалось синхронизировать.");
     writeMeta({ lastError: err.message });
+    if (err.kind !== "unauthorized") {
+      // Try again later with a growing delay (and at once when the network is back).
+      setOutbox(failed(outbox, Date.now()));
+      if (readMeta().dirty || pendingCount(outbox) > 0) schedulePush(Math.max(0, (outbox.retryAt ?? Date.now()) - Date.now()));
+    }
     setPhase(err.kind);
     if (err.kind === "unauthorized" && !redirecting && typeof window !== "undefined") {
       redirecting = true;
@@ -452,11 +548,15 @@ function flushOnHide(): void {
   window.clearTimeout(pushTimer);
   const body = JSON.stringify(localData());
   const t0 = Date.now();
+  const carried = outbox.seq;
   void call("PUT", meta.base, body, body.length < KEEPALIVE_LIMIT)
     .then(({ doc }) => {
       if (running) return;
       integrate(doc, { t0, t1: Date.now() });
-      if (!readMeta().dirty) writeMeta({ lastSyncAt: Date.now(), lastError: null });
+      if (!readMeta().dirty) {
+        writeMeta({ lastSyncAt: Date.now(), lastError: null });
+        delivered(carried);
+      }
     })
     .catch(() => undefined);
 }
@@ -535,21 +635,25 @@ export function importBackupData(raw: unknown): number | null {
  * unsent changes), so the next person signing in on this device sees nothing
  * of it. With one profile it stays (offline use as before).
  */
-function forgetLocalCopy(): void {
-  if (!readMeta().login) return;
+async function forgetLocalCopy(): Promise<void> {
   const store = storage();
   store?.removeItem(STORE_KEY);
   store?.removeItem(META_KEY);
   store?.removeItem("pora-profile");
+  outbox = emptyOutbox();
+  await wipeActiveScope();
+  forgetCachedShell();
 }
 
 export async function logout(): Promise<void> {
   if (readMeta().dirty) await syncServerNow().catch(() => undefined);
+  await forgetPushOnLogout();
   try {
     await fetch("/api/logout", { method: "POST", credentials: "same-origin", headers: { Accept: "application/json" } });
   } finally {
     redirecting = true;
-    if (!readMeta().dirty) forgetLocalCopy();
+    // Unsent changes (no network) stay in this user's own partition; nobody else sees them.
+    if (!readMeta().dirty) await forgetLocalCopy();
     window.location.assign("/login");
   }
 }
@@ -561,6 +665,7 @@ export async function logout(): Promise<void> {
  */
 export async function logoutEverywhere(): Promise<void> {
   if (readMeta().dirty) await syncServerNow().catch(() => undefined);
+  await forgetPushOnLogout();
   let response: Response;
   try {
     response = await fetch("/api/logout-all", {
@@ -578,7 +683,7 @@ export async function logoutEverywhere(): Promise<void> {
   }
   if (!response.ok) throw new Error(`Сервер не смог завершить сеансы (ответ ${response.status}).`);
   redirecting = true;
-  if (!readMeta().dirty) forgetLocalCopy();
+  if (!readMeta().dirty) await forgetLocalCopy();
   window.location.assign("/login");
 }
 
@@ -624,8 +729,10 @@ function syncedChanged(a: ReturnType<typeof usePlanner.getState>, b: ReturnType<
  * Start syncing. Call after `usePlanner.persist.rehydrate()`. `pristine` = this
  * device had no saved planner data before (only the demo seed).
  */
-export function bindServerSync(options: { pristine: boolean }): () => void {
+export function bindServerSync(options: { pristine: boolean; switched?: boolean }): () => void {
   retireLegacySync();
+  // Another person signed in on this device: the sync state belonged to the previous one.
+  if (options.switched) writeMeta({ ...DEFAULT_META, clockOffset: readMeta().clockOffset });
   const meta = readMeta();
   setClockOffset(meta.clockOffset);
   pristine = options.pristine && meta.base === null;
@@ -633,6 +740,7 @@ export function bindServerSync(options: { pristine: boolean }): () => void {
 
   const unsub = usePlanner.subscribe((state, prev) => {
     if (applying || !syncedChanged(state, prev)) return;
+    setOutbox(record(outbox, diffChanges(prev, state), Date.now()));
     editSeq++;
     if (!readMeta().dirty) writeMeta({ dirty: true });
     schedulePush();
@@ -650,16 +758,20 @@ export function bindServerSync(options: { pristine: boolean }): () => void {
     else pull();
   };
   const onPageHide = () => flushOnHide();
-  const onOnline = () => pull();
+  const onOnline = () => {
+    if (outbox.retryAt) setOutbox({ ...outbox, attempts: 0, retryAt: null });
+    lastPull = 0;
+    pull();
+  };
   const onOffline = () => setPhase("offline");
-  const onStorage = (event: StorageEvent) => {
-    if (event.key === STORE_KEY) {
-      // Another tab saved: adopt it without treating it as our own edit (that
-      // tab already marked the shared dirty flag and will upload it). Merge,
-      // never replace: its save may predate an edit made here a moment ago
-      // (that is how freshly added subtasks used to vanish). A removed copy
-      // (sign-out in that tab) is taken as is.
-      const mine = event.newValue === null ? null : localData();
+  const adoptFromOtherTab = (removed: boolean) => {
+    // Another tab saved: adopt it without treating it as our own edit (that
+    // tab already marked the shared dirty flag and will upload it). Merge,
+    // never replace: its save may predate an edit made here a moment ago
+    // (that is how freshly added subtasks used to vanish). A removed copy
+    // (sign-out in that tab) is taken as is.
+    {
+      const mine = removed ? null : localData();
       applying++;
       void Promise.resolve(usePlanner.persist.rehydrate())
         .then(() => {
@@ -671,6 +783,11 @@ export function bindServerSync(options: { pristine: boolean }): () => void {
         .finally(() => {
           applying--;
         });
+    }
+  };
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === STORE_KEY) {
+      adoptFromOtherTab(event.newValue === null);
     } else if (event.key === META_KEY || event.key === LEGACY_NOTE_KEY) {
       emit();
     }
@@ -683,12 +800,37 @@ export function bindServerSync(options: { pristine: boolean }): () => void {
   window.addEventListener("offline", onOffline);
   window.addEventListener("storage", onStorage);
   const poll = window.setInterval(() => {
-    if (document.visibilityState === "visible") void syncServerNow();
+    if (document.visibilityState !== "visible") return;
+    // After a failure the retry timer decides; polling would only hammer a dead network.
+    if (outbox.retryAt && Date.now() < outbox.retryAt) return;
+    void syncServerNow();
   }, POLL_MS);
+  const unsubTabs = onOtherTabSaved((name) => {
+    if (name === STORE_KEY) adoptFromOtherTab(false);
+    else if (name === OUTBOX_KEY) {
+      void readLocal<unknown>(OUTBOX_KEY).then((raw) => {
+        const theirs = parseOutbox(raw);
+        if (theirs.seq >= outbox.seq) {
+          outbox = theirs;
+          emit();
+        }
+      });
+    }
+  });
 
-  pull();
+  let stopped = false;
+  void readLocal<unknown>(OUTBOX_KEY).then((raw) => {
+    if (stopped) return;
+    const saved = parseOutbox(raw);
+    // Edits made before the journal was read are kept on top of it.
+    outbox = outbox.entries.length ? record(saved, outbox.entries, Date.now()) : saved;
+    emit();
+    pull();
+  });
 
   return () => {
+    stopped = true;
+    unsubTabs();
     unsub();
     document.removeEventListener("visibilitychange", onVisibility);
     window.removeEventListener("pagehide", onPageHide);

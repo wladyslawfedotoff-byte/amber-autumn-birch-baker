@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowUp, Check, Zap, Clock, Cloud, Cpu, History, Mic, MicOff, RotateCw, Search, ShieldCheck, Sparkles, Square, SquarePen, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, Zap, Clock, Cloud, CloudOff, Cpu, History, Mic, MicOff, RotateCw, Search, ShieldCheck, Sparkles, Square, SquarePen, Trash2, X } from "lucide-react";
 import { AssistMarkdown } from "@/components/planner/assist-markdown";
 import { AnswerViewCard, ChipRow, DiffRows, PlanTimeline } from "@/components/planner/assist-cards";
 import { diffLines, withoutPlanLines } from "@/lib/assistant/view";
@@ -12,6 +12,8 @@ import { groupHistory } from "@/lib/assistant/history";
 import { usePlanner } from "@/lib/planner-store";
 import { applyItems, itemTitle, withTitle } from "@/lib/assistant/apply";
 import { assistantApi, streamChat } from "@/lib/assistant/client";
+import { cancelOfflineQuestion, queueOfflineQuestion } from "@/lib/offline/assist-queue";
+import { useOnline } from "@/lib/offline/use-online";
 import type { AiWhich, AnswerSource, AssistantStatus, ChatEvent, ChatMessage, Chip, ConversationSummary, Proposal, ProposalItem } from "@/lib/assistant/types";
 
 const PRIORITY = ["", "низкий", "средний", "высокий"];
@@ -260,7 +262,7 @@ function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { m
     return (
       <div className="mt-2 flex items-center gap-2 rounded-2xl bg-elevated py-1.5 pr-1.5 pl-3 text-[0.8125rem]" role="status">
         <Clock className="size-4 shrink-0 text-accent" aria-hidden="true" />
-        <span className="min-w-0 flex-1">В очереди, попробую в {hm(message.queued.nextAt)}</span>
+        <span className="min-w-0 flex-1">{message.queued.offline ? "Спрошу, когда появится связь" : `В очереди, попробую в ${hm(message.queued.nextAt)}`}</span>
         <button type="button" onClick={onCancel} className="h-8 shrink-0 rounded-full px-3 text-muted">
           Отменить
         </button>
@@ -274,7 +276,12 @@ function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { m
         Повторить
       </button>
       {canQueue ? (
-        <button type="button" onClick={onPostpone} className="flex h-9 items-center gap-1.5 rounded-full bg-elevated px-3 text-[0.8125rem]" title="Сервер будет спрашивать модели сам до суток; ответ появится здесь и в колокольчике">
+        <button
+          type="button"
+          onClick={onPostpone}
+          className="flex h-9 items-center gap-1.5 rounded-full bg-elevated px-3 text-[0.8125rem]"
+          title={message.offline ? "Вопрос сохранится на устройстве и уйдёт, когда появится связь; ответ придёт в колокольчик" : "Сервер будет спрашивать модели сам до суток; ответ появится здесь и в колокольчике"}
+        >
           <Clock className="size-3.5" aria-hidden="true" />
           Отложить
         </button>
@@ -305,6 +312,7 @@ export function AssistView({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const online = useOnline();
   const [consent, setConsent] = useState<{ provider: AiWhich; retry: string | null } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<ConversationSummary[] | null>(null);
@@ -405,6 +413,16 @@ export function AssistView({
   async function send(text: string, retryOf?: string) {
     const question = text.trim();
     if (!question || busy) return;
+    if (!online) {
+      // No network: nothing is sent; «Отложить» keeps the question until the connection is back.
+      setDraft("");
+      setMessages((list) => [
+        ...list,
+        { id: uid(), role: "user", text: question, at: Date.now() },
+        { id: uid(), role: "assistant", text: "Нет сети. Помощник доступен при подключении.", at: Date.now(), error: true, retryable: true, offline: true },
+      ]);
+      return;
+    }
     setDraft("");
     setBusy(true);
     const localUser: ChatMessage = { id: uid(), role: "user", text: question, at: Date.now() };
@@ -512,6 +530,14 @@ export function AssistView({
 
   /** «Отложить»: the server keeps trying for up to a day; the answer lands here and in the bell. */
   async function postpone(message: ChatMessage) {
+    if (message.offline) {
+      const index = messages.findIndex((m) => m.id === message.id);
+      const question = index > 0 ? messages[index - 1] : undefined;
+      if (question?.role !== "user") return;
+      const item = await queueOfflineQuestion(question.text, conversationId);
+      setMessages((list) => list.map((m) => (m.id === message.id ? { ...m, queued: { id: item.id, nextAt: 0, offline: true } } : m)));
+      return;
+    }
     if (!conversationId) return;
     try {
       const item = await assistantApi.enqueue(conversationId, message.id);
@@ -523,9 +549,10 @@ export function AssistView({
 
   async function cancelQueued(message: ChatMessage) {
     if (!message.queued) return;
-    const { id } = message.queued;
+    const { id, offline } = message.queued;
     setMessages((list) => list.map((m) => (m.id === message.id ? { ...m, queued: undefined } : m)));
-    await assistantApi.cancelQueued(id).catch(() => undefined);
+    if (offline) await cancelOfflineQuestion(id);
+    else await assistantApi.cancelQueued(id).catch(() => undefined);
   }
 
   function toggleVoice() {
@@ -650,7 +677,7 @@ export function AssistView({
                   {m.chips?.length && !m.error && m.id === messages.at(-1)?.id ? <ChipRow chips={m.chips} disabled={busy} onChip={(chip) => takeChip(m, chip)} /> : null}
                   {m.source && !m.error && (m.text || m.proposals?.length) ? <p className="mt-1 truncate text-[0.6875rem] text-muted/80">{m.source}</p> : null}
                   {m.error && !busy && m.id === messages.at(-1)?.id ? (
-                    <FailedActions message={m} canQueue={Boolean(m.retryable && conversationId)} onRetry={() => retry(m)} onPostpone={() => void postpone(m)} onCancel={() => void cancelQueued(m)} />
+                    <FailedActions message={m} canQueue={Boolean(m.retryable && (conversationId || m.offline))} onRetry={() => retry(m)} onPostpone={() => void postpone(m)} onCancel={() => void cancelQueued(m)} />
                   ) : null}
                 </li>
               ),
@@ -669,7 +696,13 @@ export function AssistView({
           void send(draft);
         }}
       >
-        {chips.length > 0 && !busy ? (
+        {!online ? (
+          <p className="mb-1.5 flex items-center justify-center gap-1.5 text-xs text-muted" role="status">
+            <CloudOff className="size-3.5" aria-hidden="true" />
+            Помощник доступен при подключении
+          </p>
+        ) : null}
+        {chips.length > 0 && !busy && online ? (
           <div className="mb-1.5 flex flex-wrap gap-1.5" aria-label="Подсказки">
             {chips.map((chip) => (
               <button
