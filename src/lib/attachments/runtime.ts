@@ -24,8 +24,46 @@ import {
   type UploadQueue,
 } from "./queue";
 
-export const ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf";
-const ACCEPTED = new Set(ACCEPT.split(","));
+/** Extension → canonical type. The server re-checks every file by its bytes. */
+const BY_EXT: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  odt: "application/vnd.oasis.opendocument.text",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+  csv: "text/csv",
+  txt: "text/plain",
+  rtf: "application/rtf",
+};
+const ACCEPTED = new Set(Object.values(BY_EXT));
+export const ACCEPT = [...new Set([...Object.keys(BY_EXT).map((ext) => `.${ext}`), ...ACCEPTED])].join(",");
+const ACCEPT_HINT = "Только фото, PDF, документы и таблицы (DOC, DOCX, XLS, XLSX, ODT, ODS, CSV, TXT, RTF).";
+
+/** Picks the type from the extension for documents (phones often send an empty or generic type). */
+export function resolveMime(name: string, type: string): string | null {
+  const ext = /\.([a-z0-9]+)$/i.exec(name)?.[1]?.toLowerCase() ?? "";
+  const byExt = BY_EXT[ext];
+  const given = (type || "").toLowerCase();
+  if (given.startsWith("image/") && ACCEPTED.has(given)) return given;
+  return byExt ?? null;
+}
+
+export type FileKind = "image" | "pdf" | "text" | "sheet" | "doc";
+export function fileKind(mime: string): FileKind {
+  if (mime.startsWith("image/")) return "image";
+  if (mime === "application/pdf") return "pdf";
+  if (mime === "text/plain" || mime === "text/csv") return "text";
+  if (mime.includes("excel") || mime.includes("spreadsheet")) return "sheet";
+  return "doc";
+}
 const QUEUE_KEY = "uploads";
 const DELETES_KEY = "upload-deletes";
 
@@ -108,9 +146,9 @@ async function addFilesNow(files: File[], parent: { kind: ParentKind; id: string
   const added: AttachmentMeta[] = [];
   const rejected: { name: string; reason: string }[] = [];
   for (const file of files) {
-    const mime = (file.type || "").toLowerCase();
-    if (!ACCEPTED.has(mime) && mime !== "") {
-      rejected.push({ name: file.name, reason: "Только фото (JPEG, PNG, WebP, HEIC) и PDF." });
+    const mime = resolveMime(file.name || "", file.type);
+    if (!mime) {
+      rejected.push({ name: file.name, reason: ACCEPT_HINT });
       continue;
     }
     let shrunk;
@@ -120,9 +158,9 @@ async function addFilesNow(files: File[], parent: { kind: ParentKind; id: string
       rejected.push({ name: file.name, reason: "Не удалось прочитать файл." });
       continue;
     }
-    const finalMime = (shrunk.mime || mime || "application/octet-stream").toLowerCase();
+    const finalMime = mime.startsWith("image/") ? (shrunk.mime || mime).toLowerCase() : mime;
     if (!ACCEPTED.has(finalMime)) {
-      rejected.push({ name: file.name, reason: "Только фото (JPEG, PNG, WebP, HEIC) и PDF." });
+      rejected.push({ name: file.name, reason: ACCEPT_HINT });
       continue;
     }
     if (shrunk.blob.size > maxBytes) {
@@ -166,6 +204,19 @@ export function isPending(id: string): boolean {
 }
 
 /** Object URL for a file still on the device (null once uploaded). */
+/** Text of a text/CSV attachment: from the phone while pending, otherwise from the server. */
+export async function readText(id: string, maxChars = 200_000): Promise<string> {
+  const local = isPending(id) ? await store().get(blobKey(user(), id)).catch(() => null) : null;
+  let text: string;
+  if (local) text = await local.text();
+  else {
+    const res = await fetch(fileUrl(id), { credentials: "same-origin" });
+    if (!res.ok) throw new Error(String(res.status));
+    text = await res.text();
+  }
+  return text.length > maxChars ? `${text.slice(0, maxChars)}\n…` : text;
+}
+
 export async function localPreview(id: string): Promise<string | null> {
   const cached = previews.get(id);
   if (cached) return cached;

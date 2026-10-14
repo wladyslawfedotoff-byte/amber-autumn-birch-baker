@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, Image as ImageIcon, Paperclip, Trash2, Upload, X } from "lucide-react";
+import { File as FileIcon, FileSpreadsheet, FileText, Image as ImageIcon, Paperclip, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/hint";
 import { cn } from "@/lib/cn";
@@ -8,11 +8,13 @@ import {
   ACCEPT,
   addFiles,
   deleteFile,
+  fileKind,
   fileUrl,
   isPending,
   localPreview,
   online,
   pendingCountFor,
+  readText,
   useUploads,
 } from "@/lib/attachments/runtime";
 import { useCapabilities } from "@/lib/use-capabilities";
@@ -42,7 +44,37 @@ function Thumb({ item }: { item: AttachmentMeta }) {
     };
   }, [item.id, item.mime, pending]);
   if (src) return <img src={src} alt="" className="size-full object-cover" />;
-  return item.mime === "application/pdf" ? <FileText className="size-6 text-muted" /> : <ImageIcon className="size-6 text-muted" />;
+  return <KindIcon mime={item.mime} />;
+}
+
+function KindIcon({ mime }: { mime: string }) {
+  const kind = fileKind(mime);
+  const cls = "size-6 text-muted";
+  if (kind === "image") return <ImageIcon className={cls} />;
+  if (kind === "sheet") return <FileSpreadsheet className={cls} />;
+  if (kind === "pdf" || kind === "text") return <FileText className={cls} />;
+  return <FileIcon className={cls} />;
+}
+
+function TextPreview({ item }: { item: AttachmentMeta }) {
+  const [text, setText] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let gone = false;
+    readText(item.id)
+      .then((value) => !gone && setText(value))
+      .catch(() => !gone && setFailed(true));
+    return () => {
+      gone = true;
+    };
+  }, [item.id]);
+  if (failed) return <p className="rounded-lg bg-surface px-4 py-3 text-fg">Не удалось открыть файл.</p>;
+  if (text === null) return <div className="size-40 animate-pulse rounded-lg bg-elevated" />;
+  return (
+    <pre className="max-h-[75vh] w-[min(90vw,48rem)] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface p-4 text-left text-sm text-fg" aria-label={item.name}>
+      {text}
+    </pre>
+  );
 }
 
 export function AttachmentsBlock({
@@ -74,7 +106,7 @@ export function AttachmentsBlock({
     <section className="mt-3" aria-labelledby={`attach-${parentId}`}>
       <div className="flex items-center gap-2">
         <div id={`attach-${parentId}`}>
-          <FieldLabel hint="Фото с камеры или из галереи, PDF и сканы. Хранятся на вашем сервере. Без сети файл сначала остаётся на телефоне.">
+          <FieldLabel hint="Фото с камеры или из галереи, PDF, сканы, документы и таблицы (Word, Excel, OpenDocument, CSV, TXT). Хранятся на вашем сервере. Без сети файл сначала остаётся на телефоне.">
             Вложения
           </FieldLabel>
         </div>
@@ -164,9 +196,16 @@ export function AttachmentsBlock({
             {lightbox.mime.startsWith("image/") ? (
               <LightboxImage item={lightbox} />
             ) : (
-              <a href={isPending(lightbox.id) ? undefined : fileUrl(lightbox.id)} className="rounded-lg bg-surface px-4 py-3 text-fg" target="_blank" rel="noreferrer">
-                Открыть {lightbox.name}
-              </a>
+              <div className="flex flex-col items-center gap-3">
+                {fileKind(lightbox.mime) === "text" ? <TextPreview item={lightbox} /> : <p className="max-w-[80vw] truncate rounded-lg bg-surface px-4 py-2 text-fg">{lightbox.name}</p>}
+                {isPending(lightbox.id) ? (
+                  <span className="text-sm text-white/80">Ещё не отправлен — откроется после отправки.</span>
+                ) : (
+                  <a href={fileUrl(lightbox.id)} download={lightbox.name} className="rounded-lg bg-accent px-4 py-2 font-medium text-accent-fg" target="_blank" rel="noreferrer">
+                    Открыть
+                  </a>
+                )}
+              </div>
             )}
           </div>
         </div>

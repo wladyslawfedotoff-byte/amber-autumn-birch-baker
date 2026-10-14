@@ -9,7 +9,8 @@
 import { BodyTooLargeError, json, type ServerEvent } from "../../../lib/http.ts";
 import { log } from "../../../lib/log.ts";
 import { principalOf } from "../../../lib/principal.ts";
-import { attachConfig, isAllowedMime, sniffMatches } from "../../../lib/attachments/config.ts";
+import { attachConfig } from "../../../lib/attachments/config.ts";
+import { detectType, isInline } from "../../../lib/attachments/detect.ts";
 import { canAccessMeta, canAccessParent } from "../../../lib/attachments/access.ts";
 import { attachStore } from "../../../lib/attachments/store.ts";
 import { safeDisplayName, validAttachId } from "../../../lib/attachments/names.ts";
@@ -91,9 +92,12 @@ export default async function attachmentsApi(event: ServerEvent): Promise<Respon
       throw error;
     }
     if (!upload.ok) return json(upload.status, { error: upload.error, message: upload.message });
-    if (!isAllowedMime(upload.mime, config.allowed) || !sniffMatches(upload.bytes, upload.mime)) {
+    // The bytes decide the type; what the phone claims is ignored.
+    const detected = detectType(upload.bytes, upload.name);
+    if (!detected || !config.allowed.has(detected)) {
       return json(415, { error: "bad_type", message: "Этот тип файла не принимается." });
     }
+    upload.mime = detected;
     const access = await canAccessParent(user, { kind: upload.parentKind, id: upload.parentId });
     if (!access.ok) return json(access.reason === "not_found" ? 404 : 403, { error: access.reason });
 
@@ -122,15 +126,17 @@ export default async function attachmentsApi(event: ServerEvent): Promise<Respon
     if (!access.ok) return json(access.reason === "not_found" ? 404 : 403, { error: access.reason });
     const bytes = await store.readBytes(id);
     if (!bytes) return json(404, { error: "missing_file" });
-    const disposition = meta.mime.startsWith("image/") || meta.mime === "application/pdf" ? "inline" : "attachment";
+    const disposition = isInline(meta.mime) ? "inline" : "attachment";
     return new Response(Buffer.from(bytes), {
       status: 200,
       headers: {
-        "content-type": meta.mime,
+        "content-type": meta.mime.startsWith("text/") ? `${meta.mime}; charset=utf-8` : meta.mime,
         "content-length": String(bytes.byteLength),
         "content-disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
         "cache-control": "private, max-age=3600",
         "x-content-type-options": "nosniff",
+        // PDF viewers break under a sandbox; everything else gets it.
+        ...(meta.mime === "application/pdf" ? {} : { "content-security-policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox" }),
       },
     });
   }

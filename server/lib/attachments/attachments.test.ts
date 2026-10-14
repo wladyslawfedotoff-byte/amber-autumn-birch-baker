@@ -3,19 +3,16 @@ import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { attachConfig, isAllowedMime } from "./config.ts";
+import { attachConfig } from "./config.ts";
 import { resolveInside, safeDisplayName, validAttachId } from "./names.ts";
 import { AttachStore } from "./store.ts";
 
-test("config: ATTACH_MAX_MB and mime allowlist", () => {
+test("config: ATTACH_MAX_MB and ATTACH_ORPHAN_DAYS", () => {
   assert.equal(attachConfig({}).maxBytes, 25 * 1024 * 1024);
   assert.equal(attachConfig({ ATTACH_MAX_MB: "10" }).maxBytes, 10 * 1024 * 1024);
   assert.equal(attachConfig({ ATTACH_MAX_MB: "999" }).maxBytes, 25 * 1024 * 1024); // capped default
-  assert.equal(isAllowedMime("image/jpeg"), true);
-  assert.equal(isAllowedMime("image/jpeg; charset=binary"), true);
-  assert.equal(isAllowedMime("application/pdf"), true);
-  assert.equal(isAllowedMime("text/html"), false);
-  assert.equal(isAllowedMime("application/x-msdownload"), false);
+  assert.equal(attachConfig({}).orphanDays, 30);
+  assert.equal(attachConfig({ ATTACH_ORPHAN_DAYS: "7" }).orphanDays, 7);
 });
 
 test("ids and names refuse path traversal", () => {

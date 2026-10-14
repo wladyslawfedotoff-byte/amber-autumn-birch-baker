@@ -21,6 +21,8 @@ export type AttachMeta = {
   mime: string;
   size: number;
   createdAt: number;
+  /** Cleanup: first seen without task/project (ms). */
+  orphanSince?: number | null;
 };
 
 type MetaFile = { v: 1; items: Record<string, AttachMeta> };
@@ -48,6 +50,7 @@ function parse(raw: string): MetaFile {
         mime: item.mime,
         size: item.size,
         createdAt: typeof item.createdAt === "number" ? item.createdAt : 0,
+        ...(typeof item.orphanSince === "number" ? { orphanSince: item.orphanSince } : {}),
       };
     }
     return out;
@@ -111,6 +114,21 @@ export class AttachStore {
   async listFor(parent: AttachParent): Promise<AttachMeta[]> {
     const file = await this.exclusive(() => this.load());
     return Object.values(file.items).filter((item) => item.parent.kind === parent.kind && item.parent.id === parent.id);
+  }
+
+  async all(): Promise<AttachMeta[]> {
+    return Object.values((await this.exclusive(() => this.load())).items);
+  }
+
+  setOrphanSince(id: string, at: number | null): Promise<void> {
+    return this.exclusive(async () => {
+      const file = structuredClone(await this.load());
+      const meta = file.items[id];
+      if (!meta) return;
+      if (at === null) delete meta.orphanSince;
+      else meta.orphanSince = at;
+      await this.save(file);
+    });
   }
 
   filePath(id: string): string | null {
