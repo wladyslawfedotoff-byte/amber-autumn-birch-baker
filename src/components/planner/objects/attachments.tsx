@@ -14,9 +14,13 @@ import {
   localPreview,
   online,
   pendingCountFor,
+  photoStampOn,
   readText,
+  setPhotoStamp,
   useUploads,
 } from "@/lib/attachments/runtime";
+import { formatTakenAt } from "@/lib/attachments/exif";
+import { usePlanner } from "@/lib/planner-store";
 import { useCapabilities } from "@/lib/use-capabilities";
 
 function sizeLabel(bytes: number): string {
@@ -91,6 +95,7 @@ export function AttachmentsBlock({
   const uploads = useUploads();
   const [lightbox, setLightbox] = useState<AttachmentMeta | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [stamp, setStamp] = useState(() => photoStampOn());
   const pendingHere = pendingCountFor(uploads.queue, kind, parentId);
 
   const pick = async (list: FileList | null) => {
@@ -106,7 +111,7 @@ export function AttachmentsBlock({
     <section className="mt-3" aria-labelledby={`attach-${parentId}`}>
       <div className="flex items-center gap-2">
         <div id={`attach-${parentId}`}>
-          <FieldLabel hint="Фото с камеры или из галереи, PDF, сканы, документы и таблицы (Word, Excel, OpenDocument, CSV, TXT). Хранятся на вашем сервере. Без сети файл сначала остаётся на телефоне.">
+          <FieldLabel hint="Фото с камеры или из галереи (в том числе HEIC с iPhone — на сервере станет JPEG), PDF, сканы, документы и таблицы. Дата съёмки из EXIF показывается под фото. Без сети файл сначала остаётся на телефоне.">
             Вложения
           </FieldLabel>
         </div>
@@ -133,7 +138,7 @@ export function AttachmentsBlock({
                 <div className="mt-0.5 flex items-start gap-1">
                   <span className="min-w-0 flex-1 truncate text-[0.65rem] text-muted" title={item.name}>
                     {pending ? "на телефоне · " : ""}
-                    {item.name}
+                    {item.takenAt ? formatTakenAt(item.takenAt) : item.name}
                   </span>
                   <button
                     type="button"
@@ -178,6 +183,19 @@ export function AttachmentsBlock({
           <Upload className="size-4" aria-hidden="true" />
           Камера
         </Button>
+        <button
+          type="button"
+          className={cn("rounded-md px-2 py-1.5 text-xs", stamp ? "bg-accent/15 text-accent" : "text-muted")}
+          aria-pressed={stamp}
+          title="На новых фото в правом нижнем углу будет дата съёмки"
+          onClick={() => {
+            const next = !stamp;
+            setPhotoStamp(next);
+            setStamp(next);
+          }}
+        >
+          {stamp ? "Дата на фото: вкл" : "Дата на фото"}
+        </button>
       </div>
       {notice ? <p className="mt-1 text-xs text-muted">{notice}</p> : null}
 
@@ -227,7 +245,16 @@ function LightboxImage({ item }: { item: AttachmentMeta }) {
     };
   }, [item.id]);
   if (!src) return <div className="size-40 animate-pulse rounded-lg bg-elevated" />;
-  return <img src={src} alt={item.name} className="max-h-[80vh] max-w-full rounded-lg object-contain" />;
+  return (
+    <div className="relative">
+      <img src={src} alt={item.name} className="max-h-[80vh] max-w-full rounded-lg object-contain" />
+      {item.takenAt ? (
+        <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-black/55 px-2 py-0.5 text-[0.7rem] font-medium text-amber-200">
+          {formatTakenAt(item.takenAt)}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 /** Tiny chip used next to a checklist row for «до» / «после». */
@@ -246,6 +273,7 @@ export function PhotoSlot({
 }) {
   const input = useRef<HTMLInputElement>(null);
   const { attachMaxBytes } = useCapabilities();
+  const takenAt = usePlanner((s) => s.tasks.find((task) => task.id === parentId)?.attachments?.find((a) => a.id === attachId)?.takenAt);
   const [src, setSrc] = useState<string | null>(null);
   const [zoom, setZoom] = useState(false);
   useEffect(() => {
@@ -279,14 +307,18 @@ export function PhotoSlot({
       >
         {src ? <img src={src} alt="" className="size-full object-cover" /> : label}
       </button>
+      {takenAt ? <span className="max-w-[4.5rem] truncate text-center text-[0.55rem] leading-tight text-muted">{formatTakenAt(takenAt)}</span> : null}
       {attachId ? (
         <button type="button" className="text-[0.65rem] text-danger" onClick={() => onSet(null)}>
           убрать
         </button>
       ) : null}
       {zoom && src ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label={`Фото «${label}»`} onClick={() => setZoom(false)}>
-          <img src={src} alt={`Фото «${label}»`} className="max-h-[80vh] max-w-full rounded-lg object-contain" />
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-2 bg-black/70 p-4" role="dialog" aria-modal="true" aria-label={`Фото «${label}»`} onClick={() => setZoom(false)}>
+          <div className="relative" onClick={(event) => event.stopPropagation()}>
+            <img src={src} alt={`Фото «${label}»`} className="max-h-[80vh] max-w-full rounded-lg object-contain" />
+            {takenAt ? <span className="absolute bottom-2 right-2 rounded bg-black/55 px-2 py-0.5 text-[0.7rem] font-medium text-amber-200">{formatTakenAt(takenAt)}</span> : null}
+          </div>
         </div>
       ) : null}
       <input

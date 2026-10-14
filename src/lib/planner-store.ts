@@ -1,4 +1,5 @@
 import { create, type StateCreator } from "zustand";
+import { placeItem } from "@/lib/reorder";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { plannerStorage } from "@/lib/offline/device-store";
 import { syncNow } from "@/lib/sync/clock";
@@ -168,6 +169,8 @@ type PlannerState = {
   deleteSubtask: (taskId: string, subId: string) => void;
   /** Checklist: move an item up (-1) or down (+1). */
   moveSubtask: (taskId: string, subId: string, delta: -1 | 1) => void;
+  /** Drag-and-drop: put the checklist item at `toIndex`. */
+  placeSubtask: (taskId: string, subId: string, toIndex: number) => void;
   /** Checklist / task photo «до» or «после» (attachment id; null clears). */
   setPhotoSlot: (taskId: string, subId: string | null, slot: "before" | "after", attachId: string | null) => void;
   /** «Ждёт»: returns false when the link would form a cycle. */
@@ -175,6 +178,8 @@ type PlannerState = {
   /** File meta on a task or project (the bytes go to the NAS separately). */
   addAttachment: (kind: "task" | "project", parentId: string, meta: AttachmentMeta) => void;
   removeAttachment: (kind: "task" | "project", parentId: string, attachId: string) => void;
+  /** After upload the server may convert (HEIC → JPEG): update name/type/size. */
+  patchAttachment: (kind: "task" | "project", parentId: string, attachId: string, patch: Partial<Pick<AttachmentMeta, "name" | "mime" | "size">>) => void;
   addContact: (projectId: string, contact: Omit<ProjectContact, "id">) => string | null;
   updateContact: (projectId: string, contactId: string, patch: Partial<Omit<ProjectContact, "id">>) => void;
   deleteContact: (projectId: string, contactId: string) => void;
@@ -846,6 +851,10 @@ export const usePlanner = create<PlannerState>()(
             return { ...t, subtasks: subs };
           }),
         })),
+      placeSubtask: (taskId, subId, toIndex) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, subtasks: placeItem(t.subtasks ?? [], subId, toIndex) } : t)),
+        })),
       setPhotoSlot: (taskId, subId, slot, attachId) =>
         set((s) => ({
           tasks: s.tasks.map((t) => {
@@ -872,6 +881,14 @@ export const usePlanner = create<PlannerState>()(
               ? { ...item, attachments: [...(item.attachments ?? []), meta] }
               : item;
           return kind === "task" ? { tasks: s.tasks.map(add) } : { projects: (s.projects ?? []).map(add) };
+        }),
+      patchAttachment: (kind, parentId, attachId, patch) =>
+        set((s) => {
+          const edit = <T extends { id: string; attachments?: AttachmentMeta[] }>(item: T): T =>
+            item.id === parentId && item.attachments?.some((a) => a.id === attachId)
+              ? { ...item, attachments: item.attachments.map((a) => (a.id === attachId ? { ...a, ...patch, updatedAt: Date.now() } : a)) }
+              : item;
+          return kind === "task" ? { tasks: s.tasks.map(edit) } : { projects: (s.projects ?? []).map(edit) };
         }),
       removeAttachment: (kind, parentId, attachId) =>
         set((s) => {

@@ -14,6 +14,7 @@ export type QueuedUpload = {
   mime: string;
   size: number;
   createdAt: number;
+  takenAt?: number;
   attempts: number;
   retryAt: number | null;
   /** Last server error code (for UI). */

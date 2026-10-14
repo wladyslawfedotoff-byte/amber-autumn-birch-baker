@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Check, ChevronDown, ChevronUp, Copy, ListChecks, Plus, X } from "lucide-react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Check, ChevronDown, ChevronUp, Copy, GripVertical, ListChecks, Plus, X } from "lucide-react";
 import { PhotoSlot } from "@/components/planner/objects/attachments";
 import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/hint";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { dueLabel, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { Task } from "@/lib/planner-types";
+import { dropIndex, placeItem } from "@/lib/reorder";
 import { listInNotes, subtaskProgress } from "@/lib/task-tools";
 
 const field =
@@ -46,21 +47,69 @@ export function SubtasksBlock({ task }: { task: Task }) {
   const toggleSubtask = usePlanner((s) => s.toggleSubtask);
   const deleteSubtask = usePlanner((s) => s.deleteSubtask);
   const moveSubtask = usePlanner((s) => s.moveSubtask);
+  const placeSubtask = usePlanner((s) => s.placeSubtask);
   const setPhotoSlot = usePlanner((s) => s.setPhotoSlot);
   const [draft, setDraft] = useState("");
   const [photos, setPhotos] = useState(false);
-  const subs = task.subtasks ?? [];
+  const [drag, setDrag] = useState<{ id: string; order: string[] } | null>(null);
+  const real = task.subtasks ?? [];
+  const order = drag?.order ?? real.map((s) => s.id);
+  const byId = Object.fromEntries(real.map((s) => [s.id, s]));
+  const subs = order.map((id) => byId[id]).filter(Boolean) as typeof real;
   const progress = subtaskProgress(task);
   const commit = () => {
     if (!draft.trim()) return;
     addSubtask(task.id, draft);
     setDraft("");
   };
+  function beginDrag(event: ReactPointerEvent<HTMLElement>, id: string) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    try {
+      handle.setPointerCapture(event.pointerId);
+    } catch {
+      /* window listeners below still follow the finger */
+    }
+    const pointer = event.pointerId;
+    let next = real.map((s) => s.id);
+    setDrag({ id, order: next });
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointer) return;
+      ev.preventDefault();
+      const rows = [...document.querySelectorAll<HTMLElement>(`[data-sub-row="${task.id}"]`)];
+      const index = dropIndex(
+        ev.clientY,
+        rows.map((row) => {
+          const rect = row.getBoundingClientRect();
+          return { top: rect.top, height: rect.height };
+        }),
+      );
+      next = placeItem(
+        next.map((sid) => ({ id: sid })),
+        id,
+        index,
+      ).map((row) => row.id);
+      setDrag({ id, order: next });
+    };
+    const finish = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointer) return;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      setDrag(null);
+      const at = next.indexOf(id);
+      if (at >= 0 && next.join() !== real.map((s) => s.id).join()) placeSubtask(task.id, id, at);
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  }
   return (
     <section className="mt-3" aria-labelledby={`subtasks-${task.id}`} data-testid="checklist-block">
       <div className="flex items-center gap-2">
         <div id={`subtasks-${task.id}`}>
-          <FieldLabel hint="Шаги дела со счётчиком «0/2» в списке. Стрелки меняют порядок. Фото «до» и «после» — по желанию.">
+          <FieldLabel hint="Шаги дела со счётчиком «0/2» в списке. Потяните ⋮⋮ пальцем, чтобы поменять порядок (стрелки — для клавиатуры). Фото «до» и «после» — по желанию.">
             Чек-лист
           </FieldLabel>
         </div>
@@ -77,8 +126,22 @@ export function SubtasksBlock({ task }: { task: Task }) {
       ) : null}
       <ul className="mt-1">
         {subs.map((item, index) => (
-          <li key={item.id} className="border-b border-line/60 py-1 last:border-0">
+          <li
+            key={item.id}
+            data-sub-row={task.id}
+            className={cn("border-b border-line/60 py-1 last:border-0", drag?.id === item.id && "rounded-md bg-elevated shadow-md")}
+          >
             <div className="flex items-center gap-1">
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Перетащить «${item.title}»`}
+                title="Потяните, чтобы поменять порядок"
+                onPointerDown={(event) => beginDrag(event, item.id)}
+                className="drag-handle flex size-11 shrink-0 cursor-grab touch-none items-center justify-center text-subtle"
+              >
+                <GripVertical className="size-5" />
+              </span>
               <button
                 type="button"
                 aria-pressed={item.done}

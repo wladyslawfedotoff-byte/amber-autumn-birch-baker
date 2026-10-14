@@ -26,6 +26,8 @@ export type AttachmentMeta = {
   mime: string;
   size: number;
   createdAt: number;
+  /** Photo capture time (EXIF DateTimeOriginal, else upload time), ms. */
+  takenAt?: number;
   /** Sync stamp when the meta row itself changes. */
   updatedAt?: number;
 };

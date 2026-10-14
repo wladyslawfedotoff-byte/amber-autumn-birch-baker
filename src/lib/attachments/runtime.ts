@@ -7,6 +7,7 @@
 import { useSyncExternalStore } from "react";
 import { usePlanner } from "../planner-store";
 import type { AttachmentMeta } from "../planner-types";
+import { formatTakenAt, readTakenAt } from "./exif";
 import { getServerSyncStatus, subscribeServerSync } from "../server-sync";
 import { activeScope, readJson, writeJson } from "../offline/device-store";
 import { compressImage } from "./compress";
@@ -54,6 +55,33 @@ export function resolveMime(name: string, type: string): string | null {
   const given = (type || "").toLowerCase();
   if (given.startsWith("image/") && ACCEPTED.has(given)) return given;
   return byExt ?? null;
+}
+
+const STAMP_KEY = "pora-photo-stamp";
+/** «Дата на фото»: burn the capture date into new photos (per device). */
+export function photoStampOn(): boolean {
+  try {
+    return localStorage.getItem(STAMP_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+export function setPhotoStamp(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(STAMP_KEY, "1");
+    else localStorage.removeItem(STAMP_KEY);
+  } catch {
+    /* private mode */
+  }
+}
+
+/**
+ * EXIF has no zone: «14:30» means the phone's wall clock. readTakenAt
+ * returns it as if UTC; shift by the local offset so the caption shows 14:30.
+ */
+export function exifToInstant(wallAsUtc: number | null): number | null {
+  if (wallAsUtc === null) return null;
+  return wallAsUtc + new Date(wallAsUtc).getTimezoneOffset() * 60_000;
 }
 
 export type FileKind = "image" | "pdf" | "text" | "sheet" | "doc";
@@ -152,8 +180,13 @@ async function addFilesNow(files: File[], parent: { kind: ParentKind; id: string
       continue;
     }
     let shrunk;
+    let takenAt: number | undefined;
     try {
-      shrunk = await compressImage(file);
+      if (mime.startsWith("image/")) {
+        const head = new Uint8Array(await file.slice(0, 512 * 1024).arrayBuffer());
+        takenAt = exifToInstant(readTakenAt(head)) ?? (file.lastModified || Date.now());
+      }
+      shrunk = await compressImage(file, { stamp: takenAt !== undefined && photoStampOn() ? formatTakenAt(takenAt) : null });
     } catch {
       rejected.push({ name: file.name, reason: "Не удалось прочитать файл." });
       continue;
@@ -174,9 +207,9 @@ async function addFilesNow(files: File[], parent: { kind: ParentKind; id: string
       rejected.push({ name: file.name, reason: "Не хватило места на устройстве." });
       continue;
     }
-    const meta: AttachmentMeta = { id, name: shrunk.name, mime: finalMime, size: shrunk.blob.size, createdAt: Date.now() };
+    const meta: AttachmentMeta = { id, name: shrunk.name, mime: finalMime, size: shrunk.blob.size, createdAt: Date.now(), ...(takenAt !== undefined ? { takenAt } : {}) };
     // Always against the newest queue: the sender may have removed entries meanwhile.
-    await saveQueue(enqueue(state.queue, { id, parentKind: parent.kind, parentId: parent.id, name: meta.name, mime: meta.mime, size: meta.size, createdAt: meta.createdAt }));
+    await saveQueue(enqueue(state.queue, { id, parentKind: parent.kind, parentId: parent.id, name: meta.name, mime: meta.mime, size: meta.size, createdAt: meta.createdAt, ...(meta.takenAt !== undefined ? { takenAt: meta.takenAt } : {}) }));
     usePlanner.getState().addAttachment(parent.kind, parent.id, meta);
     added.push(meta);
   }
@@ -265,9 +298,19 @@ async function sendOne(): Promise<"done" | "idle" | "wait"> {
   form.set("parentKind", item.parentKind);
   form.set("parentId", item.parentId);
   form.set("id", item.id);
+  if (item.takenAt) form.set("takenAt", String(item.takenAt));
   try {
     const res = await fetch("/api/attachments", { method: "POST", body: form, credentials: "same-origin" });
     if (res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { item?: { name?: string; mime?: string; size?: number; takenAt?: number } };
+      const saved = body.item;
+      if (saved && (saved.mime !== item.mime || saved.name !== item.name)) {
+        usePlanner.getState().patchAttachment(item.parentKind, item.parentId, item.id, {
+          mime: saved.mime ?? item.mime,
+          name: saved.name ?? item.name,
+          size: saved.size ?? item.size,
+        });
+      }
       await saveQueue(remove(state.queue, item.id));
       revokePreview(item.id);
       await store().del(blobKey(user(), item.id)).catch(() => undefined);

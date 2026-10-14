@@ -21,7 +21,7 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/sync/merge.test.ts src/lib/sync/world.test.ts src/lib/sync/offline-merge.test.ts src/lib/offline/outbox.test.ts src/lib/offline/local-db.test.ts src/lib/dates.test.ts src/lib/task-tools.test.ts src/lib/task-done.test.ts src/lib/task-reset.test.ts src/lib/habit-stats.test.ts src/lib/habit-plan.test.ts src/lib/habit-view.test.ts src/lib/special-dates.test.ts src/lib/ui-prefs.test.ts src/lib/paste-lines.test.ts server/lib/sync-store.test.ts server/lib/auth.test.ts server/lib/pages.test.ts server/lib/http.test.ts server/lib/ai/ai.test.ts server/lib/ai/json-reply.test.ts server/lib/push/push.test.ts src/lib/assistant/apply.test.ts src/lib/assistant/markdown.test.ts src/lib/assistant/view.test.ts src/lib/assistant/suggest.test.ts src/lib/assistant/history.test.ts src/lib/task-deps.test.ts src/lib/attachments/queue.test.ts server/lib/attachments/attachments.test.ts server/lib/attachments/route.test.ts server/lib/attachments/detect.test.ts server/lib/attachments/cleanup.test.ts",
+    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/sync/merge.test.ts src/lib/sync/world.test.ts src/lib/sync/offline-merge.test.ts src/lib/offline/outbox.test.ts src/lib/offline/local-db.test.ts src/lib/dates.test.ts src/lib/task-tools.test.ts src/lib/task-done.test.ts src/lib/task-reset.test.ts src/lib/habit-stats.test.ts src/lib/habit-plan.test.ts src/lib/habit-view.test.ts src/lib/special-dates.test.ts src/lib/ui-prefs.test.ts src/lib/paste-lines.test.ts server/lib/sync-store.test.ts server/lib/auth.test.ts server/lib/pages.test.ts server/lib/http.test.ts server/lib/ai/ai.test.ts server/lib/ai/json-reply.test.ts server/lib/push/push.test.ts src/lib/assistant/apply.test.ts src/lib/assistant/markdown.test.ts src/lib/assistant/view.test.ts src/lib/assistant/suggest.test.ts src/lib/assistant/history.test.ts src/lib/task-deps.test.ts src/lib/attachments/queue.test.ts server/lib/attachments/attachments.test.ts server/lib/attachments/route.test.ts server/lib/attachments/detect.test.ts server/lib/attachments/cleanup.test.ts src/lib/attachments/exif.test.ts src/lib/reorder.test.ts server/lib/attachments/heic.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -61,6 +61,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.0.0",
+    "heic-convert": "^2.1.0",
     "jose": "6.2.9",
     "kysely": "^0.28.5",
     "lightningcss": "^1.28.0",

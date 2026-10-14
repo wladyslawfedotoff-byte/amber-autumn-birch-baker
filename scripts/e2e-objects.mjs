@@ -113,6 +113,63 @@ try {
   await page.locator('[data-testid="checklist-photos"] img').nth(1).waitFor({ timeout: 10_000 });
   await page.getByText("1 из 3").waitFor();
   ok("checklist 1/3, before/after photos, 4 files uploaded");
+
+  // 1b. Drag the first checklist item to the end by its handle (pointer events, like a finger).
+  const rowTitles = () => block.locator("[data-sub-row] button[aria-pressed] span:last-child").allTextContents();
+  const before = await rowTitles();
+  const handle = block.getByRole("button", { name: `Перетащить «${before[0]}»` });
+  const lastRow = block.locator("[data-sub-row]").nth(before.length - 1);
+  const h = await handle.boundingBox();
+  const l = await lastRow.boundingBox();
+  await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(h.x + h.width / 2, h.y + ((l.y + l.height - 4 - h.y) * i) / 8);
+  await shot(page, "08-checklist-dragging");
+  await page.mouse.up();
+  const after = await rowTitles();
+  if (after[after.length - 1] !== before[0] || after.length !== before.length) fail(`drag order: ${before} → ${after}`);
+  ok(`checklist drag: ${before.join(" / ")} → ${after.join(" / ")}`);
+
+  // 1c. Capture date from EXIF under before/after photos.
+  const photosRow = page.locator('[data-testid="checklist-photos"]').filter({ hasText: /08:30/ });
+  await photosRow.getByText(/08:30/).waitFor({ timeout: 5_000 });
+  await photosRow.getByText(/17:45/).waitFor({ timeout: 5_000 });
+  ok("before/after show EXIF capture time (08:30 / 17:45)");
+  await photosRow.scrollIntoViewIfNeeded();
+  await shot(page, "09-before-after-dates");
+  await photosRow.getByRole("button", { name: "до: открыть" }).click();
+  const zoom = page.getByRole("dialog", { name: "Фото «до»" });
+  await zoom.getByText(/08:30/).waitFor();
+  await shot(page, "10-before-lightbox-date");
+  await zoom.click({ position: { x: 5, y: 5 } });
+
+  // 1d. HEIC from a phone: server turns it into JPEG with a preview.
+  await page.getByLabel("Добавить вложение").setInputFiles(join(FILES, "sample.heic"));
+  await page.waitForFunction(() => !document.querySelector('[data-testid="attach-pending"]'), null, { timeout: 30_000 });
+  const heicTile = page.getByRole("button", { name: "sample.jpg", exact: true });
+  await heicTile.waitFor({ timeout: 15_000 });
+  await page.waitForFunction(() => {
+    const btn = [...document.querySelectorAll("button[aria-label]")].find((b) => b.getAttribute("aria-label") === "sample.jpg");
+    const img = btn?.querySelector("img");
+    return !!img && img.complete && img.naturalWidth > 0;
+  }, null, { timeout: 15_000 });
+  ok("HEIC uploaded → JPEG on the server, preview shown");
+
+  // 1e. Optional visible date stamp burnt into a new photo.
+  await page.getByRole("button", { name: "Дата на фото" }).click();
+  await page.getByLabel("Добавить вложение").setInputFiles(join(FILES, "site2.jpg"));
+  await page.waitForFunction(() => !document.querySelector('[data-testid="attach-pending"]'), null, { timeout: 20_000 });
+  await page.getByRole("button", { name: "Дата на фото: вкл" }).click(); // back off
+  await page.locator('section[aria-labelledby^="attach-"]').first().scrollIntoViewIfNeeded();
+  await shot(page, "11-attachments-heic-dates");
+  await page.getByRole("button", { name: "site2.jpg", exact: true }).click();
+  const stamped = page.getByRole("dialog", { name: "site2.jpg" });
+  await stamped.locator("img").waitFor();
+  await page.waitForTimeout(400);
+  await shot(page, "12-stamped-photo-lightbox");
+  await stamped.click({ position: { x: 10, y: 10 } });
+  await stamped.waitFor({ state: "detached" });
+  ok("date stamp option: photo uploaded with the date drawn in");
   await page.locator('[data-testid="checklist-block"]').scrollIntoViewIfNeeded();
   await shot(page, "01-task-checklist-before-after");
   await page.locator('section[aria-labelledby^="attach-"]').first().scrollIntoViewIfNeeded();

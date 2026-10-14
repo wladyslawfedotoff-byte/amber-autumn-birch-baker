@@ -10,7 +10,9 @@ import { BodyTooLargeError, json, type ServerEvent } from "../../../lib/http.ts"
 import { log } from "../../../lib/log.ts";
 import { principalOf } from "../../../lib/principal.ts";
 import { attachConfig } from "../../../lib/attachments/config.ts";
-import { detectType, isInline } from "../../../lib/attachments/detect.ts";
+import { MIME, detectType, isInline } from "../../../lib/attachments/detect.ts";
+import { heicToJpeg } from "../../../lib/attachments/heic.ts";
+import { readTakenAt } from "../../../../src/lib/attachments/exif.ts";
 import { canAccessMeta, canAccessParent } from "../../../lib/attachments/access.ts";
 import { attachStore } from "../../../lib/attachments/store.ts";
 import { safeDisplayName, validAttachId } from "../../../lib/attachments/names.ts";
@@ -18,7 +20,7 @@ import { safeDisplayName, validAttachId } from "../../../lib/attachments/names.t
 const MAX_FIELDS = 16;
 
 async function readUpload(req: Request, maxBytes: number): Promise<
-  | { ok: true; bytes: Uint8Array; name: string; mime: string; parentKind: "task" | "project"; parentId: string; id?: string }
+  | { ok: true; bytes: Uint8Array; name: string; mime: string; parentKind: "task" | "project"; parentId: string; id?: string; takenAt?: number }
   | { ok: false; status: number; error: string; message?: string }
 > {
   const type = (req.headers.get("content-type") ?? "").toLowerCase();
@@ -49,6 +51,9 @@ async function readUpload(req: Request, maxBytes: number): Promise<
   const mime = (file.type || "application/octet-stream").toLowerCase().split(";")[0]!.trim();
   const idRaw = form.get("id");
   const id = typeof idRaw === "string" && validAttachId(idRaw) ? idRaw : undefined;
+  const takenRaw = String(form.get("takenAt") ?? "");
+  const takenParsed = /^\d{10,13}$/.test(takenRaw) ? Number(takenRaw) : NaN;
+  const takenAt = Number.isFinite(takenParsed) ? takenParsed : undefined;
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (bytes.byteLength > maxBytes) return { ok: false, status: 413, error: "too_large" };
   return {
@@ -59,6 +64,7 @@ async function readUpload(req: Request, maxBytes: number): Promise<
     parentKind: parentKindRaw,
     parentId,
     id,
+    takenAt,
   };
 }
 
@@ -98,6 +104,17 @@ export default async function attachmentsApi(event: ServerEvent): Promise<Respon
       return json(415, { error: "bad_type", message: "Этот тип файла не принимается." });
     }
     upload.mime = detected;
+    if (detected === MIME.heic || detected === MIME.heif) {
+      const jpeg = await heicToJpeg(upload.bytes, upload.name);
+      if (jpeg.converted) {
+        log("info", "attach.heic_converted", { user: user.login, from: upload.bytes.byteLength, to: jpeg.bytes.byteLength });
+        upload.bytes = jpeg.bytes;
+        upload.mime = jpeg.mime;
+        upload.name = jpeg.name;
+      } else {
+        log("warn", "attach.heic_kept", { user: user.login, size: upload.bytes.byteLength, error: jpeg.error ?? "" });
+      }
+    }
     const access = await canAccessParent(user, { kind: upload.parentKind, id: upload.parentId });
     if (!access.ok) return json(access.reason === "not_found" ? 404 : 403, { error: access.reason });
 
@@ -106,6 +123,8 @@ export default async function attachmentsApi(event: ServerEvent): Promise<Respon
       if (existing && existing.owner !== user.login) return json(409, { error: "id_taken" });
     }
 
+    const fromExif = readTakenAt(upload.bytes);
+    const takenAt = upload.takenAt ?? (fromExif !== null ? fromExif + new Date(fromExif).getTimezoneOffset() * 60_000 : Date.now());
     const meta = await store.put({
       owner: user.login,
       parent: { kind: upload.parentKind, id: upload.parentId },
@@ -113,6 +132,7 @@ export default async function attachmentsApi(event: ServerEvent): Promise<Respon
       mime: upload.mime,
       bytes: upload.bytes,
       id: upload.id,
+      takenAt,
     });
     log("info", "attach.uploaded", { user: user.login, id: meta.id, size: meta.size, mime: meta.mime });
     return json(201, { item: meta });

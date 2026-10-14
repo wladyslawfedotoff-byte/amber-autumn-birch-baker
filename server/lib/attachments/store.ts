@@ -21,6 +21,8 @@ export type AttachMeta = {
   mime: string;
   size: number;
   createdAt: number;
+  /** Capture time (EXIF or upload), ms. */
+  takenAt?: number;
   /** Cleanup: first seen without task/project (ms). */
   orphanSince?: number | null;
 };
@@ -50,6 +52,7 @@ function parse(raw: string): MetaFile {
         mime: item.mime,
         size: item.size,
         createdAt: typeof item.createdAt === "number" ? item.createdAt : 0,
+        ...(typeof item.takenAt === "number" ? { takenAt: item.takenAt } : {}),
         ...(typeof item.orphanSince === "number" ? { orphanSince: item.orphanSince } : {}),
       };
     }
@@ -147,6 +150,7 @@ export class AttachStore {
     bytes: Uint8Array;
     id?: string;
     now?: number;
+    takenAt?: number;
   }): Promise<AttachMeta> {
     return this.exclusive(async () => {
       await this.ensure();
@@ -164,6 +168,7 @@ export class AttachStore {
         mime: input.mime,
         size: input.bytes.byteLength,
         createdAt: input.now ?? Date.now(),
+        ...(typeof input.takenAt === "number" && Number.isFinite(input.takenAt) ? { takenAt: input.takenAt } : {}),
       };
       const file = structuredClone(await this.load());
       file.items[id] = meta;
