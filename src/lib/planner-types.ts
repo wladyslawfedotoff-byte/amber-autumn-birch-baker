@@ -19,10 +19,39 @@ export type Shared = {
   aclAt?: number;
 };
 
+/** File linked to a task or project (bytes live on the NAS under /data/attachments). */
+export type AttachmentMeta = {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  createdAt: number;
+  /** Photo capture time (EXIF DateTimeOriginal, else upload time), ms. */
+  takenAt?: number;
+  /** Sync stamp when the meta row itself changes. */
+  updatedAt?: number;
+};
+
+export type ProjectContact = {
+  id: string;
+  name: string;
+  /** Role on the object («заказчик», «поставщик»). */
+  role?: string;
+  phone?: string;
+  email?: string;
+  note?: string;
+  updatedAt?: number;
+};
+
 export type Subtask = {
   id: string;
   title: string;
   done: boolean;
+  /** Attachment id: photo «до». */
+  beforeId?: string | null;
+  /** Attachment id: photo «после». */
+  afterId?: string | null;
+  updatedAt?: number;
 };
 
 export type Task = {
@@ -60,6 +89,15 @@ export type Task = {
   lastDue?: string | null;
   /** Colour from our 10-colour palette (see task-colors.ts). */
   color?: TaskColor | null;
+  /** Task-level photo «до» / «после» (attachment ids). */
+  beforeId?: string | null;
+  afterId?: string | null;
+  /** Files on this task (photos, PDF, scans). */
+  attachments?: AttachmentMeta[];
+  /** This task waits until `dependsOn` is done («Ждёт»). */
+  dependsOn?: string | null;
+  /** Contact from the project card linked to this task. */
+  contactId?: string | null;
   /** Sync stamp (ms, server-corrected clock). Missing on old data = 0. */
   updatedAt?: number;
 } & Shared;
@@ -199,8 +237,12 @@ export type Project = {
   start: string | null;
   end: string | null;
   stages: ProjectStage[];
+  /** People on the object (tap to call / write). */
+  contacts?: ProjectContact[];
+  /** Files on the project. */
+  attachments?: AttachmentMeta[];
   updatedAt?: number;
-};
+} & Shared;
 
 export type FocusClock = {
   mode: "work" | "break";

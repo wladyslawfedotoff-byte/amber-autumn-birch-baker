@@ -21,11 +21,11 @@ if [ "$(id -u)" = "0" ]; then
   APP_UID="${PUID:-$(id -u node)}"
   APP_GID="${PGID:-$(id -g node)}"
 
-  if ! mkdir -p "$DATA_DIR" "$DATA_DIR/backups" 2>/dev/null; then
+  if ! mkdir -p "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/attachments" "$DATA_DIR/attachments/files" 2>/dev/null; then
     log "WARN  entrypoint: cannot create $DATA_DIR — проверьте volume (./data:/data) / check the volume mount"
   fi
   # Only our own files; never recurse into anything else the user mounted.
-  for path in "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/pora.json" "$DATA_DIR/.session-secret" "$DATA_DIR/.session-epoch" "$DATA_DIR/users.json"; do
+  for path in "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/attachments" "$DATA_DIR/attachments/files" "$DATA_DIR/pora.json" "$DATA_DIR/.session-secret" "$DATA_DIR/.session-epoch" "$DATA_DIR/users.json" "$DATA_DIR/attachments/meta.json"; do
     [ -e "$path" ] || continue
     if ! chown "$APP_UID:$APP_GID" "$path" 2>/dev/null; then
       log "WARN  entrypoint: chown $APP_UID:$APP_GID $path failed"

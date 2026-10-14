@@ -10,6 +10,9 @@ import { TaskShareControls } from "@/components/planner/sharing";
 import { ColorPicker } from "@/components/planner/color-picker";
 import { PickerInput } from "@/components/planner/picker-input";
 import { DuplicateControls, NotesField, SubtasksBlock } from "@/components/planner/task-extras";
+import { AttachmentsBlock } from "@/components/planner/objects/attachments";
+import { ContactChip } from "@/components/planner/objects/contacts";
+import { DependsBlock } from "@/components/planner/objects/deps";
 import { cleanDates, dueLabel, repeatLabel, shiftIso, todayIso } from "@/lib/dates";
 import { colorHex, colorLabel } from "@/lib/task-colors";
 import { usePlanner } from "@/lib/planner-store";
@@ -89,6 +92,41 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
         <NotesField task={task} />
 
         <SubtasksBlock task={task} />
+
+        <AttachmentsBlock kind="task" parentId={task.id} items={task.attachments ?? []} />
+
+        <DependsBlock task={task} />
+
+        {(() => {
+          const contact = project?.contacts?.find((c) => c.id === task.contactId);
+          return contact ? (
+            <div className="mt-3">
+              <p className="mb-1 text-xs text-muted">Контакт</p>
+              <ContactChip contact={contact} />
+            </div>
+          ) : null;
+        })()}
+
+        {project && (project.contacts?.length ?? 0) > 0 ? (
+          <div className="mt-3">
+            <label className="block text-xs text-muted">
+              Связать с контактом проекта
+              <select
+                className="mt-1 h-11 w-full rounded-md border border-line bg-elevated px-3 text-base"
+                value={task.contactId ?? ""}
+                aria-label="Контакт проекта"
+                onChange={(event) => updateTask(task.id, { contactId: event.target.value || null })}
+              >
+                <option value="">Нет</option>
+                {(project.contacts ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.role ? ` · ${c.role}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : null}
 
         <RowGroup>
           <Row label="Дата" value={task.repeat === "dates" ? (task.due ? `ближайшая: ${dueLabel(task.due, today)}` : "по выбранным датам") : task.due ? dueLabel(task.due, today) : "Нет"} open={open === "date"} onClick={() => toggle("date")}>

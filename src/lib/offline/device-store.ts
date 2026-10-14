@@ -6,6 +6,7 @@
  */
 import type { StateStorage } from "zustand/middleware";
 import { idbKv, localStorageKv, memoryKv, scopeOf, scopedKey, wipeScope, writeQueue, type Kv } from "./local-db";
+import { idbBlobs, wipeBlobScope } from "../attachments/blob-store";
 
 const ACTIVE_KEY = "pora-active-user";
 const LEGACY_META_KEY = "pora-server-sync";
@@ -193,6 +194,14 @@ export async function wipeActiveScope(): Promise<void> {
     await wipeScope(backend(), scope);
   } catch {
     // ignore
+  }
+  // Photos and PDFs still waiting to be sent belong to this user too.
+  if (typeof indexedDB !== "undefined") {
+    try {
+      await wipeBlobScope(idbBlobs(), scope);
+    } catch {
+      // ignore
+    }
   }
   ls()?.removeItem(ACTIVE_KEY);
 }

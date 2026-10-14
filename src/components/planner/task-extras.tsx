@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { Check, Copy, ListChecks, Plus, X } from "lucide-react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Check, ChevronDown, ChevronUp, Copy, GripVertical, ListChecks, Plus, X } from "lucide-react";
+import { PhotoSlot } from "@/components/planner/objects/attachments";
 import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/hint";
 import { cn } from "@/lib/cn";
 import { dueLabel, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { Task } from "@/lib/planner-types";
+import { dropIndex, placeItem } from "@/lib/reorder";
 import { listInNotes, subtaskProgress } from "@/lib/task-tools";
 
 const field =
@@ -44,20 +46,71 @@ export function SubtasksBlock({ task }: { task: Task }) {
   const addSubtask = usePlanner((s) => s.addSubtask);
   const toggleSubtask = usePlanner((s) => s.toggleSubtask);
   const deleteSubtask = usePlanner((s) => s.deleteSubtask);
+  const moveSubtask = usePlanner((s) => s.moveSubtask);
+  const placeSubtask = usePlanner((s) => s.placeSubtask);
+  const setPhotoSlot = usePlanner((s) => s.setPhotoSlot);
   const [draft, setDraft] = useState("");
-  const subs = task.subtasks ?? [];
+  const [photos, setPhotos] = useState(false);
+  const [drag, setDrag] = useState<{ id: string; order: string[] } | null>(null);
+  const real = task.subtasks ?? [];
+  const order = drag?.order ?? real.map((s) => s.id);
+  const byId = Object.fromEntries(real.map((s) => [s.id, s]));
+  const subs = order.map((id) => byId[id]).filter(Boolean) as typeof real;
   const progress = subtaskProgress(task);
   const commit = () => {
     if (!draft.trim()) return;
     addSubtask(task.id, draft);
     setDraft("");
   };
+  function beginDrag(event: ReactPointerEvent<HTMLElement>, id: string) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    try {
+      handle.setPointerCapture(event.pointerId);
+    } catch {
+      /* window listeners below still follow the finger */
+    }
+    const pointer = event.pointerId;
+    let next = real.map((s) => s.id);
+    setDrag({ id, order: next });
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointer) return;
+      ev.preventDefault();
+      const rows = [...document.querySelectorAll<HTMLElement>(`[data-sub-row="${task.id}"]`)];
+      const index = dropIndex(
+        ev.clientY,
+        rows.map((row) => {
+          const rect = row.getBoundingClientRect();
+          return { top: rect.top, height: rect.height };
+        }),
+      );
+      next = placeItem(
+        next.map((sid) => ({ id: sid })),
+        id,
+        index,
+      ).map((row) => row.id);
+      setDrag({ id, order: next });
+    };
+    const finish = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointer) return;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      setDrag(null);
+      const at = next.indexOf(id);
+      if (at >= 0 && next.join() !== real.map((s) => s.id).join()) placeSubtask(task.id, id, at);
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  }
   return (
-    <section className="mt-3" aria-labelledby={`subtasks-${task.id}`}>
+    <section className="mt-3" aria-labelledby={`subtasks-${task.id}`} data-testid="checklist-block">
       <div className="flex items-center gap-2">
         <div id={`subtasks-${task.id}`}>
-          <FieldLabel hint="Разбейте дело на шаги: «Поездка» → «купить билеты», «забронировать отель». В списке появится счётчик «0/2». Можно вставить сразу несколько строк.">
-            Подзадачи
+          <FieldLabel hint="Шаги дела со счётчиком «0/2» в списке. Потяните ⋮⋮ пальцем, чтобы поменять порядок (стрелки — для клавиатуры). Фото «до» и «после» — по желанию.">
+            Чек-лист
           </FieldLabel>
         </div>
         {progress.total ? (
@@ -72,31 +125,66 @@ export function SubtasksBlock({ task }: { task: Task }) {
         </div>
       ) : null}
       <ul className="mt-1">
-        {subs.map((item) => (
-          <li key={item.id} className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-pressed={item.done}
-              aria-label={`${item.done ? "Снять отметку" : "Отметить"}: ${item.title}`}
-              onClick={() => toggleSubtask(task.id, item.id)}
-              className="flex h-11 min-w-0 flex-1 items-center gap-3 text-left text-sm"
-            >
+        {subs.map((item, index) => (
+          <li
+            key={item.id}
+            data-sub-row={task.id}
+            className={cn("border-b border-line/60 py-1 last:border-0", drag?.id === item.id && "rounded-md bg-elevated shadow-md")}
+          >
+            <div className="flex items-center gap-1">
               <span
-                className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-full border",
-                  item.done ? "border-accent bg-accent text-accent-fg" : "border-line",
-                )}
+                role="button"
+                tabIndex={0}
+                aria-label={`Перетащить «${item.title}»`}
+                title="Потяните, чтобы поменять порядок"
+                onPointerDown={(event) => beginDrag(event, item.id)}
+                className="drag-handle flex size-11 shrink-0 cursor-grab touch-none items-center justify-center text-subtle"
               >
-                {item.done ? <Check className="size-3" strokeWidth={3} /> : null}
+                <GripVertical className="size-5" />
               </span>
-              <span className={item.done ? "text-subtle line-through" : "text-fg"}>{item.title}</span>
-            </button>
-            <Button size="icon" variant="ghost" aria-label={`Удалить подзадачу ${item.title}`} onClick={() => deleteSubtask(task.id, item.id)}>
-              <X className="size-4" />
-            </Button>
+              <button
+                type="button"
+                aria-pressed={item.done}
+                aria-label={`${item.done ? "Снять отметку" : "Отметить"}: ${item.title}`}
+                onClick={() => toggleSubtask(task.id, item.id)}
+                className="flex h-11 min-w-0 flex-1 items-center gap-3 text-left text-sm"
+              >
+                <span
+                  className={cn(
+                    "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                    item.done ? "border-accent bg-accent text-accent-fg" : "border-line",
+                  )}
+                >
+                  {item.done ? <Check className="size-3" strokeWidth={3} /> : null}
+                </span>
+                <span className={item.done ? "text-subtle line-through" : "text-fg"}>{item.title}</span>
+              </button>
+              <div className="flex shrink-0 flex-col">
+                <button type="button" aria-label="Выше" disabled={index === 0} className="p-0.5 text-subtle disabled:opacity-30" onClick={() => moveSubtask(task.id, item.id, -1)}>
+                  <ChevronUp className="size-3.5" />
+                </button>
+                <button type="button" aria-label="Ниже" disabled={index === subs.length - 1} className="p-0.5 text-subtle disabled:opacity-30" onClick={() => moveSubtask(task.id, item.id, 1)}>
+                  <ChevronDown className="size-3.5" />
+                </button>
+              </div>
+              <Button size="icon" variant="ghost" aria-label={`Удалить подзадачу ${item.title}`} onClick={() => deleteSubtask(task.id, item.id)}>
+                <X className="size-4" />
+              </Button>
+            </div>
+            {photos ? (
+              <div className="mb-1 ml-8 flex gap-3" data-testid="checklist-photos">
+                <PhotoSlot label="до" attachId={item.beforeId} parentId={task.id} subId={item.id} onSet={(id) => setPhotoSlot(task.id, item.id, "before", id)} />
+                <PhotoSlot label="после" attachId={item.afterId} parentId={task.id} subId={item.id} onSet={(id) => setPhotoSlot(task.id, item.id, "after", id)} />
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
+      {subs.length ? (
+        <button type="button" className="mt-1 text-xs text-muted underline-offset-2 hover:underline" onClick={() => setPhotos((v) => !v)} aria-pressed={photos}>
+          {photos ? "Скрыть фото до/после" : "Фото до / после"}
+        </button>
+      ) : null}
       <form
         className="mt-1 flex gap-2"
         onSubmit={(event) => {
