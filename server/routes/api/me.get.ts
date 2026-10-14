@@ -2,6 +2,7 @@ import { json, type ServerEvent } from "../../lib/http.ts";
 import { principalOf } from "../../lib/principal.ts";
 import { hasInAppPassword } from "../../lib/user-store.ts";
 import { aiEnabled, readAiConfig } from "../../lib/ai/config.ts";
+import { attachConfig } from "../../lib/attachments/config.ts";
 
 /** Who is signed in (+ the profiles one can share with). Requires a session (01.auth). */
 export default function me(event: ServerEvent): Response {
@@ -16,5 +17,7 @@ export default function me(event: ServerEvent): Response {
     dataOwner: user.owner,
     passwordInApp: hasInAppPassword(user.login),
     assistant: aiEnabled(readAiConfig()),
+    /** Upload ceiling for attachments (ATTACH_MAX_MB). */
+    attachMaxBytes: attachConfig().maxBytes,
   });
 }

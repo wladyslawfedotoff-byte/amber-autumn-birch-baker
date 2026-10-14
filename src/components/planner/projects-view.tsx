@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { CalendarRange, ChevronLeft, ChevronRight, MoreHorizontal, Plus, X } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, Lock, MoreHorizontal, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineHint } from "@/components/ui/hint";
 import { Sheet } from "@/components/ui/sheet";
@@ -10,6 +10,9 @@ import { formatRange, formatShortDay } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { Project, ProjectCard } from "@/lib/planner-types";
 import { projectProgress } from "@/lib/projects";
+import { AttachmentsBlock } from "@/components/planner/objects/attachments";
+import { ContactsBlock } from "@/components/planner/objects/contacts";
+import { isBlocked } from "@/lib/task-deps";
 
 function spanLabel(project: Project): string {
   if (project.start && project.end) return formatRange(project.start, project.end);
@@ -136,6 +139,7 @@ function DateRows({ start, end, onStart, onEnd }: { start: string; end: string; 
 function ProjectBoard({ project, onBack }: { project: Project; onBack: () => void }) {
   const updateProject = usePlanner((s) => s.updateProject);
   const deleteProject = usePlanner((s) => s.deleteProject);
+  const tasks = usePlanner((s) => s.tasks);
   const addStage = usePlanner((s) => s.addStage);
   const renameStage = usePlanner((s) => s.renameStage);
   const deleteStage = usePlanner((s) => s.deleteStage);
@@ -225,6 +229,9 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
         Потяните карточку в другой этап. Название этапа можно изменить, нажав на него. Карточки на последнем этапе считаются готовыми.
       </InlineHint>
 
+      <ContactsBlock projectId={project.id} contacts={project.contacts ?? []} />
+      <AttachmentsBlock kind="project" parentId={project.id} items={project.attachments ?? []} />
+
       <div ref={scrollerRef} className="no-scrollbar -mx-4 mt-1 flex snap-x snap-mandatory scroll-px-4 items-start gap-2 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
         {project.stages.map((stage) => (
           <section
@@ -256,7 +263,12 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
               {stage.cards.map((card) => (
                 <li key={card.id}>
                   <div className="drag-handle flex items-start rounded-lg bg-elevated pl-2.5" onPointerDown={(event) => beginCard(event, card, stage.id)}>
-                    <p className="min-w-0 flex-1 py-2 text-[0.9375rem] leading-snug">{card.title}</p>
+                    <p className="min-w-0 flex-1 py-2 text-[0.9375rem] leading-snug">
+                      {card.taskId && isBlocked(tasks.find((item) => item.id === card.taskId) ?? { dependsOn: null, done: false }, tasks) ? (
+                        <Lock className="mr-1 inline size-3.5 text-warn" aria-label="Ждёт другого дела" />
+                      ) : null}
+                      {card.title}
+                    </p>
                     <button
                       type="button"
                       data-nodrag=""

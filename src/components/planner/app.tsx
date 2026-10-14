@@ -25,6 +25,7 @@ import type { View } from "@/lib/planner-types";
 import { scopeTasks } from "@/lib/queries";
 import { useProfile } from "@/lib/use-capabilities";
 import { bindServerSync } from "@/lib/server-sync";
+import { bindAttachments } from "@/lib/attachments/runtime";
 import { hasSavedPlanner, initScope, markLoaded } from "@/lib/offline/device-store";
 import { registerServiceWorker } from "@/lib/offline/sw-client";
 import { refreshPushSubscription } from "@/lib/offline/push-client";
@@ -118,6 +119,7 @@ export function PlannerApp() {
 
   useEffect(() => {
     let stop = () => {};
+    let stopAttach = () => {};
     let cancelled = false;
     // This user's local copy (IndexedDB), chosen before anything is read.
     const switched = initScope();
@@ -125,12 +127,16 @@ export function PlannerApp() {
       const pristine = !(await hasSavedPlanner("srok-planner"));
       await usePlanner.persist.rehydrate();
       markLoaded();
-      if (!cancelled) stop = bindServerSync({ pristine, switched });
+      if (!cancelled) {
+        stop = bindServerSync({ pristine, switched });
+        stopAttach = bindAttachments();
+      }
       void registerServiceWorker().then(() => refreshPushSubscription());
     })();
     return () => {
       cancelled = true;
       stop();
+      stopAttach();
     };
   }, []);
 

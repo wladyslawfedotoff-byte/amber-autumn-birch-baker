@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Archive, ChevronDown, ChevronRight, GripVertical, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, ChevronDown, ChevronRight, GripVertical, Lock, RotateCcw, Trash2 } from "lucide-react";
 import { TodayStrip, TodaySummary, WeekDays } from "@/components/planner/today-strip";
 import { AddTaskForm, TaskRow } from "@/components/planner/task-row";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { Empty } from "@/components/planner/empty-state";
 import { canBoard } from "@/lib/ui-prefs";
 import { cn } from "@/lib/cn";
 import { dueLabel, formatShortDay, shiftIso, todayIso, occursOn } from "@/lib/dates";
+import { hideBlockedIn, isBlocked } from "@/lib/task-deps";
+import { setShowBlocked, useShowBlocked } from "@/lib/use-show-blocked";
 import { usePlanner } from "@/lib/planner-store";
 import type { Priority, Task, View } from "@/lib/planner-types";
 import { byNewest, doneInScope, matchesQuery, scopeTasks } from "@/lib/queries";
@@ -57,7 +59,9 @@ export function TaskViews({
     ? tasks.filter((task) => matchesQuery(task, query, lists)).sort(byNewest)
     : [];
   const share = useShareScope();
-  const open = scopeTasks(tasks, view, today, share).sort(byNewest);
+  const showBlocked = useShowBlocked();
+  const open = scopeTasks(tasks, view, today, share, { showBlocked }).sort(byNewest);
+  const hiddenBlocked = showBlocked || !hideBlockedIn(view) ? 0 : scopeTasks(tasks, view, today, share, { showBlocked: true }).length - open.length;
   const done = doneInScope(tasks, view, today, share, { now, archiveDays });
   const currentList = view.startsWith("list:") ? lists.find((list) => list.id === view.slice(5)) : undefined;
   const doneBlock =
@@ -97,9 +101,24 @@ export function TaskViews({
     ) : null;
   const canAdd = !searching && view !== "done" && view !== "archive" && view !== "calendar" && view !== "focus" && view !== "habits";
 
+  const blockedToggle =
+    !searching && (hiddenBlocked > 0 || (showBlocked && hideBlockedIn(view) && open.some((task) => isBlocked(task, tasks)))) ? (
+      <button
+        type="button"
+        onClick={() => setShowBlocked(!showBlocked)}
+        aria-pressed={showBlocked}
+        className="mb-1 flex h-9 items-center gap-1.5 rounded-full px-2 text-xs text-muted hover:text-fg"
+        data-testid="blocked-toggle"
+      >
+        <Lock className="size-3.5" aria-hidden="true" />
+        {showBlocked ? "Скрыть ждущие" : `Ждут другого дела: ${hiddenBlocked} · показать`}
+      </button>
+    ) : null;
+
   return (
     <div>
       {currentList && !searching ? <ListShareBar list={currentList} /> : null}
+      {blockedToggle}
       {view === "shared" && !searching ? (
         <InlineHint label="Что сюда попадает" className="mb-1">
           Задачи, которые видите не только вы: совместные, назначенные и из общих списков. Поделиться — откройте задачу → «Совместная» или

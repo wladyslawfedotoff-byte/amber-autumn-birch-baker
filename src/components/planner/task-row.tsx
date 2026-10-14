@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Lock, Paperclip, Plus } from "lucide-react";
 import { useState, type PointerEvent, type Ref } from "react";
 import { cn } from "@/lib/cn";
 import { dueLabel, repeatLabel, shiftIso, todayIso } from "@/lib/dates";
@@ -49,6 +49,12 @@ export function TaskRow({
   const addSubtask = usePlanner((s) => s.addSubtask);
   const subs = task.subtasks ?? [];
   const progress = subtaskProgress(task);
+  const blockedBy = usePlanner((s) => {
+    if (!task.dependsOn || task.done) return null;
+    const prereq = s.tasks.find((item) => item.id === task.dependsOn);
+    return prereq && !prereq.done ? prereq : null;
+  });
+  const files = (task.attachments ?? []).length;
   const [open, setOpen] = useSubtasksOpen(task.id, !task.done);
   const [step, setStep] = useState("");
   const preview = notesPreview(task.notes);
@@ -132,6 +138,18 @@ export function TaskRow({
                 <span key={tag}>#{tag}</span>
               ))}
               <ShareBadges task={task} />
+              {blockedBy ? (
+                <span className="flex min-w-0 items-center gap-0.5 text-warn" data-testid="blocked-badge">
+                  <Lock className="size-3 shrink-0" aria-hidden="true" />
+                  <span className="max-w-40 truncate">ждёт: {blockedBy.title}</span>
+                </span>
+              ) : null}
+              {files > 0 ? (
+                <span className="flex items-center gap-0.5" aria-label={`Вложений: ${files}`}>
+                  <Paperclip className="size-3" aria-hidden="true" />
+                  <span className="tabular-nums">{files}</span>
+                </span>
+              ) : null}
             </span>
           </button>
           {progress.total > 0 ? (

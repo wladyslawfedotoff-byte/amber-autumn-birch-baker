@@ -1,6 +1,7 @@
 import { isoFromTs, occursOn, shiftIso, taskDates } from "@/lib/dates";
 import { DEFAULT_ARCHIVE_DAYS, byCompleted, isArchived, repeatTickedOn } from "@/lib/task-done";
 import type { Task, TaskList, View } from "@/lib/planner-types";
+import { hideBlockedIn, isBlocked } from "@/lib/task-deps";
 
 /** Who owns it: items from before profiles belong to the server's APP_OWNER. */
 export function ownerOf(item: { owner?: string }, dataOwner: string): string {
@@ -20,26 +21,26 @@ function inRange(task: Task, from: string, to: string): boolean {
   return taskDates(task).some((date) => date >= from && date <= to);
 }
 
-export function countToday(tasks: Task[], today: string): number {
-  return tasks.filter((t) => !t.done && t.due != null && t.due <= today).length;
+export function countToday(tasks: Task[], today: string, showBlocked = false): number {
+  return tasks.filter((t) => !t.done && t.due != null && t.due <= today && (showBlocked || !isBlocked(t, tasks))).length;
 }
 
-export function countTomorrow(tasks: Task[], today: string): number {
+export function countTomorrow(tasks: Task[], today: string, showBlocked = false): number {
   const tomorrow = shiftIso(today, 1);
-  return tasks.filter((t) => !t.done && occursOn(t, tomorrow)).length;
+  return tasks.filter((t) => !t.done && occursOn(t, tomorrow) && (showBlocked || !isBlocked(t, tasks))).length;
 }
 
-export function countWeek(tasks: Task[], today: string): number {
+export function countWeek(tasks: Task[], today: string, showBlocked = false): number {
   const end = shiftIso(today, 6);
-  return tasks.filter((t) => !t.done && inRange(t, today, end)).length;
+  return tasks.filter((t) => !t.done && inRange(t, today, end) && (showBlocked || !isBlocked(t, tasks))).length;
 }
 
 export function countOpen(tasks: Task[]): number {
   return tasks.filter((t) => !t.done).length;
 }
 
-export function countInbox(tasks: Task[]): number {
-  return tasks.filter((t) => !t.done && t.listId == null).length;
+export function countInbox(tasks: Task[], showBlocked = false): number {
+  return tasks.filter((t) => !t.done && t.listId == null && (showBlocked || !isBlocked(t, tasks))).length;
 }
 
 export function countList(tasks: Task[], id: string): number {
@@ -48,9 +49,13 @@ export function countList(tasks: Task[], id: string): number {
 
 export type ShareScope = { lists: TaskList[]; me: string; dataOwner: string };
 
-export function scopeTasks(tasks: Task[], view: View, today: string, share?: ShareScope): Task[] {
+export type ScopeOptions = { showBlocked?: boolean };
+
+export function scopeTasks(tasks: Task[], view: View, today: string, share?: ShareScope, options?: ScopeOptions): Task[] {
   const end = shiftIso(today, 6);
+  const showBlocked = options?.showBlocked === true;
   return tasks.filter((t) => {
+    if (!showBlocked && hideBlockedIn(view) && isBlocked(t, tasks)) return false;
     if (view === "today") {
       if (t.done) return false;
       return t.due != null && t.due <= today;

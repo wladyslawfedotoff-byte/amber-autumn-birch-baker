@@ -25,11 +25,16 @@ function request<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
+const DB_VERSION = 2;
+const BLOBS = "blobs";
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      if (!db.objectStoreNames.contains(BLOBS)) db.createObjectStore(BLOBS);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);

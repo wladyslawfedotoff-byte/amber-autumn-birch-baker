@@ -18,10 +18,12 @@ export type Capabilities = {
   passwordInApp: boolean;
   /** Owner of items without `owner` (data from before profiles; APP_OWNER). */
   dataOwner: string;
+  /** Attachment size limit from the server (bytes). */
+  attachMaxBytes: number;
 };
 
 const CACHE_KEY = "pora-profile";
-const NONE: Capabilities = { assistant: false, login: "", name: "", multiUser: false, users: [], passwordInApp: false, dataOwner: "" };
+const NONE: Capabilities = { assistant: false, login: "", name: "", multiUser: false, users: [], passwordInApp: false, dataOwner: "", attachMaxBytes: 25 * 1024 * 1024 };
 let current: Capabilities = NONE;
 let started = false;
 let hydrated = false;
@@ -47,6 +49,7 @@ function parse(body: unknown): Capabilities | null {
     users,
     passwordInApp: b.passwordInApp === true,
     dataOwner: typeof b.dataOwner === "string" ? b.dataOwner : "",
+    attachMaxBytes: typeof b.attachMaxBytes === "number" && b.attachMaxBytes > 0 ? b.attachMaxBytes : 25 * 1024 * 1024,
   };
 }
 

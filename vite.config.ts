@@ -184,6 +184,9 @@ export default defineConfig(({ command, isPreview }) => ({
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
             serverDir: "./server",
+            // HEIC → JPEG decoder (libheif WASM) reads files next to itself:
+            // keep it in node_modules instead of bundling it.
+            traceDeps: ["heic-convert*", "heic-decode*", "libheif-js*"],
             // Baseline security headers for everything, including static
             // assets (Nitro serves those before server/middleware runs).
             // CSP and the rest are added by server/middleware/00.guard.ts.
