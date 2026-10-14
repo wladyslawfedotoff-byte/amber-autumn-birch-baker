@@ -1,0 +1,166 @@
+import { useState } from "react";
+import { Mail, MessageSquare, Phone, Plus, Trash2, UserRound } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { FieldLabel } from "@/components/ui/hint";
+import { usePlanner } from "@/lib/planner-store";
+import type { ProjectContact } from "@/lib/planner-types";
+
+const field = "h-11 w-full rounded-md border border-line bg-elevated px-3 text-base text-fg outline-none placeholder:text-subtle";
+
+export function ContactsBlock({ projectId, contacts }: { projectId: string; contacts: ProjectContact[] }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const addContact = usePlanner((s) => s.addContact);
+  const updateContact = usePlanner((s) => s.updateContact);
+  const deleteContact = usePlanner((s) => s.deleteContact);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+
+  const save = () => {
+    const id = addContact(projectId, { name, role, phone, email, note });
+    if (!id) return;
+    setName("");
+    setRole("");
+    setPhone("");
+    setEmail("");
+    setNote("");
+    setOpen(false);
+  };
+
+  return (
+    <section className="mt-4" aria-labelledby={`contacts-${projectId}`} data-testid="project-contacts">
+      <div id={`contacts-${projectId}`}>
+        <FieldLabel hint="Люди на объекте: заказчик, поставщик, прораб. Нажмите на телефон — позвонить, на конверт — написать.">
+          Контакты
+        </FieldLabel>
+      </div>
+      <ul className="mt-2 space-y-2">
+        {contacts.map((contact) => (
+          <li key={contact.id} className="rounded-xl border border-line bg-elevated p-3">
+            <div className="flex items-start gap-2">
+              <UserRound className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                {editing === contact.id ? (
+                  <>
+                    <input
+                      value={contact.name}
+                      aria-label="Имя"
+                      onChange={(event) => updateContact(projectId, contact.id, { name: event.target.value })}
+                      className="w-full bg-transparent text-sm font-medium text-fg outline-none"
+                    />
+                    <input
+                      value={contact.role ?? ""}
+                      aria-label="Роль"
+                      placeholder="Роль: заказчик, поставщик…"
+                      onChange={(event) => updateContact(projectId, contact.id, { role: event.target.value })}
+                      className="mt-0.5 w-full bg-transparent text-xs text-muted outline-none placeholder:text-subtle"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <p className="truncate text-sm font-medium text-fg">{contact.name}</p>
+                    {contact.role ? <p className="truncate text-xs text-muted">{contact.role}</p> : null}
+                  </>
+                )}
+                {contact.note ? <p className="mt-1 text-xs text-muted">{contact.note}</p> : null}
+              </div>
+              <Button size="icon" variant="ghost" aria-label={`Удалить ${contact.name}`} onClick={() => deleteContact(projectId, contact.id)}>
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {contact.phone ? (
+                <>
+                  <a href={`tel:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3 text-sm text-fg">
+                    <Phone className="size-3.5" aria-hidden="true" />
+                    {contact.phone}
+                  </a>
+                  <a href={`sms:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3 text-sm text-fg" aria-label={`Сообщение ${contact.name}`}>
+                    <MessageSquare className="size-3.5" aria-hidden="true" />
+                    SMS
+                  </a>
+                </>
+              ) : null}
+              {contact.email ? (
+                <a href={`mailto:${contact.email}`} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3 text-sm text-fg">
+                  <Mail className="size-3.5" aria-hidden="true" />
+                  {contact.email}
+                </a>
+              ) : null}
+            </div>
+            <button type="button" className="mt-1 text-xs text-muted underline-offset-2 hover:underline" onClick={() => setEditing(editing === contact.id ? null : contact.id)}>
+              {editing === contact.id ? "Готово" : "Изменить"}
+            </button>
+            {editing === contact.id ? (
+            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+              <input
+                value={contact.phone ?? ""}
+                aria-label="Телефон"
+                placeholder="+7 …"
+                inputMode="tel"
+                onChange={(event) => updateContact(projectId, contact.id, { phone: event.target.value })}
+                className={field}
+              />
+              <input
+                value={contact.email ?? ""}
+                aria-label="Почта"
+                placeholder="user@example.com"
+                inputMode="email"
+                onChange={(event) => updateContact(projectId, contact.id, { email: event.target.value })}
+                className={field}
+              />
+            </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {open ? (
+        <form
+          className="mt-2 space-y-2 rounded-xl border border-line bg-elevated p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            save();
+          }}
+        >
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя — например, Пользователь 1" aria-label="Имя" className={field} required />
+          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Роль" aria-label="Роль" className={field} />
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Телефон" aria-label="Телефон" inputMode="tel" className={field} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Почта" aria-label="Почта" inputMode="email" className={field} />
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка" aria-label="Заметка" className={field} />
+          <div className="flex gap-2">
+            <Button type="submit" variant="primary" size="sm" disabled={!name.trim()}>
+              Сохранить
+            </Button>
+            <Button type="button" variant="soft" size="sm" onClick={() => setOpen(false)}>
+              Отмена
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <Button type="button" variant="soft" size="sm" className="mt-2" onClick={() => setOpen(true)}>
+          <Plus className="size-4" aria-hidden="true" />
+          Добавить контакт
+        </Button>
+      )}
+    </section>
+  );
+}
+
+/** Compact chip in task detail when a project contact is linked. */
+export function ContactChip({ contact }: { contact: ProjectContact }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line bg-elevated px-2.5 py-1 text-xs text-fg" data-testid="contact-chip">
+      <UserRound className="size-3.5 shrink-0 text-muted" aria-hidden="true" />
+      <span className="min-w-0 truncate font-medium">{contact.name}</span>
+      {contact.role ? <span className="truncate text-muted">· {contact.role}</span> : null}
+      {contact.phone ? (
+        <a href={`tel:${contact.phone.replace(/\s/g, "")}`} className="shrink-0 text-accent" aria-label={`Позвонить ${contact.name}`} onClick={(e) => e.stopPropagation()}>
+          <Phone className="size-3.5" />
+        </a>
+      ) : null}
+    </span>
+  );
+}

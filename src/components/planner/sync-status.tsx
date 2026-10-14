@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { applyUpdate, subscribeUpdate, updateReady } from "@/lib/offline/sw-client";
 import { useServerSyncStatus } from "@/lib/use-server-sync";
 import { pendingLabel } from "@/lib/offline/labels";
+import { useUploads } from "@/lib/attachments/runtime";
 
 /**
  * Header indicator for sync errors: the old cloud icon (opens «Подключение»).
@@ -30,9 +31,12 @@ export function SyncIndicator({ onOpen }: { onOpen: () => void }) {
 /** The pill row under the header (takes room only while it is shown). */
 export function SyncPill() {
   const status = useServerSyncStatus();
+  const uploads = useUploads();
   const update = useSyncExternalStore(subscribeUpdate, updateReady, () => false);
   const [hint, setHint] = useState(false);
   const offline = status.offline || status.phase === "offline";
+  const pendingFiles = uploads.queue.items.length;
+  const pendingTotal = status.pending + pendingFiles;
 
   useEffect(() => {
     if (!offline) setHint(false);
@@ -45,7 +49,7 @@ export function SyncPill() {
         <div role="status" className="flex h-7 items-center gap-1.5 rounded-full bg-elevated pr-0.5 pl-2.5 text-xs text-muted shadow-sm" data-testid="offline-pill">
           <CloudOff className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="whitespace-nowrap">
-            Нет сети{status.pending > 0 ? ` · ${pendingLabel(status.pending)}` : ""}
+            Нет сети{pendingTotal > 0 ? ` · ${pendingLabel(pendingTotal)}` : ""}
           </span>
           <button
             type="button"
@@ -61,7 +65,7 @@ export function SyncPill() {
         </div>
         {hint ? (
           <p className="mt-1 max-w-[17rem] rounded-xl bg-elevated px-3 py-2 text-center text-xs leading-snug text-muted shadow-sm">
-            Всё, что вы делаете без сети, сохраняется на этом устройстве и само уйдёт на сервер, когда связь появится. Помощник работает только при подключении.
+            Всё, что вы делаете без сети, сохраняется на этом устройстве и само уйдёт на сервер, когда связь появится. Фото и файлы тоже ждут отправки. Помощник работает только при подключении.
           </p>
         ) : null}
       </div>
@@ -71,6 +75,12 @@ export function SyncPill() {
       <div role="status" className="flex h-7 items-center gap-1.5 rounded-full bg-elevated px-2.5 text-xs text-ok shadow-sm" data-testid="synced-pill">
         <Check className="size-3.5" aria-hidden="true" />
         Синхронизировано
+      </div>
+    );
+  } else if (pendingFiles > 0) {
+    pill = (
+      <div role="status" className="flex h-7 items-center gap-1.5 rounded-full bg-elevated px-2.5 text-xs text-warn shadow-sm" data-testid="upload-pending-pill">
+        Ждут отправки · {pendingFiles}
       </div>
     );
   } else if (update) {

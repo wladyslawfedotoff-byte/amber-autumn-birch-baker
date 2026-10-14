@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Check, Copy, ListChecks, Plus, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, ListChecks, Plus, X } from "lucide-react";
+import { PhotoSlot } from "@/components/planner/objects/attachments";
 import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/hint";
 import { cn } from "@/lib/cn";
@@ -44,7 +45,10 @@ export function SubtasksBlock({ task }: { task: Task }) {
   const addSubtask = usePlanner((s) => s.addSubtask);
   const toggleSubtask = usePlanner((s) => s.toggleSubtask);
   const deleteSubtask = usePlanner((s) => s.deleteSubtask);
+  const moveSubtask = usePlanner((s) => s.moveSubtask);
+  const setPhotoSlot = usePlanner((s) => s.setPhotoSlot);
   const [draft, setDraft] = useState("");
+  const [photos, setPhotos] = useState(false);
   const subs = task.subtasks ?? [];
   const progress = subtaskProgress(task);
   const commit = () => {
@@ -53,11 +57,11 @@ export function SubtasksBlock({ task }: { task: Task }) {
     setDraft("");
   };
   return (
-    <section className="mt-3" aria-labelledby={`subtasks-${task.id}`}>
+    <section className="mt-3" aria-labelledby={`subtasks-${task.id}`} data-testid="checklist-block">
       <div className="flex items-center gap-2">
         <div id={`subtasks-${task.id}`}>
-          <FieldLabel hint="Разбейте дело на шаги: «Поездка» → «купить билеты», «забронировать отель». В списке появится счётчик «0/2». Можно вставить сразу несколько строк.">
-            Подзадачи
+          <FieldLabel hint="Шаги дела со счётчиком «0/2» в списке. Стрелки меняют порядок. Фото «до» и «после» — по желанию.">
+            Чек-лист
           </FieldLabel>
         </div>
         {progress.total ? (
@@ -72,31 +76,52 @@ export function SubtasksBlock({ task }: { task: Task }) {
         </div>
       ) : null}
       <ul className="mt-1">
-        {subs.map((item) => (
-          <li key={item.id} className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-pressed={item.done}
-              aria-label={`${item.done ? "Снять отметку" : "Отметить"}: ${item.title}`}
-              onClick={() => toggleSubtask(task.id, item.id)}
-              className="flex h-11 min-w-0 flex-1 items-center gap-3 text-left text-sm"
-            >
-              <span
-                className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-full border",
-                  item.done ? "border-accent bg-accent text-accent-fg" : "border-line",
-                )}
+        {subs.map((item, index) => (
+          <li key={item.id} className="border-b border-line/60 py-1 last:border-0">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-pressed={item.done}
+                aria-label={`${item.done ? "Снять отметку" : "Отметить"}: ${item.title}`}
+                onClick={() => toggleSubtask(task.id, item.id)}
+                className="flex h-11 min-w-0 flex-1 items-center gap-3 text-left text-sm"
               >
-                {item.done ? <Check className="size-3" strokeWidth={3} /> : null}
-              </span>
-              <span className={item.done ? "text-subtle line-through" : "text-fg"}>{item.title}</span>
-            </button>
-            <Button size="icon" variant="ghost" aria-label={`Удалить подзадачу ${item.title}`} onClick={() => deleteSubtask(task.id, item.id)}>
-              <X className="size-4" />
-            </Button>
+                <span
+                  className={cn(
+                    "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                    item.done ? "border-accent bg-accent text-accent-fg" : "border-line",
+                  )}
+                >
+                  {item.done ? <Check className="size-3" strokeWidth={3} /> : null}
+                </span>
+                <span className={item.done ? "text-subtle line-through" : "text-fg"}>{item.title}</span>
+              </button>
+              <div className="flex shrink-0 flex-col">
+                <button type="button" aria-label="Выше" disabled={index === 0} className="p-0.5 text-subtle disabled:opacity-30" onClick={() => moveSubtask(task.id, item.id, -1)}>
+                  <ChevronUp className="size-3.5" />
+                </button>
+                <button type="button" aria-label="Ниже" disabled={index === subs.length - 1} className="p-0.5 text-subtle disabled:opacity-30" onClick={() => moveSubtask(task.id, item.id, 1)}>
+                  <ChevronDown className="size-3.5" />
+                </button>
+              </div>
+              <Button size="icon" variant="ghost" aria-label={`Удалить подзадачу ${item.title}`} onClick={() => deleteSubtask(task.id, item.id)}>
+                <X className="size-4" />
+              </Button>
+            </div>
+            {photos ? (
+              <div className="mb-1 ml-8 flex gap-3" data-testid="checklist-photos">
+                <PhotoSlot label="до" attachId={item.beforeId} parentId={task.id} subId={item.id} onSet={(id) => setPhotoSlot(task.id, item.id, "before", id)} />
+                <PhotoSlot label="после" attachId={item.afterId} parentId={task.id} subId={item.id} onSet={(id) => setPhotoSlot(task.id, item.id, "after", id)} />
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
+      {subs.length ? (
+        <button type="button" className="mt-1 text-xs text-muted underline-offset-2 hover:underline" onClick={() => setPhotos((v) => !v)} aria-pressed={photos}>
+          {photos ? "Скрыть фото до/после" : "Фото до / после"}
+        </button>
+      ) : null}
       <form
         className="mt-1 flex gap-2"
         onSubmit={(event) => {

@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { plannerStorage } from "@/lib/offline/device-store";
 import { syncNow } from "@/lib/sync/clock";
 import { COLLECTIONS, emptyTombstones, stampCollection, type Tombstones } from "@/lib/sync/merge";
+import { safeDependsOn, wouldCycle } from "@/lib/task-deps";
 import { cleanDates, firstChosenDate, shiftIso, todayIso } from "@/lib/dates";
 import { currentLogin } from "@/lib/use-capabilities";
 import { parseQuick } from "@/lib/quick-add";
@@ -36,7 +37,9 @@ import type {
   MilestoneItemKind,
   MilestoneKind,
   Priority,
+  AttachmentMeta,
   Project,
+  ProjectContact,
   ProjectStage,
   Task,
   TaskList,
@@ -163,6 +166,18 @@ type PlannerState = {
   notesToSubtasks: (taskId: string) => number;
   toggleSubtask: (taskId: string, subId: string) => void;
   deleteSubtask: (taskId: string, subId: string) => void;
+  /** Checklist: move an item up (-1) or down (+1). */
+  moveSubtask: (taskId: string, subId: string, delta: -1 | 1) => void;
+  /** Checklist / task photo «до» or «после» (attachment id; null clears). */
+  setPhotoSlot: (taskId: string, subId: string | null, slot: "before" | "after", attachId: string | null) => void;
+  /** «Ждёт»: returns false when the link would form a cycle. */
+  setTaskDependsOn: (taskId: string, dependsOn: string | null) => boolean;
+  /** File meta on a task or project (the bytes go to the NAS separately). */
+  addAttachment: (kind: "task" | "project", parentId: string, meta: AttachmentMeta) => void;
+  removeAttachment: (kind: "task" | "project", parentId: string, attachId: string) => void;
+  addContact: (projectId: string, contact: Omit<ProjectContact, "id">) => string | null;
+  updateContact: (projectId: string, contactId: string, patch: Partial<Omit<ProjectContact, "id">>) => void;
+  deleteContact: (projectId: string, contactId: string) => void;
   addList: (name: string) => string;
   renameList: (id: string, name: string) => void;
   deleteList: (id: string) => void;
@@ -218,6 +233,16 @@ type PlannerState = {
   setFocusTask: (taskId: string | null) => void;
   tickFocus: () => boolean;
 };
+
+function cleanContact(input: Partial<Omit<ProjectContact, "id">>): Partial<Omit<ProjectContact, "id">> {
+  const out: Partial<Omit<ProjectContact, "id">> = {};
+  const field = (value: string | undefined, max: number) => (value === undefined ? undefined : value.trim().slice(0, max));
+  if (input.role !== undefined) out.role = field(input.role, 80);
+  if (input.phone !== undefined) out.phone = field(input.phone, 40)!.replace(/[^\d+()\-\s]/g, "");
+  if (input.email !== undefined) out.email = field(input.email, 160);
+  if (input.note !== undefined) out.note = field(input.note, 500);
+  return out;
+}
 
 function uid(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -744,7 +769,10 @@ export const usePlanner = create<PlannerState>()(
         set((s) => ({
           lists: s.lists.map((l) => (l.id === id ? { ...l, members: [...new Set(members)] } : l)),
         })),
-      deleteTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
+      deleteTask: (id) =>
+        set((s) => ({
+          tasks: s.tasks.filter((t) => t.id !== id).map((t) => (t.dependsOn === id ? { ...t, dependsOn: null } : t)),
+        })),
       addSubtask: (taskId, title) => {
         const titles = splitLines(title);
         if (!titles.length) return;
@@ -805,6 +833,98 @@ export const usePlanner = create<PlannerState>()(
               ? { ...t, subtasks: (t.subtasks ?? []).filter((sub) => sub.id !== subId) }
               : t,
           ),
+        })),
+      moveSubtask: (taskId, subId, delta) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== taskId) return t;
+            const subs = [...(t.subtasks ?? [])];
+            const from = subs.findIndex((sub) => sub.id === subId);
+            const to = from + delta;
+            if (from < 0 || to < 0 || to >= subs.length) return t;
+            [subs[from], subs[to]] = [subs[to]!, subs[from]!];
+            return { ...t, subtasks: subs };
+          }),
+        })),
+      setPhotoSlot: (taskId, subId, slot, attachId) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== taskId) return t;
+            const key = slot === "before" ? "beforeId" : "afterId";
+            if (!subId) return { ...t, [key]: attachId };
+            return {
+              ...t,
+              subtasks: (t.subtasks ?? []).map((sub) => (sub.id === subId ? { ...sub, [key]: attachId } : sub)),
+            };
+          }),
+        })),
+      setTaskDependsOn: (taskId, dependsOn) => {
+        const tasks = get().tasks;
+        if (dependsOn && wouldCycle(taskId, dependsOn, tasks)) return false;
+        const safe = safeDependsOn(taskId, dependsOn, tasks);
+        set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, dependsOn: safe } : t)) }));
+        return true;
+      },
+      addAttachment: (kind, parentId, meta) =>
+        set((s) => {
+          const add = <T extends { id: string; attachments?: AttachmentMeta[] }>(item: T): T =>
+            item.id === parentId && !(item.attachments ?? []).some((a) => a.id === meta.id)
+              ? { ...item, attachments: [...(item.attachments ?? []), meta] }
+              : item;
+          return kind === "task" ? { tasks: s.tasks.map(add) } : { projects: (s.projects ?? []).map(add) };
+        }),
+      removeAttachment: (kind, parentId, attachId) =>
+        set((s) => {
+          const drop = <T extends { id: string; attachments?: AttachmentMeta[] }>(item: T): T =>
+            item.id === parentId ? { ...item, attachments: (item.attachments ?? []).filter((a) => a.id !== attachId) } : item;
+          if (kind === "project") return { projects: (s.projects ?? []).map(drop) };
+          return {
+            tasks: s.tasks.map((t) => {
+              if (t.id !== parentId) return t;
+              const next = drop(t);
+              return {
+                ...next,
+                beforeId: next.beforeId === attachId ? null : next.beforeId,
+                afterId: next.afterId === attachId ? null : next.afterId,
+                subtasks: (next.subtasks ?? []).map((sub) =>
+                  sub.beforeId === attachId || sub.afterId === attachId
+                    ? { ...sub, beforeId: sub.beforeId === attachId ? null : sub.beforeId, afterId: sub.afterId === attachId ? null : sub.afterId }
+                    : sub,
+                ),
+              };
+            }),
+          };
+        }),
+      addContact: (projectId, contact) => {
+        const name = contact.name.trim().slice(0, 120);
+        if (!name) return null;
+        const id = uid();
+        set((s) => ({
+          projects: (s.projects ?? []).map((p) =>
+            p.id === projectId ? { ...p, contacts: [...(p.contacts ?? []), { ...cleanContact(contact), name, id }] } : p,
+          ),
+        }));
+        return id;
+      },
+      updateContact: (projectId, contactId, patch) =>
+        set((s) => ({
+          projects: (s.projects ?? []).map((p) =>
+            p.id === projectId
+              ? {
+                  ...p,
+                  contacts: (p.contacts ?? []).map((c) =>
+                    c.id === contactId ? { ...c, ...cleanContact(patch), name: (patch.name ?? c.name).trim().slice(0, 120) || c.name } : c,
+                  ),
+                }
+              : p,
+          ),
+        })),
+      deleteContact: (projectId, contactId) =>
+        set((s) => ({
+          projects: (s.projects ?? []).map((p) =>
+            p.id === projectId ? { ...p, contacts: (p.contacts ?? []).filter((c) => c.id !== contactId) } : p,
+          ),
+          tasks: s.tasks.map((t) => (t.contactId === contactId ? { ...t, contactId: null } : t)),
         })),
       addList: (name) => {
         const id = uid();

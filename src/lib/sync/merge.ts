@@ -127,10 +127,10 @@ export const NO_SPECIAL: EntitySpecial = { sets: [], keyed: [] };
  */
 export const ENTITY_SPECIAL: Record<Collection, EntitySpecial> = {
   lists: { sets: ["members"], keyed: [] },
-  tasks: { sets: ["tags", "repeatDates", "members"], keyed: ["subtasks"] },
+  tasks: { sets: ["tags", "repeatDates", "members"], keyed: ["subtasks", "attachments"] },
   habits: { sets: ["checks", "members"], keyed: ["log"] },
   milestones: { sets: ["members"], keyed: ["items"] },
-  projects: { sets: ["members"], keyed: [] },
+  projects: { sets: ["members"], keyed: ["contacts", "attachments"] },
 };
 
 function specialFor(special: EntitySpecial | Collection | undefined): EntitySpecial {
