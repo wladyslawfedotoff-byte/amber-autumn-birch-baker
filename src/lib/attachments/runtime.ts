@@ -7,7 +7,7 @@
 import { useSyncExternalStore } from "react";
 import { usePlanner } from "../planner-store";
 import type { AttachmentMeta } from "../planner-types";
-import { formatTakenAt, readTakenAt } from "./exif";
+import { readTakenAt } from "./exif";
 import { getServerSyncStatus, subscribeServerSync } from "../server-sync";
 import { activeScope, readJson, writeJson } from "../offline/device-store";
 import { compressImage } from "./compress";
@@ -55,24 +55,6 @@ export function resolveMime(name: string, type: string): string | null {
   const given = (type || "").toLowerCase();
   if (given.startsWith("image/") && ACCEPTED.has(given)) return given;
   return byExt ?? null;
-}
-
-const STAMP_KEY = "pora-photo-stamp";
-/** «Дата на фото»: burn the capture date into new photos (per device). */
-export function photoStampOn(): boolean {
-  try {
-    return localStorage.getItem(STAMP_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-export function setPhotoStamp(on: boolean): void {
-  try {
-    if (on) localStorage.setItem(STAMP_KEY, "1");
-    else localStorage.removeItem(STAMP_KEY);
-  } catch {
-    /* private mode */
-  }
 }
 
 /**
@@ -186,7 +168,7 @@ async function addFilesNow(files: File[], parent: { kind: ParentKind; id: string
         const head = new Uint8Array(await file.slice(0, 512 * 1024).arrayBuffer());
         takenAt = exifToInstant(readTakenAt(head)) ?? (file.lastModified || Date.now());
       }
-      shrunk = await compressImage(file, { stamp: takenAt !== undefined && photoStampOn() ? formatTakenAt(takenAt) : null });
+      shrunk = await compressImage(file);
     } catch {
       rejected.push({ name: file.name, reason: "Не удалось прочитать файл." });
       continue;
@@ -402,4 +384,11 @@ export function pendingCountFor(queue: UploadQueue, kind: ParentKind, id: string
 
 export function dismissUploadError(): void {
   setState({ lastError: null });
+}
+
+/** 1.9.1 dropped «Дата на фото»: forget the old per-device switch. */
+try {
+  if (typeof localStorage !== "undefined") localStorage.removeItem("pora-photo-stamp");
+} catch {
+  /* private mode */
 }
