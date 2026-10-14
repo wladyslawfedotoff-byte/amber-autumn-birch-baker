@@ -864,7 +864,7 @@ test("token economy: only the data and tools the question needs; short ids; max_
     // plan → today, overdue, free time today; tools for planning only
     assert.match(systems[1]!, /Задачи сегодня:\nt1 Отчёт за квартал \[Работа\] !2/);
     assert.match(systems[1]!, /Свободно \(09:00-18:00\): 10-12 пн: 10:00-18:00/);
-    assert.match(systems[1]!, /Инструменты: list_tasks [^\n]*; update_tasks [^\n]*; plan_day [^\n]*$/m);
+    assert.match(systems[1]!, /рабочие действия \(приложение выполняет их из actions\): list_tasks [^\n]*; update_tasks [^\n]*; plan_day [^\n]*$/m);
     assert.doesNotMatch(systems[1]!, /create_habits/);
     // create on a day → free time of that day, no task lists
     assert.match(systems[2]!, /Свободно: 10-13 вт: 09:00-10:00, 11:30-18:00/);
@@ -1110,7 +1110,7 @@ test("stream: tool calls with index, without index, arguments as an object, in a
 
 test("looksToolless: the phrases that mean the tools never reached the model", async () => {
   const { looksToolless } = await import("./agent.ts");
-  for (const text of ["Сейчас у меня нет доступа к нужным инструментам планировщика.", "Не могу вызвать инструмент free_slots", "Я добавил задачу «Купить молоко».", "I don't have access to the tools"]) assert.ok(looksToolless(text), text);
+  for (const text of ["Сейчас у меня нет доступа к нужным инструментам планировщика.", "Не могу вызвать инструмент free_slots", "Я добавил задачу «Купить молоко».", "I don't have access to the tools", "Доступ к команде создания задач не подключён"]) assert.ok(looksToolless(text), text);
   for (const text of ["Сегодня у вас 3 задачи.", "Вы добавили много дел — давайте разберём.", "Свободно с 9 до 12."]) assert.ok(!looksToolless(text), text);
 });
 
@@ -1230,4 +1230,99 @@ test("a question asked without network is queued once and answered in the backgr
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/* ---- 1.8.1: «что ты умеешь» and JSON-mode actions with a tool-less service ---- */
+
+const KIE_LIKE = { AI_PROVIDERS: "kieai", AI_KIEAI_BASE_URL: "https://api.example.com/v1", AI_KIEAI_API_KEY: KEY, AI_KIEAI_MODEL: "m-json", AI_KIEAI_TOOLS: "json", AI_KIEAI_REASONING_EFFORT: "low" };
+/** A service that ignores `tools` and answers with one plain (non-streamed) completion. */
+const plainReply = (content: string) => () => Response.json({ choices: [{ message: { content } }], usage: { total_tokens: 300 } });
+
+test("1.8.1: meta questions are answered by the app, without a model", async () => {
+  const { intentOf, isMetaQuestion } = await import("./context.ts");
+  for (const q of ["Что ты умеешь?", "что можешь делать", "Какие права тебе нужны?", "напиши какие задачи ты можешь сделать и какие права и команды тебе нужны чтоб я открыл доступ", "какие у тебя команды"]) {
+    assert.ok(isMetaQuestion(q), q);
+    assert.equal(intentOf(q, TODAY).kind, "about", q);
+  }
+  for (const q of ["добавь задачу купить хлеб завтра в 10", "что на сегодня?", "перенеси отчёт на пятницу", "напомни что ты умеешь готовить"]) assert.notEqual(intentOf(q, TODAY).kind, "about", q);
+
+  const dir = tmp();
+  const { fn, calls } = fakeFetch({ chat: [] });
+  const assistant = new Assistant({ config: readAiConfig(KIE_LIKE), fetchFn: fn, store: new AssistantStore(dir), loadData: async () => seed(), now: () => 1, usage: new UsageBook(null, () => 1), principal: () => user1 });
+  const events = await ask(assistant, "Что ты умеешь и какие права тебе нужны?");
+  const done = events.find((e) => e.type === "done") as Extract<ChatEvent, { type: "done" }>;
+  assert.ok(done, "answered");
+  assert.equal(done.message.provider, "app");
+  assert.equal(calls.filter((c) => c.url.endsWith("/chat/completions")).length, 0, "0 tokens: no model call");
+  assert.match(done.message.text, /^Умею:/);
+  assert.match(done.message.text, /открывать доступ не нужно/);
+  assert.doesNotMatch(done.message.text, /list_tasks|create_tasks|update_tasks|plan_day/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("1.8.1: JSON mode with a tool-less service still turns «добавь задачу» into a card", async () => {
+  const action = { reply: "Добавлю.", actions: [{ name: "create_tasks", arguments: { tasks: [{ title: "Купить хлеб", due: "2026-10-13", time: "10:00" }] } }] };
+  const { assistant, calls, dir, store } = makeAssistant(KIE_LIKE, { chat: [plainReply(JSON.stringify(action))] });
+  await store.setSettings("user1", { consent: "cloud" });
+  const events = await ask(assistant, "добавь задачу купить хлеб завтра в 10");
+  const sent = calls.find((c) => c.url.endsWith("/chat/completions"))!.body!;
+  assert.equal(sent.tools, undefined, "json mode: tools are never sent");
+  assert.equal(sent.reasoning_effort, "low");
+  const proposal = events.find((e) => e.type === "proposal") as Extract<ChatEvent, { type: "proposal" }>;
+  assert.ok(proposal, "a card is offered");
+  assert.equal(proposal.proposal.items[0]?.op, "create");
+  assert.equal((proposal.proposal.items[0] as { title: string }).title, "Купить хлеб");
+  assert.equal((proposal.proposal.items[0] as { start: string | null }).start, "10:00");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("1.8.1: the prompt says the actions work and forbids asking to open access", async () => {
+  const { systemPrompt } = await import("./agent.ts");
+  const ctx = { data: seed(), today: TODAY, now: "10:00", newId: () => "x" };
+  for (const json of [true, false]) {
+    const prompt = systemPrompt(ctx, { json });
+    assert.match(prompt, /подключены и работают/);
+    assert.match(prompt, /Никогда не проси открыть доступ/);
+  }
+  assert.match(systemPrompt(ctx, { json: true }), /рабочие действия \(приложение выполняет их из actions\)/);
+});
+
+test("1.8.1: a reply that names tools or asks to open access is replaced by the app's list", async () => {
+  const { leaksTools } = await import("./agent.ts");
+  assert.ok(leaksTools("Нужны list_tasks и create_tasks"));
+  assert.ok(leaksTools("Интеграция должна открыть доступ к задачам"));
+  assert.ok(leaksTools("Это перечень команд, заявленных в конфигурации планировщика"));
+  assert.ok(!leaksTools("На завтра две задачи."));
+  const leak = { reply: "Команды list_tasks, create_tasks заявлены в конфигурации; нужно открыть доступ.", actions: [] };
+  const { assistant, dir, store } = makeAssistant(KIE_LIKE, { chat: [plainReply(JSON.stringify(leak))] });
+  await store.setSettings("user1", { consent: "cloud" });
+  const events = await ask(assistant, "расскажи подробно про свою интеграцию");
+  const done = events.find((e) => e.type === "done") as Extract<ChatEvent, { type: "done" }>;
+  assert.match(done.message.text, /^Умею:/);
+  assert.doesNotMatch(done.message.text, /list_tasks|открыть доступ/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("1.8.1: JSON mode retries once when the model says «доступ не подключён» instead of create_tasks", async () => {
+  const refuse = { reply: "Доступ к команде создания задач не подключён. Интеграция должна открыть доступ.", actions: [] };
+  const ok = { reply: "Добавлю.", actions: [{ name: "create_tasks", arguments: { tasks: [{ title: "Купить хлеб", due: "2026-10-13", time: "10:00" }] } }] };
+  const { assistant, calls, dir, store } = makeAssistant(KIE_LIKE, { chat: [plainReply(JSON.stringify(refuse)), plainReply(JSON.stringify(ok))] });
+  await store.setSettings("user1", { consent: "cloud" });
+  const events = await ask(assistant, "добавь задачу купить хлеб завтра в 10");
+  assert.equal(calls.filter((c) => c.url.endsWith("/chat/completions")).length, 2, "one nudge retry");
+  const nudge = calls[1]!.body!.messages as { role: string; content: string }[];
+  assert.match(nudge.at(-1)!.content, /Действия уже подключены/);
+  const proposal = events.find((e) => e.type === "proposal") as Extract<ChatEvent, { type: "proposal" }>;
+  assert.ok(proposal, "card after retry");
+  assert.equal((proposal.proposal.items[0] as { title: string }).title, "Купить хлеб");
+  const done = events.find((e) => e.type === "done") as Extract<ChatEvent, { type: "done" }>;
+  assert.doesNotMatch(done.message.text, /не подключ|открыть доступ|create_tasks/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("1.8.1: leaksTools catches «доступ к команде … не подключён»", async () => {
+  const { leaksTools, looksToolless } = await import("./agent.ts");
+  const text = "Доступ к команде создания задач не подключён";
+  assert.ok(leaksTools(text));
+  assert.ok(looksToolless(text));
 });
