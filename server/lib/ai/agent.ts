@@ -8,7 +8,7 @@ import type { Proposal } from "../../../src/lib/assistant/types.ts";
 import type { ToolsMode } from "./config.ts";
 import { TOOL_SPECS, WRITE_TOOLS, runTool, type ToolContext } from "./tools.ts";
 import { ToolsUnsupportedError, type ChatFn, type ToolSpec, type WireMessage } from "./provider.ts";
-import { contextFor, intentOf, toolsFor, type Intent } from "./context.ts";
+import { CAPABILITIES, contextFor, intentOf, toolsFor, type Intent } from "./context.ts";
 import { ReplyStreamer, parseJsonReply } from "./json-reply.ts";
 import { log } from "../log.ts";
 
@@ -28,6 +28,7 @@ const CORE = [
   "Только данные ниже; id — как в них (t1…). Даты YYYY-MM-DD, время HH:mm.",
   "Название задачи: глагол в начале, кратко и конкретно («Позвонить в сервис — записаться на ТО»), детали — в notes/subtasks. План дня — только строки «HH:mm — задача».",
   "Изменения — только инструментами (карточка на подтверждение); не пиши, что уже сделал.",
+  "Инструменты подключены и работают — приложение выполняет их само. Чтобы добавить, перенести или закрыть задачу, положи действие в actions; не пиши, что доступа нет. Никогда не проси открыть доступ или права и не называй пользователю имена инструментов.",
 ].join("\n");
 
 /** Compact signatures for JSON mode (the full JSON schema would cost ~4× more). */
@@ -48,7 +49,7 @@ function jsonRules(tools: ToolSpec[]): string {
     'Ответ — ТОЛЬКО один JSON-объект, без ```, тегов и текста вокруг: {"reply":"текст","actions":[{"name":"…","arguments":{…}}]}',
     'Пример: {"reply":"Перенос на завтра.","actions":[{"name":"update_tasks","arguments":{"changes":[{"id":"t3","due":"2026-01-02"}]}}]}',
     "Данных ниже обычно хватает — отвечай сразу. Чтение нужно редко: тогда reply пустой, actions с чтением, ответ — следующим сообщением.",
-    `Инструменты: ${tools.map((t) => SIGNATURES[t.function.name] ?? t.function.name).join("; ")}`,
+    `Твои рабочие действия (приложение выполняет их из actions): ${tools.map((t) => SIGNATURES[t.function.name] ?? t.function.name).join("; ")}`,
   ].join("\n");
 }
 
@@ -87,6 +88,8 @@ const NO_TOOLS = new RegExp(
     "нет доступа к (нужным |необходимым )?(инструмент|функци|данн|задач|календар|планировщик|расписани)",
     "не (могу|удаётся|удается|получается) (вызвать|использовать|запустить|получить доступ|посмотреть|проверить|прочитать|увидеть)[^.]{0,40}(инструмент|функци|задач|данн|календар|расписани)",
     "инструмент[а-я]* (недоступн|не доступн|не работа|не подключ)",
+    "доступ к (команд|инструмент|функци)[а-я]* [^.]{0,40}не подключ",
+    "(команд|инструмент|функци)[а-я]* [^.]{0,40}(не подключ|недоступн|не доступн)",
     "(don't|do not|cannot|can't) (have )?access (to )?(the )?(tools|functions)",
     `\\b(${TOOL_NAMES})\\b`,
     "(^|[\\s,.])(я )?(добавил|создал|перен[её]с|отметил|запланировал|поставил|разбил)(а)?( |,)",
@@ -97,6 +100,30 @@ const NO_TOOLS = new RegExp(
 export function looksToolless(text: string): boolean {
   return NO_TOOLS.test(text);
 }
+
+/** A reply that names internal tools or asks the user to «open access»: never shown as is. */
+const LEAK = new RegExp(
+  [
+    `\\b(${TOOL_NAMES})\\b`,
+    "(открыть|открой|откройте|предоставить|выдать|дать) [^.]{0,40}(доступ|права|разрешени)",
+    "не подтвержден[а-я]*,? что [^.]{0,40}подключен",
+    "заявлен[а-я]* в конфигурац",
+    "доступ к (команд|инструмент|функци)[а-я]* [^.]{0,40}не подключ",
+    "(команд|инструмент|функци)[а-я]* [^.]{0,40}(не подключ|недоступн|не доступн)",
+    "интеграци[а-я]* [^.]*открыть доступ",
+  ].join("|"),
+  "i",
+);
+
+export function leaksTools(text: string): boolean {
+  return LEAK.test(text);
+}
+
+/** Intents that need a write card; a toolless prose answer is a failure, not a reply. */
+const WRITE_INTENTS = new Set(["create", "update", "complete", "breakdown", "plan", "habit"]);
+
+const NUDGE =
+  'Действия уже подключены. Ответь ОДНИМ JSON-объектом {"reply":"…","actions":[…]} и обязательно положи нужное действие в actions (например create_tasks). Не пиши про доступ, права или имена команд.';
 
 export type AgentResult = { text: string; proposals: Proposal[] };
 
@@ -121,6 +148,7 @@ export async function runAgent(options: {
   let jsonMode = mode === "json";
   let calledTools = false;
   let jsonReads = 0;
+  let jsonNudged = false;
   const proposals: Proposal[] = [];
   const question = [...options.history].reverse().find((m) => m.role === "user")?.text ?? "";
   const intent = options.intent ?? intentOf(question, ctx.today);
@@ -193,7 +221,18 @@ export async function runAgent(options: {
       round--;
       continue;
     }
-    const answer = parsed.reply.trim() || (writes.length ? "Проверьте карточку." : "");
+    // JSON mode and the model talked about tools / «нет доступа» instead of emitting actions.
+    const refused = !writes.length && (leaksTools(parsed.reply) || looksToolless(parsed.reply));
+    if (refused && WRITE_INTENTS.has(intent.kind) && !jsonNudged) {
+      jsonNudged = true;
+      if (streamer.shown) events.onReset?.();
+      messages.push({ role: "assistant", content: reply.content || parsed.reply }, { role: "user", content: NUDGE });
+      round--;
+      continue;
+    }
+    // Meta / general: show the app's own capability list (never tool names or «open access»).
+    const said = refused ? CAPABILITIES : parsed.reply.trim();
+    const answer = said || (writes.length ? "Проверьте карточку." : "");
     if (!answer) {
       if (streamer.shown) events.onReset?.();
       break;

@@ -10,7 +10,7 @@ import { TOOL_SPECS, TASKS, brief, freeSlots, plural, tasksOf, type TaskLike, ty
 import type { ToolSpec } from "./provider.ts";
 import type { AnswerView, Chip, Proposal, ProposalItem } from "../../../src/lib/assistant/types.ts";
 
-export type IntentKind = "overdue" | "today" | "free" | "plan" | "create" | "update" | "complete" | "breakdown" | "habit" | "general";
+export type IntentKind = "about" | "overdue" | "today" | "free" | "plan" | "create" | "update" | "complete" | "breakdown" | "habit" | "general";
 export type Intent = { kind: IntentKind; dates: string[]; local: boolean };
 
 const WEEKDAYS_SHORT = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
@@ -56,6 +56,15 @@ export function datesIn(question: string, today: string): string[] {
   return out.sort();
 }
 
+/** A question about the assistant itself, not about the user's tasks. */
+const META = /(что ты (умеешь|можешь)|что умеешь|что можешь делать|чем (ты )?(можешь )?помочь|твои (возможности|функции|команды)|какие (у тебя )?(есть )?(возможности|функции|команды|инструменты|права)|(права|доступ|разрешени)[а-я]* (тебе )?нужн|нужн[а-я]* (тебе )?(права|доступ|разрешени)|открыть (тебе )?доступ|открыл[а-я]* (тебе )?доступ|какие (у тебя )?права|кто ты|что ты такое)/;
+const ACT = /(добавь|создай|запиши|напомни|перенеси|сдвинь|отметь|закрой|разбей|спланируй|распланируй)/;
+
+export function isMetaQuestion(question: string): boolean {
+  const q = question.toLowerCase().replace(/ё/g, "е");
+  return META.test(q) && !ACT.test(q);
+}
+
 /** What the user wants. `local` = this app can answer it alone. */
 export function intentOf(question: string, today: string): Intent {
   const q = question.toLowerCase().replace(/ё/g, "е").trim();
@@ -63,6 +72,8 @@ export function intentOf(question: string, today: string): Intent {
   // Just a lookup: one clause, no advice or follow-up asked for.
   const advice = /(почему|как |делать|совет|помоги|предлож|лучше|стоит|\sи\s+(что|как|поч|постав|добав|перенес|сдела|созд|запиш|скажи|предлож)|,\s*(а|и|потом)\s)/.test(q);
   const short = q.length <= 80 && !advice && !/\b(и|а также|потом|затем)\b.*\b(добав|перенес|созд|постав)/.test(q);
+  // «что ты умеешь», «какие права нужны»: the app answers itself (0 tokens).
+  if (isMetaQuestion(q)) return { kind: "about", dates: [], local: true };
   const writes = /(добав|создай|создать|запиши|напомни|перенеси|перенести|сдвинь|поменяй|измени|отметь|выполн|сделал|закрой|разбей|распиши|разложи|спланируй|распланируй|составь|расставь|поставь|привычк)/.test(q);
   if (/привычк/.test(q)) return { kind: "habit", dates, local: false };
   if (/(разбей|разложи|на шаги|подзадач)/.test(q)) return { kind: "breakdown", dates, local: false };
@@ -122,6 +133,8 @@ export function contextFor(intent: Intent, question: string, ctx: ToolContext): 
   const out: string[] = [];
   const hours = `${ctx.data.settings?.workStart ?? "09:00"}-${ctx.data.settings?.workEnd ?? "18:00"}`;
   switch (intent.kind) {
+    case "about":
+      break;
     case "overdue":
       out.push(...section(ctx, "Просрочено", overdue, 25));
       break;
@@ -162,6 +175,7 @@ export function contextFor(intent: Intent, question: string, ctx: ToolContext): 
 }
 
 const TOOLS_FOR: Record<IntentKind, string[] | null> = {
+  about: [],
   overdue: ["update_tasks", "complete_tasks"],
   today: ["update_tasks", "complete_tasks", "plan_day"],
   free: ["create_tasks", "plan_day"],
@@ -199,6 +213,19 @@ function dayName(day: string, today: string): string {
   return `${Number(day.slice(8))}.${day.slice(5, 7)} (${weekdayOf(day)})`;
 }
 
+/** What the assistant can do, in plain words (no tool names): answered by the app. */
+export const CAPABILITIES = [
+  "Умею:",
+  "- показать задачи на день, просроченные и свободные окна;",
+  "- добавить задачи с датой, временем, списком и подзадачами;",
+  "- перенести, переименовать, сменить список или приоритет;",
+  "- отметить задачи выполненными;",
+  "- спланировать день и разбить задачу на шаги;",
+  "- завести привычку.",
+  "",
+  "Всё уже подключено, открывать доступ не нужно. Изменения приходят карточкой — нажмите «Применить».",
+].join("\n");
+
 export type LocalAnswer = { text: string; view?: AnswerView; chips?: Chip[] };
 
 const MAX_ROWS = 20;
@@ -227,6 +254,8 @@ export function localAnswer(intent: Intent, ctx: ToolContext): LocalAnswer | nul
   const overdueRows = open.filter((t) => t.due !== null && t.due < today).sort(byDue);
   const chips = (list: (Chip | null)[]) => list.filter((c): c is Chip => c !== null);
   switch (intent.kind) {
+    case "about":
+      return { text: CAPABILITIES, chips: [ask("Что на сегодня?", "Что на сегодня?"), ask("Спланировать день", "Спланируй мой день")] };
     case "overdue": {
       const rows = overdueRows;
       if (!rows.length) return { text: "Просроченных задач нет.", chips: chips([ask("Что на сегодня?", "Что на сегодня?")]) };
