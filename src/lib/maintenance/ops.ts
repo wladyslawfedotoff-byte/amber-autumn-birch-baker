@@ -4,9 +4,10 @@
  */
 import type { RuleDraft } from "../assistant/types.ts";
 import type { Asset, AssetKind, KmReading, PainNote, ServiceEntry } from "../planner-types.ts";
-import { NAME_MAX, cleanTitle } from "../objects/links.ts";
-import { DEFAULT_SOON_DAYS, DEFAULT_SOON_KM, isIso, ruleState, worst, type MaintRule, type RuleState, type Status } from "./rules.ts";
-import { limitsOf } from "./plan.ts";
+import { NAME_MAX, cleanPhone, cleanTitle, normalizeUrl } from "../objects/links.ts";
+import { DEFAULT_SOON_DAYS, DEFAULT_SOON_KM, addDays, isIso, ruleState, worst, type MaintRule, type RuleState, type Status } from "./rules.ts";
+import { limitsOf, painRef, painTaskId, parsePainRef } from "./plan.ts";
+export { painRef, painTaskId, parsePainRef };
 
 export const KINDS: { id: AssetKind; label: string; icon: string }[] = [
   { id: "car", label: "Автомобиль", icon: "car" },
@@ -173,6 +174,48 @@ export function logService(asset: Asset, input: ServiceInput, ids: { entry: stri
   return { asset: next, entry };
 }
 
+/** Cars: the current mileage is the newest reading (after a reading or an entry was edited or removed). */
+function syncKm(asset: Asset): Asset {
+  const readings = asset.readings ?? [];
+  if (!readings.length) return asset;
+  const latest = readings.reduce((best, r) => (r.date >= best.date ? r : best));
+  return { ...asset, km: latest.km, kmAt: latest.date };
+}
+
+/**
+ * Edit an entry in place: every field, the rules it resets and (cars) the mileage it recorded.
+ * Cleared fields are written as explicit empty values (not removed), so that the clearing
+ * wins over the old value when two devices are merged.
+ */
+export function updateService(asset: Asset, entryId: string, input: ServiceInput, readingId: string): { asset: Asset; entry: ServiceEntry } | null {
+  const old = (asset.log ?? []).find((e) => e.id === entryId);
+  const title = text(input.title, 160);
+  if (!old || !title) return null;
+  const date = input.date && isIso(input.date) ? input.date : old.date;
+  const car = asset.kind === "car";
+  const km = car ? cleanNumber(input.km) : undefined;
+  const cost = cleanCost(input.cost);
+  const known = new Set((asset.rules ?? []).map((r) => r.id));
+  const ruleIds = input.ruleIds === undefined ? (old.ruleIds ?? []) : [...new Set(input.ruleIds.filter((id) => known.has(id)))];
+  const entry: ServiceEntry = {
+    ...old,
+    title,
+    date,
+    km: km ?? null,
+    cost: cost !== undefined && cost > 0 ? cost : null,
+    place: text(input.place, 120),
+    note: multiline(input.note, 1000),
+    ruleIds,
+  };
+  let readings = asset.readings ?? [];
+  // The reading this entry made goes away (or moves) with it.
+  if (old.km != null) readings = readings.filter((r) => !(r.date === old.date && r.km === old.km));
+  if (km !== undefined) readings = [...readings.filter((r) => r.date !== date), { id: readingId, date, km }];
+  let next: Asset = { ...asset, log: asset.log.map((e) => (e.id === entryId ? entry : e)), readings };
+  next = recomputeRules(syncKm(next));
+  return { asset: next, entry };
+}
+
 /** «Last done» of every rule = the newest log entry that names it (so deleting an entry restores the earlier state). */
 export function recomputeRules(asset: Asset): Asset {
   const rules = (asset.rules ?? []).map((rule) => {
@@ -190,8 +233,14 @@ export function recomputeRules(asset: Asset): Asset {
   return { ...asset, rules };
 }
 
+/** What hangs on a log entry or a note (files, links, contacts) goes with it. */
+function dropChildren(asset: Asset, parentId: string): Pick<Asset, "attachments" | "links" | "contacts"> {
+  const keep = <T extends { entryId?: string }>(list: T[] | undefined) => (list ?? []).filter((x) => x.entryId !== parentId);
+  return { attachments: keep(asset.attachments), links: keep(asset.links), contacts: keep(asset.contacts) };
+}
+
 export function removeEntry(asset: Asset, entryId: string): Asset {
-  return recomputeRules({ ...asset, log: (asset.log ?? []).filter((e) => e.id !== entryId), attachments: (asset.attachments ?? []).filter((a) => a.entryId !== entryId) });
+  return recomputeRules({ ...asset, log: (asset.log ?? []).filter((e) => e.id !== entryId), ...dropChildren(asset, entryId) });
 }
 
 export function removeRule(asset: Asset, ruleId: string): Asset {
@@ -202,10 +251,12 @@ export function removeRule(asset: Asset, ruleId: string): Asset {
   };
 }
 
-export function addPain(asset: Asset, textRaw: string, id: string, now: number): Asset | null {
+export function addPain(asset: Asset, textRaw: string, id: string, now: number, todoRaw?: string): Asset | null {
   const body = multiline(textRaw, 500);
   if (!body) return null;
   const pain: PainNote = { id, text: body, createdAt: now };
+  const todo = multiline(todoRaw, 500);
+  if (todo) pain.todo = todo;
   return { ...asset, pains: [...(asset.pains ?? []), pain] };
 }
 
@@ -213,8 +264,57 @@ export function setPainSolved(asset: Asset, painId: string, solved: boolean, now
   return { ...asset, pains: (asset.pains ?? []).map((p) => (p.id === painId ? { ...p, solvedAt: solved ? now : null } : p)) };
 }
 
+/** Links and contacts of a card (no `parentId`) or of one of its entries / notes. */
+export function addAssetLinkTo(asset: Asset, parentId: string | null, id: string, urlRaw: string, titleRaw?: string): Asset | null {
+  const url = normalizeUrl(urlRaw);
+  if (!url) return null;
+  const title = cleanTitle(titleRaw);
+  const link = { id, url, ...(title ? { title } : {}), ...(parentId ? { entryId: parentId } : {}) };
+  return { ...asset, links: [...(asset.links ?? []), link] };
+}
+
+export function addAssetContactTo(asset: Asset, parentId: string | null, id: string, contact: { name: string; phone?: string | null }): Asset | null {
+  const phone = cleanPhone(contact.phone);
+  const name = cleanTitle(contact.name).slice(0, NAME_MAX) || phone || "";
+  if (!name) return null;
+  const item = { id, name, ...(phone ? { phone } : {}), ...(parentId ? { entryId: parentId } : {}) };
+  return { ...asset, contacts: [...(asset.contacts ?? []), item] };
+}
+
+export function updatePain(asset: Asset, painId: string, textRaw: string, todoRaw?: string): Asset | null {
+  const body = multiline(textRaw, 500);
+  if (!body) return null;
+  // `todo` undefined = leave as is; "" = cleared (written as an explicit empty value so it wins on merge).
+  return { ...asset, pains: (asset.pains ?? []).map((p) => (p.id === painId ? { ...p, text: body, ...(todoRaw !== undefined ? { todo: multiline(todoRaw, 500) } : {}) } : p)) };
+}
+
+export type PainPlanInput = { date?: string | null; days?: number | string | null; km?: number | string | null };
+/**
+ * «Запланировать»: a day (or «через N дней») or a mileage (cars). Returns the
+ * values to store on the note, or null when the input says nothing usable.
+ */
+export function resolvePainPlan(asset: Asset, input: PainPlanInput, today: string): { planDate: string | null; planKm: number | null } | null {
+  if (input.date && isIso(input.date)) return { planDate: input.date < today ? today : input.date, planKm: null };
+  const days = cleanNumber(input.days, 3650);
+  if (days !== undefined && input.days !== null && input.days !== undefined && input.days !== "") return { planDate: addDays(today, Math.round(days)), planKm: null };
+  const km = cleanNumber(input.km);
+  if (asset.kind === "car" && km !== undefined && km > 0 && input.km !== null && input.km !== "") return { planDate: null, planKm: km };
+  return null;
+}
+
+/** Correct a mileage reading (e.g. a typo in an earlier month). */
+export function updateReading(asset: Asset, readingId: string, kmRaw: number | string): Asset | null {
+  const km = cleanNumber(kmRaw);
+  if (km === undefined || !(asset.readings ?? []).some((r) => r.id === readingId)) return null;
+  return syncKm({ ...asset, readings: asset.readings.map((r) => (r.id === readingId ? { ...r, km } : r)) });
+}
+
+export function removeReading(asset: Asset, readingId: string): Asset {
+  return syncKm({ ...asset, readings: (asset.readings ?? []).filter((r) => r.id !== readingId) });
+}
+
 export function removePain(asset: Asset, painId: string): Asset {
-  return { ...asset, pains: (asset.pains ?? []).filter((p) => p.id !== painId) };
+  return { ...asset, pains: (asset.pains ?? []).filter((p) => p.id !== painId), ...dropChildren(asset, painId) };
 }
 
 /* ---- summary for lists ----------------------------------------------------- */

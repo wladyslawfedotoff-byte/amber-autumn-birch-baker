@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildRule, createAsset, logService, setMileage } from "./ops.ts";
-import { kmTaskId, openTasksFor, planIsEmpty, planMaintenance, ruleTaskId } from "./plan.ts";
+import { addPain, buildRule, createAsset, logService, setMileage } from "./ops.ts";
+import { kmTaskId, openTasksFor, painTask, planIsEmpty, planMaintenance, ruleTaskId } from "./plan.ts";
 import type { Asset, Task } from "../planner-types.ts";
 
 const TODAY = "2026-10-14";
@@ -132,4 +132,35 @@ test("openTasksFor finds open reminder tasks of a card, a rule or the mileage", 
   assert.deepEqual(openTasksFor(tasks, "a1/r1"), ["1"]);
   assert.deepEqual(openTasksFor(tasks, "a1/").sort(), ["1", "2"]);
   assert.deepEqual(openTasksFor(tasks, "a1/km"), ["2"]);
+});
+
+test("planned pain note at N km: the task appears once, when the mileage is close", () => {
+  const base = { ...oilCar(80000), rules: [] as Asset["rules"] };
+  let a = addPain(base, "стук", "p1", 1, "заменить стойки")!;
+  a = { ...a, pains: a.pains.map((p) => ({ ...p, planKm: 81000, taskMade: false })) };
+  assert.ok(planIsEmpty(planMaintenance([a], [], TODAY, NOW)), "1 000 km left, not yet");
+  const near = setMileage(a, 80600, TODAY, "rd")!;
+  const plan = planMaintenance([near], [], TODAY, NOW);
+  assert.equal(plan.create.length, 1);
+  assert.equal(plan.create[0]!.id, "maintpain-p1");
+  assert.equal(plan.create[0]!.title, "заменить стойки — Легковая");
+  assert.equal(plan.create[0]!.maint, "a1/pain:p1");
+  assert.equal(plan.create[0]!.remindAt, "10:00");
+  assert.deepEqual(plan.painMade, [{ assetId: "a1", painId: "p1" }]);
+  // made once: a deleted task is not made again
+  const made = { ...near, pains: near.pains.map((p) => ({ ...p, taskMade: true })) };
+  assert.ok(planIsEmpty(planMaintenance([made], [], TODAY, NOW)));
+  // solved or without a mileage: nothing
+  assert.ok(planIsEmpty(planMaintenance([{ ...near, pains: near.pains.map((p) => ({ ...p, solvedAt: 5 })) }], [], TODAY, NOW)));
+});
+
+test("painTask: title uses «что сделать» (or the note), the note text goes into the task notes", () => {
+  const a = addPain(oilCar(), "стук спереди", "p1", 1, "заменить стойки")!;
+  const t = painTask(a, a.pains[0]!, "2026-10-20", NOW);
+  assert.equal(t.title, "заменить стойки — Легковая");
+  assert.equal(t.notes, "Что болит: стук спереди");
+  assert.equal(t.due, "2026-10-20");
+  assert.equal(t.remindAt, "09:00");
+  const plain = addPain(oilCar(), "стук спереди", "p2", 1)!;
+  assert.equal(painTask(plain, plain.pains[0]!, TODAY, NOW).title, "стук спереди — Легковая");
 });
