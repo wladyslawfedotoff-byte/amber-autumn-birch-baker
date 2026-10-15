@@ -26,6 +26,8 @@ export type SuggestInput = {
   draft: string;
   /** Title of the project the assistant was opened from, if any. */
   project?: string | null;
+  /** «Обслуживание»: cards with a rule overdue. */
+  maintOverdue?: number;
 };
 
 export const MAX_SUGGESTIONS = 3;
@@ -52,6 +54,9 @@ export function suggestChips(input: SuggestInput): Suggestion[] {
   }
   if (input.project) {
     out.push({ id: "project-steps", label: "Разбей проект на шаги", ask: `Разбей проект «${input.project}» на шаги` });
+  }
+  if ((input.maintOverdue ?? 0) > 0) {
+    out.push({ id: "maint", label: `Обслуживание: просрочено (${input.maintOverdue})`, ask: "Что по обслуживанию просрочено?" });
   }
   if (input.overdue > 0) {
     out.push({ id: "overdue", label: `Перенести просроченное (${input.overdue})`, ask: "Что у меня просрочено? Предложи, на когда перенести." });

@@ -1,6 +1,6 @@
 /**
  * Who may read or write an attachment: the signed-in user must see the
- * parent task or project (same ACL as /api/sync).
+ * parent task, project or «Обслуживание» card (same ACL as /api/sync).
  */
 import type { SyncData, SyncEntity } from "../../../src/lib/sync/merge.ts";
 import { canSee, type AclConfig } from "../../../src/lib/sync/world.ts";
@@ -24,13 +24,13 @@ async function loadView(user: Principal): Promise<{ data: SyncData; acl: AclConf
 }
 
 function findParent(data: SyncData, parent: AttachParent): SyncEntity | null {
-  const list = parent.kind === "task" ? data.tasks : data.projects;
+  const list = parent.kind === "task" ? data.tasks : parent.kind === "asset" ? (data.assets ?? []) : data.projects;
   return (list.find((item) => item.id === parent.id) as SyncEntity | undefined) ?? null;
 }
 
 function allowed(user: Principal, data: SyncData, acl: AclConfig | null, parent: AttachParent, entity: SyncEntity): boolean {
   if (!acl) return true;
-  const collection = parent.kind === "task" ? "tasks" : "projects";
+  const collection = parent.kind === "task" ? "tasks" : parent.kind === "asset" ? "assets" : "projects";
   return canSee(collection, entity, user.login, acl, new Map(data.lists.map((list) => [list.id, list])));
 }
 

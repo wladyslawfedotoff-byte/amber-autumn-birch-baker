@@ -11,6 +11,7 @@ export type TabId =
   | "focus"
   | "matrix"
   | "dates"
+  | "maintenance"
   | "checklist"
   | "inbox"
   | "projects"
@@ -28,6 +29,7 @@ export const TAB_OPTIONS: { id: TabId; label: string }[] = [
   { id: "focus", label: "Фокус" },
   { id: "matrix", label: "Матрица" },
   { id: "dates", label: "Даты" },
+  { id: "maintenance", label: "Обслуживание" },
   { id: "checklist", label: "Все" },
   { id: "inbox", label: "Входящие" },
   { id: "projects", label: "Проекты" },
@@ -122,6 +124,7 @@ export type NavId =
   | "focus"
   | "matrix"
   | "dates"
+  | "maintenance"
   | "checklist"
   | "inbox"
   | "tomorrow"
@@ -150,6 +153,7 @@ export const NAV_ITEMS: { id: NavId; label: string; tab: boolean; group: "views"
   { id: "focus", label: "Фокус", tab: true, group: "views" },
   { id: "matrix", label: "Матрица", tab: true, group: "views" },
   { id: "dates", label: "Даты", tab: true, group: "views" },
+  { id: "maintenance", label: "Обслуживание", tab: true, group: "views" },
   { id: "checklist", label: "Все", tab: true, group: "smart" },
   { id: "inbox", label: "Входящие", tab: true, group: "smart" },
   { id: "tomorrow", label: "Завтра", tab: true, group: "smart" },

@@ -3,7 +3,19 @@
  * proposals from the model's tool calls) and the app (it shows them and, after
  * «Применить», applies them through the normal store so they sync).
  */
-import type { HabitFreq, HabitSection, Priority } from "../planner-types.ts";
+import type { AssetKind, HabitFreq, HabitSection, Priority } from "../planner-types.ts";
+
+/** A maintenance rule as the assistant proposes it («Обслуживание»). */
+export type RuleDraft = {
+  title: string;
+  everyKm?: number | null;
+  everyMonths?: number | null;
+  fixedMonth?: number | null;
+  fixedDay?: number | null;
+  fixedYear?: number | null;
+  lastDoneAt?: string | null;
+  lastDoneKm?: number | null;
+};
 
 /** Which model answered: on the home PC or a cloud API. */
 export type AiWhich = "local" | "cloud";
@@ -40,7 +52,25 @@ export type ProposalItem =
     }
   | { op: "complete"; key: string; taskId: string; taskTitle: string }
   | { op: "subtasks"; key: string; taskId: string; taskTitle: string; steps: string[] }
-  | { op: "habit"; key: string; name: string; goal: number | null; unit: string | null; section: HabitSection; freq: HabitFreq };
+  | { op: "habit"; key: string; name: string; goal: number | null; unit: string | null; section: HabitSection; freq: HabitFreq }
+  | { op: "asset"; key: string; name: string; kind: AssetKind; plate?: string | null; model?: string | null; km?: number | null; rules: RuleDraft[] }
+  | {
+      op: "service";
+      key: string;
+      assetId: string;
+      assetName: string;
+      title: string;
+      date: string;
+      km?: number | null;
+      cost?: number | null;
+      place?: string;
+      note?: string;
+      /** Rules this entry resets (ids) and their names for the card. */
+      ruleIds: string[];
+      ruleNames: string[];
+    }
+  | { op: "rule"; key: string; assetId: string; assetName: string; rule: RuleDraft }
+  | { op: "mileage"; key: string; assetId: string; assetName: string; km: number; was?: number | null };
 
 export type ProposalStatus = "pending" | "applied" | "dismissed";
 

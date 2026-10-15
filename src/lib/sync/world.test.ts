@@ -50,7 +50,7 @@ test("migration: a single-user pora.json becomes APP_OWNER's data, nothing rewri
   const old = world({
     tasks: [task("t1"), task("t2", { done: true })],
     lists: [{ id: "l1", name: "Дом", updatedAt: T0 }],
-    tombstones: { lists: {}, tasks: { gone: T0 - 5 }, habits: {}, milestones: {}, projects: {} },
+    tombstones: { lists: {}, tasks: { gone: T0 - 5 }, habits: {}, milestones: {}, projects: {}, assets: {} },
     settings: { workStart: "08:00", workEnd: "17:00", updatedAt: T0 },
   });
   const user1 = viewFor(old, "user1", CFG, T0 + 1);

@@ -17,6 +17,7 @@ import {
   Sunrise,
   Users,
   Timer,
+  Wrench,
 } from "lucide-react";
 import type { NavId, TabId } from "@/lib/ui-prefs";
 
@@ -29,6 +30,7 @@ export const TAB_ICONS: Record<TabId, typeof Inbox> = {
   focus: Timer,
   matrix: LayoutGrid,
   dates: Hourglass,
+  maintenance: Wrench,
   checklist: ListChecks,
   inbox: Inbox,
   projects: Columns3,
