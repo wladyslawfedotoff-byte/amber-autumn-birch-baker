@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { COLLECTIONS, emptyData, mergeData, normalizeData, stampCollection, type SyncData, type SyncEntity } from "../sync/merge.ts";
 import { applyPut, viewFor, type AclConfig, type WorldDoc } from "../sync/world.ts";
-import { addPain, buildRule, createAsset, logService, removeEntry, setMileage } from "./ops.ts";
+import { addAssetLinkTo, addAssetContactTo, addPain, buildRule, createAsset, logService, removeEntry, setMileage, updatePain, updateService } from "./ops.ts";
 import type { Asset } from "../planner-types.ts";
 
 const TODAY = "2026-10-14";
@@ -97,4 +97,37 @@ test("sharing: a member can add to the card but a stranger's edit of a private c
   assert.ok(out.data.assets.some((a) => a.id === "a1"), "private card kept");
   const a1 = out.data.assets.find((a) => a.id === "a1") as unknown as Asset;
   assert.equal(a1.log.length, 1);
+});
+
+test("editing an entry on one device wins over the old copy; clearing a field really clears it after merge", () => {
+  const start = edit(seeded(), (a) => ({ ...a, log: a.log.map((e) => ({ ...e, cost: 6400, place: "Сервис" })) }), T0 + 1);
+  const phone = edit(start, (a) => updateService(a, "e1", { title: "Замена масла", date: "2026-06-03", km: 74300, cost: "", place: "", note: "", ruleIds: ["r1"] }, "rd-x")!.asset, T0 + 100);
+  const stale = edit(start, (a) => ({ ...a, log: a.log.map((e) => (e.id === "e1" ? { ...e, note: "метка" } : e)) }), T0 + 10);
+  for (const merged of [mergeData(phone, stale), mergeData(stale, phone)]) {
+    const e = asset(merged).log.find((x) => x.id === "e1")!;
+    assert.equal(e.date, "2026-06-03");
+    assert.ok(!e.cost, "cost cleared, not resurrected");
+    assert.ok(!e.place);
+    assert.equal(asset(merged).rules[0]!.lastDoneAt, "2026-06-03");
+  }
+});
+
+test("pain text edited on one device and solved on another: both changes survive", () => {
+  const start = edit(seeded(), (a) => addPain(a, "стук", "p1", T0)!, T0 + 1);
+  const phone = edit(start, (a) => updatePain(a, "p1", "стук слева")!, T0 + 20);
+  const tablet = edit(start, (a) => ({ ...a, pains: a.pains.map((p) => ({ ...p, solvedAt: T0 + 30 })) }), T0 + 30);
+  const p = asset(mergeData(phone, tablet)).pains[0]!;
+  assert.equal(p.text, "стук слева");
+  assert.equal(p.solvedAt, T0 + 30);
+});
+
+test("two devices add links and contacts to the same entry offline: both are kept", () => {
+  const start = seeded();
+  const phone = edit(start, (a) => addAssetLinkTo(a, "e1", "l-phone", "https://example.ru/receipt")!, T0 + 10);
+  const tablet = edit(start, (a) => addAssetContactTo(addAssetLinkTo(a, "e1", "l-tab", "https://example.ru/manual")!, "e1", "c-tab", { name: "Мастер" })!, T0 + 20);
+  for (const merged of [mergeData(phone, tablet), mergeData(tablet, phone)]) {
+    const a = asset(merged);
+    assert.deepEqual((a.links ?? []).map((l) => l.id).sort(), ["l-phone", "l-tab"]);
+    assert.deepEqual((a.contacts ?? []).map((c) => c.id), ["c-tab"]);
+  }
 });

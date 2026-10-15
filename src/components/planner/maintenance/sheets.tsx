@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Sheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { FieldLabel, InlineHint } from "@/components/ui/hint";
-import { AttachmentsBlock } from "@/components/planner/objects/attachments";
+import { AssetObjects } from "./objects";
 import { AssetShareBar } from "@/components/planner/sharing";
 import { deleteFile } from "@/lib/attachments/runtime";
 import { cn } from "@/lib/cn";
@@ -128,9 +128,11 @@ export function EditAssetSheet({ assetId, onClose, onDeleted }: { assetId: strin
   const update = usePlanner((s) => s.updateAsset);
   const remove = usePlanner((s) => s.deleteAsset);
   const [confirm, setConfirm] = useState(false);
+  const [soonDays, setSoonDays] = useState(String(asset?.soonDays ?? 14));
+  const [soonKm, setSoonKm] = useState(String(asset?.soonKm ?? 500));
   if (!asset) return null;
   return (
-    <Sheet open title={`${kindLabel(asset.kind)}: настройки`} onClose={onClose}>
+    <Sheet open title={`${kindLabel(asset.kind)}: изменить`} onClose={onClose}>
       <div className="space-y-2">
         <label className="block">
           <span className={smallLabel}>Название</span>
@@ -141,18 +143,17 @@ export function EditAssetSheet({ assetId, onClose, onDeleted }: { assetId: strin
             <span className={smallLabel}>Номер</span>
             <input defaultValue={asset.plate ?? ""} onChange={(e) => update(asset.id, { plate: e.target.value })} maxLength={20} className={field} />
           </label>
-        ) : (
-          <div className="flex gap-2">
-            <label className="block min-w-0 flex-1">
-              <span className={smallLabel}>Модель</span>
-              <input defaultValue={asset.model ?? ""} onChange={(e) => update(asset.id, { model: e.target.value })} maxLength={120} className={field} />
-            </label>
-            <label className="block min-w-0 flex-1">
-              <span className={smallLabel}>Куплено</span>
-              <input type="date" defaultValue={asset.boughtAt ?? ""} onChange={(e) => update(asset.id, { boughtAt: e.target.value || null })} className={cn(field, "text-left")} />
-            </label>
-          </div>
-        )}
+        ) : null}
+        <div className="flex gap-2">
+          <label className="block min-w-0 flex-1">
+            <span className={smallLabel}>{asset.kind === "car" ? "Марка, модель" : "Модель"}</span>
+            <input defaultValue={asset.model ?? ""} onChange={(e) => update(asset.id, { model: e.target.value })} maxLength={120} className={field} />
+          </label>
+          <label className="block min-w-0 flex-1">
+            <span className={smallLabel}>{asset.kind === "car" ? "Куплен" : "Куплено"}</span>
+            <input type="date" defaultValue={asset.boughtAt ?? ""} onChange={(e) => update(asset.id, { boughtAt: e.target.value || null })} className={cn(field, "text-left")} />
+          </label>
+        </div>
         <label className="block">
           <span className={smallLabel}>Заметка</span>
           <textarea defaultValue={asset.notes} onChange={(e) => update(asset.id, { notes: e.target.value })} rows={3} maxLength={2000} className={cn(field, "h-auto py-2.5")} />
@@ -160,8 +161,8 @@ export function EditAssetSheet({ assetId, onClose, onDeleted }: { assetId: strin
         <div>
           <FieldLabel hint="За сколько до срока карточка станет «скоро» и Пора создаст задачу-напоминание. Считается по тому, что наступит раньше: дни до даты или километры до пробега.">Когда считать «скоро»</FieldLabel>
           <div className="mt-1 flex gap-2">
-            <Num label="За, дней" value={String(asset.soonDays ?? 14)} onChange={(v) => update(asset.id, { soonDays: Number(v) || 14 })} suffix="дн." />
-            {asset.kind === "car" ? <Num label="За, км" value={String(asset.soonKm ?? 500)} onChange={(v) => update(asset.id, { soonKm: Number(v) || 500 })} suffix="км" /> : null}
+            <Num label="За, дней" value={soonDays} onChange={(v) => { setSoonDays(v); if (cleanNumber(v)) update(asset.id, { soonDays: Number(v) }); }} suffix="дн." />
+            {asset.kind === "car" ? <Num label="За, км" value={soonKm} onChange={(v) => { setSoonKm(v); if (cleanNumber(v)) update(asset.id, { soonKm: Number(v) }); }} suffix="км" /> : null}
           </div>
         </div>
         <AssetShareBar asset={asset} />
@@ -199,7 +200,11 @@ export function EditAssetSheet({ assetId, onClose, onDeleted }: { assetId: strin
 export function MileageSheet({ assetId, onClose }: { assetId: string; onClose: () => void }) {
   const asset = useAsset(assetId);
   const setKm = usePlanner((s) => s.setAssetKm);
+  const fixReading = usePlanner((s) => s.updateAssetReading);
+  const dropReading = usePlanner((s) => s.deleteAssetReading);
   const [value, setValue] = useState("");
+  const [fixing, setFixing] = useState<string | null>(null);
+  const [fixValue, setFixValue] = useState("");
   if (!asset) return null;
   const n = cleanNumber(value);
   const lower = n !== undefined && typeof asset.km === "number" && n < asset.km;
@@ -219,6 +224,29 @@ export function MileageSheet({ assetId, onClose }: { assetId: string; onClose: (
         {lower ? <p className="mt-2 px-1 text-xs text-warn">Меньше прежнего ({groupKm(asset.km as number)} км). Если это опечатка — поправьте.</p> : null}
         <p className="mt-2 px-1 text-xs text-muted">Одно значение в день. По обновлениям Пора считает «км в месяц» и срок правил «каждые N км».</p>
       </form>
+      {asset.readings?.length ? (
+        <div className="mt-4">
+          <FieldLabel hint="Прежние показания можно поправить, если ошиблись: «км в месяц» и текущий пробег пересчитаются.">Прежние показания</FieldLabel>
+          <ul className="mt-1 divide-y divide-line rounded-xl bg-elevated">
+            {[...asset.readings].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 12).map((r) =>
+              fixing === r.id ? (
+                <li key={r.id} className="flex items-center gap-2 px-3 py-1.5">
+                  <span className="w-20 shrink-0 text-xs text-muted">{formatShortDay(r.date)} {r.date.slice(0, 4)}</span>
+                  <input autoFocus inputMode="numeric" aria-label={`Пробег на ${r.date}`} value={fixValue} onChange={(e) => setFixValue(e.target.value)} className={cn(field, "min-w-0 flex-1")} />
+                  <Button variant="primary" disabled={cleanNumber(fixValue) === undefined} onClick={() => { if (fixReading(asset.id, r.id, fixValue)) setFixing(null); }}>Ок</Button>
+                </li>
+              ) : (
+                <li key={r.id} className="flex items-center gap-2 px-3 text-[0.9375rem]">
+                  <span className="w-20 shrink-0 text-xs text-muted">{formatShortDay(r.date)} {r.date.slice(0, 4)}</span>
+                  <span className="flex-1 tabular-nums">{groupKm(r.km)} км</span>
+                  <button type="button" className="h-10 px-1 text-[0.8125rem] text-accent" onClick={() => { setFixing(r.id); setFixValue(String(r.km)); }}>Изменить</button>
+                  {asset.readings.length > 1 ? <button type="button" className="h-10 px-1 text-[0.8125rem] text-danger" aria-label={`Удалить показание ${r.date}`} onClick={() => dropReading(asset.id, r.id)}>Удалить</button> : null}
+                </li>
+              ),
+            )}
+          </ul>
+        </div>
+      ) : null}
     </Sheet>
   );
 }
@@ -345,35 +373,44 @@ export function RuleSheet({
 
 /* ---- log entry ---------------------------------------------------------------- */
 
-export function ServiceSheet({ assetId, preset, onClose }: { assetId: string; preset: { title: string; ruleIds: string[] } | null; onClose: () => void }) {
+export function ServiceSheet({ assetId, preset, editing, onClose }: { assetId: string; preset: { title: string; ruleIds: string[] } | null; editing?: ServiceEntry; onClose: () => void }) {
   const asset = useAsset(assetId);
   const add = usePlanner((s) => s.addAssetService);
-  const id = useRef(newId()).current;
-  const [title, setTitle] = useState(preset?.title ?? "");
-  const [date, setDate] = useState(todayIso());
-  const [km, setKm] = useState("");
-  const [cost, setCost] = useState("");
-  const [place, setPlace] = useState("");
-  const [note, setNote] = useState("");
-  const [picked, setPicked] = useState<string[] | null>(preset ? preset.ruleIds : null);
+  const update = usePlanner((s) => s.updateAssetEntry);
+  const discardChildren = usePlanner((s) => s.discardAssetChildren);
+  const fresh = useRef(newId()).current;
+  const id = editing?.id ?? fresh;
+  const [title, setTitle] = useState(editing?.title ?? preset?.title ?? "");
+  const [date, setDate] = useState(editing?.date ?? todayIso());
+  const [km, setKm] = useState(editing?.km != null ? String(editing.km) : "");
+  const [cost, setCost] = useState(editing?.cost ? String(editing.cost) : "");
+  const [place, setPlace] = useState(editing?.place ?? "");
+  const [note, setNote] = useState(editing?.note ?? "");
+  const [picked, setPicked] = useState<string[] | null>(editing ? (editing.ruleIds ?? []) : preset ? preset.ruleIds : null);
   const files = useMemo(() => (asset?.attachments ?? []).filter((a) => a.entryId === id), [asset?.attachments, id]);
   if (!asset) return null;
   const guess = picked ?? guessRules(asset, title);
   const ok = title.trim().length > 0;
   const discard = () => {
     // The files were added before the entry existed: a cancelled entry must not leave them behind.
-    for (const f of files) void deleteFile({ kind: "asset", id: asset.id }, f.id);
+    // (An entry being edited already has its files: they stay.)
+    if (!editing) {
+      for (const f of files) void deleteFile({ kind: "asset", id: asset.id }, f.id);
+      discardChildren(asset.id, id);
+    }
     onClose();
   };
   const save = () => {
     if (!ok) return;
-    add(asset.id, { id, title, date, km, cost, place, note, ruleIds: guess });
+    if (editing) {
+      if (!update(asset.id, editing.id, { title, date, km, cost, place, note, ruleIds: guess })) return;
+    } else add(asset.id, { id, title, date, km, cost, place, note, ruleIds: guess });
     onClose();
   };
   return (
-    <Sheet open title="Запись в историю" onClose={discard} action={{ label: "Сохранить", onClick: save, disabled: !ok }}>
+    <Sheet open title={editing ? "Изменить запись" : "Запись в историю"} onClose={discard} action={{ label: "Сохранить", onClick: save, disabled: !ok }}>
       <div className="space-y-2">
-        <input autoFocus={!preset} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={asset.kind === "car" ? "Что сделано — например, замена масла" : "Что сделано — например, заменён фильтр"} aria-label="Что сделано" maxLength={160} className={field} />
+        <input autoFocus={!preset && !editing} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={asset.kind === "car" ? "Что сделано — например, замена масла" : "Что сделано — например, заменён фильтр"} aria-label="Что сделано" maxLength={160} className={field} />
         <div className="flex gap-2">
           <DateField label="Дата" value={date} onChange={setDate} />
           {asset.kind === "car" ? <Num label="Пробег, км" value={km} onChange={setKm} placeholder={asset.km ? groupKm(asset.km) : "км"} /> : null}
@@ -386,7 +423,7 @@ export function ServiceSheet({ assetId, preset, onClose }: { assetId: string; pr
           </label>
         </div>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка" aria-label="Заметка" rows={2} maxLength={1000} className={cn(field, "h-auto py-2.5")} />
-        <AttachmentsBlock kind="asset" parentId={asset.id} entryId={id} items={files} label="Фото чека, файлы" />
+        <AssetObjects asset={asset} parentId={id} label="Чеки, файлы и ссылки записи" />
         {asset.rules.length ? (
           <div className="rounded-xl bg-elevated px-3 py-2">
             <FieldLabel hint="Отмеченные правила начнут отсчёт от этой записи: срок «следующего раза» сдвинется, а напоминание по ним закроется.">Отсчитывать заново</FieldLabel>
@@ -413,7 +450,7 @@ export function ServiceSheet({ assetId, preset, onClose }: { assetId: string; pr
   );
 }
 
-export function EntrySheet({ assetId, entry, onClose }: { assetId: string; entry: ServiceEntry; onClose: () => void }) {
+export function EntrySheet({ assetId, entry, onClose, onEdit }: { assetId: string; entry: ServiceEntry; onClose: () => void; onEdit: () => void }) {
   const asset = useAsset(assetId);
   const removeEntry = usePlanner((s) => s.deleteAssetEntry);
   const [confirm, setConfirm] = useState(false);
@@ -426,7 +463,7 @@ export function EntrySheet({ assetId, entry, onClose }: { assetId: string; entry
     onClose();
   };
   return (
-    <Sheet open title={entry.title} onClose={onClose}>
+    <Sheet open title={entry.title} onClose={onClose} action={{ label: "Изменить", onClick: onEdit }}>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-xl bg-elevated p-3 text-[0.9375rem]">
         <dt className="text-muted">Дата</dt>
         <dd>{formatShortDay(entry.date)} {entry.date.slice(0, 4)}</dd>
@@ -436,8 +473,9 @@ export function EntrySheet({ assetId, entry, onClose }: { assetId: string; entry
         {names.length ? (<><dt className="text-muted">Правила</dt><dd>{names.join(", ")}</dd></>) : null}
         {entry.note ? (<><dt className="text-muted">Заметка</dt><dd className="whitespace-pre-wrap break-words">{entry.note}</dd></>) : null}
       </dl>
-      <AttachmentsBlock kind="asset" parentId={asset.id} entryId={entry.id} items={files} label="Чеки и файлы записи" />
+      <AssetObjects asset={asset} parentId={entry.id} label="Чеки, файлы и ссылки записи" />
       <div className="pt-4">
+        <Button variant="primary" className="mb-2 w-full" onClick={onEdit}>Изменить запись</Button>
         {confirm ? (
           <div className="flex gap-2">
             <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>Отмена</Button>

@@ -34,6 +34,7 @@ import { flushOfflineQuestions } from "@/lib/offline/assist-queue";
 import { SyncIndicator, SyncPill } from "@/components/planner/sync-status";
 import { useServerSyncStatus } from "@/lib/use-server-sync";
 import { DoneToastBar } from "@/components/planner/done-toast";
+import { PainPromptBar } from "@/components/planner/maintenance/prompt-bar";
 import { Fab, QuickComposer } from "@/components/planner/quick-composer";
 import { TAB_ICONS } from "@/components/planner/tab-icons";
 import { TAB_OPTIONS, canBoard } from "@/lib/ui-prefs";
@@ -533,7 +534,7 @@ export function PlannerApp() {
             />
           ) : null}
           {!query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} onOpenChange={onProjectShown} /> : null}
-          {!query.trim() && view === "maintenance" ? <MaintenanceView /> : null}
+          {!query.trim() && view === "maintenance" ? <MaintenanceView onOpenTask={setSelectedId} /> : null}
           {!query.trim() && view === "settings" ? <SettingsView onView={openView} /> : null}
         </div>
         {quick ? (
@@ -545,6 +546,7 @@ export function PlannerApp() {
         </div>
 
         <DoneToastBar />
+        <PainPromptBar onOpen={() => openView("maintenance")} />
 
         {focus.running || focus.note ? (
           <div className="flex h-12 shrink-0 items-center gap-3 border-t border-line px-4">

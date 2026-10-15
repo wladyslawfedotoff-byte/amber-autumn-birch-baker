@@ -98,7 +98,7 @@ try {
   ok("rule: counted from the last time (74 200 + 10 000), not soon yet");
 
   // mileage near the limit → «скоро» + a task is made
-  await page.getByRole("button", { name: "Изменить" }).click();
+  await page.getByRole("button", { name: "Изменить", exact: true }).click();
   await dialog(page, "Пробег").getByLabel("Пробег, км").fill("83800");
   await dialog(page, "Пробег").getByRole("button", { name: "Сохранить" }).click();
   await page.getByText(/~?400 км/).first().waitFor();
@@ -125,7 +125,7 @@ try {
     await page.getByText(e.title, { exact: true }).waitFor();
   }
   const d = await addEntry(page, { title: "Замена масла и фильтра", date: "2026-10-14", km: "83900", cost: "6400", place: "Сервис у дома" });
-  await d.getByLabel("Добавить вложение").setInputFiles(join(FILES, "site.jpg"));
+  await d.getByLabel("Добавить файл").setInputFiles(join(FILES, "site.jpg"));
   await page.waitForFunction(() => !document.querySelector('[data-testid="attach-pending"]'), null, { timeout: 20_000 });
   const reset = d.getByRole("checkbox", { name: /Замена масла/ });
   if (!(await reset.isChecked())) fail("rule not preselected from the title");
@@ -143,7 +143,73 @@ try {
   await page.getByText("Замена масла и фильтра", { exact: true }).click();
   await dialog(page, "Замена масла и фильтра").getByTestId("object-photo").or(dialog(page, "Замена масла и фильтра").getByRole("button", { name: /site/ })).first().waitFor();
   await shot(page, "06-entry");
-  await dialog(page, "Замена масла и фильтра").getByRole("button", { name: "Закрыть" }).click();
+
+  // 1.10.1: everything entered can be edited
+  await dialog(page, "Замена масла и фильтра").getByRole("button", { name: "Изменить запись" }).click();
+  const ed = dialog(page, "Изменить запись");
+  await ed.getByLabel("Где").fill("Другой сервис");
+  await ed.getByLabel("Стоимость").fill("6500");
+  await ed.getByLabel("Заметка").fill("масло синтетика");
+  if (!(await ed.getByRole("checkbox", { name: /Замена масла/ }).isChecked())) fail("edit: the reset rule is not shown as ticked");
+  await shot(page, "12-edit-entry");
+  await ed.getByRole("button", { name: "Сохранить" }).click();
+  const back = dialog(page, "Замена масла и фильтра");
+  await back.getByText("Другой сервис").waitFor();
+  await back.getByText("масло синтетика").waitFor();
+  await back.getByText(/6\s?500/).waitFor();
+  await back.getByTestId("object-photo").or(back.getByRole("button", { name: /site/ })).first().waitFor();
+  // the same attach row as on tasks: a link and a contact on the entry
+  await back.getByRole("button", { name: "Ссылка", exact: true }).click();
+  const ls = dialog(page, "Ссылка");
+  await ls.getByLabel("Адрес ссылки").fill("https://example.com/manual");
+  await ls.getByLabel("Название ссылки").fill("Инструкция");
+  await ls.getByRole("button", { name: "Добавить" }).first().click();
+  await back.getByTestId("object-link").waitFor();
+  await back.getByRole("button", { name: "Контакт", exact: true }).click();
+  const cts = dialog(page, "Контакт");
+  await cts.getByLabel("Имя").fill("Мастер");
+  await cts.getByLabel("Телефон").fill("+7 900 000-00-00");
+  await cts.getByRole("button", { name: "Добавить" }).first().click();
+  await back.getByTestId("object-contact").waitFor();
+  ok("entry: file, link and contact in one chip strip (same row as tasks)");
+  await shot(page, "13-entry-edited");
+  ok("entry edited inline: place, cost, note changed, the receipt photo is kept");
+  await back.getByRole("button", { name: "Закрыть" }).click();
+  await page.getByText(/через 10 000 км|10 000 км/).first().waitFor();
+  ok("rule still counts from the edited entry");
+
+  // pain: edit text + «что сделать», plan it as a task (today, so it shows in «Сегодня»)
+  await page.getByRole("button", { name: /Изменить: Стук спереди на кочках/ }).click();
+  const ps = dialog(page, "Что болит");
+  await ps.getByLabel("Текст заметки").fill("Стук спереди слева на кочках");
+  await ps.getByLabel("Что сделать").fill("Заменить стойки");
+  await ps.getByRole("tab", { name: "При пробеге" }).click();
+  await ps.getByLabel("Пробег, км").fill("90000");
+  await shot(page, "14-pain-edit");
+  await ps.getByRole("tab", { name: "Через N дней" }).click();
+  await ps.getByLabel("Через сколько дней").fill("0");
+  await ps.getByRole("button", { name: "Запланировать", exact: true }).last().click();
+  await ps.getByText(/запланировано на/).waitFor();
+  await ps.getByRole("button", { name: "открыть задачу" }).waitFor();
+  await shot(page, "15-pain-planned");
+  await ps.getByRole("button", { name: "Сохранить" }).click();
+  await page.getByText("Сделать: Заменить стойки").waitFor();
+  await page.getByText(/запланировано на/).first().waitFor();
+  ok("«Что болит»: text and «что сделать» edited, planned as a task");
+
+  // card: visible «Изменить», model for a car, mileage history
+  await page.getByRole("button", { name: "Изменить карточку" }).click();
+  const cs = dialog(page, /Автомобиль: изменить/);
+  await cs.getByLabel(/Марка, модель/).fill("Седан 1.6");
+  await shot(page, "15-card-edit");
+  await cs.getByRole("button", { name: "Закрыть" }).click();
+  await page.getByText(/Седан 1\.6/).first().waitFor();
+  ok("card edited: model shown under the name");
+  await page.getByRole("button", { name: "Изменить", exact: true }).first().click();
+  const ms = dialog(page, "Пробег");
+  await ms.getByText("Прежние показания").waitFor();
+  await shot(page, "16-readings");
+  await ms.getByRole("button", { name: "Закрыть" }).click();
 
   // --- consumable + device ------------------------------------------------
   await page.getByRole("button", { name: "Назад к списку" }).click();
@@ -181,6 +247,27 @@ try {
   ok("overdue rule became an ordinary task in «Сегодня»");
   await shot(page, "09-today-reminder");
 
+  // the planned note's task: ticking it solves the note and offers a history entry
+  const planned = page.getByText("Заменить стойки — Легковая").first();
+  await planned.waitFor({ timeout: 10_000 });
+  await planned.locator("xpath=ancestor::*[.//button[@aria-label='Выполнить']][1]").getByRole("button", { name: "Выполнить" }).first().click();
+  await page.getByText("Заметка решена. Записать в историю?").waitFor();
+  await shot(page, "17-pain-solved-offer");
+  await page.getByRole("button", { name: "Записать", exact: true }).click();
+  const offered = dialog(page, "Запись в историю");
+  await offered.getByRole("textbox", { name: "Что сделано" }).waitFor();
+  if ((await offered.getByLabel("Что сделано").inputValue()) !== "Заменить стойки") fail("history entry not prefilled from the note");
+  await offered.getByLabel("Пробег, км").fill("84000");
+  await shot(page, "18-pain-history-entry");
+  await offered.getByRole("button", { name: "Сохранить" }).click();
+  await page.getByText("Заменить стойки", { exact: true }).first().waitFor();
+  ok("task ticked → note solved → entry offered, prefilled and saved");
+  await page.getByRole("button", { name: /Решённые: 1/ }).click();
+  await page.getByRole("button", { name: "Вернуть", exact: true }).click();
+  await page.getByRole("button", { name: /Изменить: Стук спереди слева на кочках/ }).waitFor();
+  ok("solved note reopened");
+  await page.getByRole("button", { name: "Назад к списку" }).click();
+
   // --- stats ----------------------------------------------------------------
   await openMaint(page);
   await page.getByRole("button", { name: /Статистика/ }).first().click();
@@ -199,7 +286,7 @@ try {
   ok("second device sees the cards (sync)");
   await other.getByText("Легковая", { exact: true }).first().click();
   await other.getByText("Замена масла и фильтра", { exact: true }).waitFor();
-  await other.getByText("Стук спереди на кочках").waitFor();
+  await other.getByText("Стук спереди слева на кочках").waitFor();
   ok("history and «Что болит» synced");
 
   // menu / navigation

@@ -31,15 +31,32 @@ export function cycleKey(rule: MaintRule): string {
 export const ruleTaskId = (rule: MaintRule) => `maint-${rule.id}-${cycleKey(rule)}`;
 export const kmTaskId = (assetId: string, month: string) => `maintkm-${assetId}-${month}`;
 
+export const painTaskId = (painId: string) => `maintpain-${painId}`;
+export const painRef = (assetId: string, painId: string) => `${assetId}/pain:${painId}`;
+/** «assetId/pain:noteId» → ids, or null for any other task. */
+export function parsePainRef(ref: string | undefined): { assetId: string; painId: string } | null {
+  const m = typeof ref === "string" ? /^([^/]+)\/pain:(.+)$/.exec(ref) : null;
+  return m ? { assetId: m[1]!, painId: m[2]! } : null;
+}
+
+
+/** The reminder task of a planned «что болит» note (date-based: made right away; mileage-based: when «скоро»). */
+export function painTask(asset: Asset, pain: NonNullable<Asset["pains"]>[number], day: string, now: number): Task {
+  const what = (pain.todo || pain.text).trim();
+  const notes = pain.todo && pain.todo !== pain.text ? `Что болит: ${pain.text}` : "";
+  return maintTask(painTaskId(pain.id), `${what} — ${asset.name}`, notes, day, pain.planKm ? KM_TASK_TIME : TASK_TIME, painRef(asset.id, pain.id), now);
+}
+
 export type Plan = {
   create: Task[];
   patch: { id: string; patch: Partial<Task> }[];
   ruleNotified: { assetId: string; ruleId: string; notified: string }[];
   kmNotified: { assetId: string; month: string }[];
+  painMade: { assetId: string; painId: string }[];
 };
 
-export const emptyPlan = (): Plan => ({ create: [], patch: [], ruleNotified: [], kmNotified: [] });
-export const planIsEmpty = (p: Plan) => !p.create.length && !p.patch.length && !p.ruleNotified.length && !p.kmNotified.length;
+export const emptyPlan = (): Plan => ({ create: [], patch: [], ruleNotified: [], kmNotified: [], painMade: [] });
+export const planIsEmpty = (p: Plan) => !p.create.length && !p.patch.length && !p.ruleNotified.length && !p.kmNotified.length && !p.painMade.length;
 
 function maintTask(id: string, title: string, notes: string, due: string, time: string, ref: string, now: number): Task {
   return { id, title, notes, listId: null, done: false, priority: 0, due, tags: [], subtasks: [], createdAt: now, completedAt: null, remindAt: time, maint: ref };
@@ -89,6 +106,13 @@ export function planMaintenance(assets: Asset[], tasks: Task[], today: string, n
       const task = maintTask(id, `${rule.title} — ${asset.name}`, ruleLine(rule), when.create, TASK_TIME, `${asset.id}/${rule.id}`, now);
       plan.create.push(task);
       plan.ruleNotified.push({ assetId: asset.id, ruleId: rule.id, notified: cycleKey(rule) });
+    }
+    // A pain note planned «at N km»: the task appears when the mileage gets close (like a rule), once.
+    for (const pain of asset.pains ?? []) {
+      if (pain.solvedAt || !pain.planKm || pain.taskMade || byId.has(painTaskId(pain.id)) || asset.km == null) continue;
+      if (pain.planKm - asset.km > limitsOf(asset).soonKm) continue;
+      plan.create.push(painTask(asset, pain, today, now));
+      plan.painMade.push({ assetId: asset.id, painId: pain.id });
     }
     if (asset.kind === "car" && asset.kmRemind) {
       let last = asset.kmNotified ?? "";
