@@ -144,14 +144,14 @@ export type AddResult = { added: AttachmentMeta[]; rejected: { name: string; rea
 let addChain: Promise<unknown> = Promise.resolve();
 
 /** Add files to a task/project. Returns the new meta rows (already on the entity). Calls run one after another. */
-export function addFiles(files: Iterable<File>, parent: { kind: ParentKind; id: string }, maxBytes: number): Promise<AddResult> {
+export function addFiles(files: Iterable<File>, parent: { kind: ParentKind; id: string; entryId?: string }, maxBytes: number): Promise<AddResult> {
   const list = [...files];
   const run = addChain.then(() => addFilesNow(list, parent, maxBytes));
   addChain = run.catch(() => undefined);
   return run;
 }
 
-async function addFilesNow(files: File[], parent: { kind: ParentKind; id: string }, maxBytes: number): Promise<AddResult> {
+async function addFilesNow(files: File[], parent: { kind: ParentKind; id: string; entryId?: string }, maxBytes: number): Promise<AddResult> {
   await ensureLoaded();
   const added: AttachmentMeta[] = [];
   const rejected: { name: string; reason: string }[] = [];
@@ -189,7 +189,7 @@ async function addFilesNow(files: File[], parent: { kind: ParentKind; id: string
       rejected.push({ name: file.name, reason: "Не хватило места на устройстве." });
       continue;
     }
-    const meta: AttachmentMeta = { id, name: shrunk.name, mime: finalMime, size: shrunk.blob.size, createdAt: Date.now(), ...(takenAt !== undefined ? { takenAt } : {}) };
+    const meta: AttachmentMeta = { id, name: shrunk.name, mime: finalMime, size: shrunk.blob.size, createdAt: Date.now(), ...(takenAt !== undefined ? { takenAt } : {}), ...(parent.entryId ? { entryId: parent.entryId } : {}) };
     // Always against the newest queue: the sender may have removed entries meanwhile.
     await saveQueue(enqueue(state.queue, { id, parentKind: parent.kind, parentId: parent.id, name: meta.name, mime: meta.mime, size: meta.size, createdAt: meta.createdAt, ...(meta.takenAt !== undefined ? { takenAt: meta.takenAt } : {}) }));
     usePlanner.getState().addAttachment(parent.kind, parent.id, meta);

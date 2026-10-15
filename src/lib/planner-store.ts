@@ -1,4 +1,20 @@
 import { NAME_MAX, cleanPhone, cleanTitle, normalizeUrl } from "@/lib/objects/links";
+import {
+  addPain,
+  buildRule,
+  createAsset,
+  logService,
+  patchAsset,
+  removeEntry,
+  removePain,
+  removeRule,
+  setMileage,
+  setPainSolved,
+  type AssetInput,
+  type RuleInput,
+  type ServiceInput,
+} from "@/lib/maintenance/ops";
+import { kmTaskId, openTasksFor, planIsEmpty, planMaintenance } from "@/lib/maintenance/plan";
 import { create, type StateCreator } from "zustand";
 import { placeItem } from "@/lib/reorder";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -40,6 +56,7 @@ import type {
   MilestoneKind,
   Priority,
   AttachmentMeta,
+  Asset,
   Project,
   ProjectContact,
   ProjectStage,
@@ -91,6 +108,7 @@ type PlannerState = {
   habits: Habit[];
   milestones: Milestone[];
   projects: Project[];
+  assets: Asset[];
   workStart: string;
   workEnd: string;
   focus: FocusClock;
@@ -180,11 +198,29 @@ type PlannerState = {
   removeTaskContact: (taskId: string, contactId: string) => void;
   /** «Ждёт»: returns false when the link would form a cycle. */
   setTaskDependsOn: (taskId: string, dependsOn: string | null) => boolean;
-  /** File meta on a task or project (the bytes go to the NAS separately). */
-  addAttachment: (kind: "task" | "project", parentId: string, meta: AttachmentMeta) => void;
-  removeAttachment: (kind: "task" | "project", parentId: string, attachId: string) => void;
+  /** File meta on a task, project or «Обслуживание» card (the bytes go to the NAS separately). */
+  addAttachment: (kind: "task" | "project" | "asset", parentId: string, meta: AttachmentMeta) => void;
+  removeAttachment: (kind: "task" | "project" | "asset", parentId: string, attachId: string) => void;
   /** After upload the server may convert (HEIC → JPEG): update name/type/size. */
-  patchAttachment: (kind: "task" | "project", parentId: string, attachId: string, patch: Partial<Pick<AttachmentMeta, "name" | "mime" | "size">>) => void;
+  patchAttachment: (kind: "task" | "project" | "asset", parentId: string, attachId: string, patch: Partial<Pick<AttachmentMeta, "name" | "mime" | "size">>) => void;
+  /* «Обслуживание» */
+  addAsset: (input: AssetInput) => string | null;
+  updateAsset: (id: string, patch: Parameters<typeof patchAsset>[1]) => void;
+  deleteAsset: (id: string) => void;
+  /** New mileage for a car; false when the value is not a number. */
+  setAssetKm: (id: string, km: number | string) => boolean;
+  addAssetRule: (assetId: string, input: RuleInput) => string | null;
+  updateAssetRule: (assetId: string, ruleId: string, input: RuleInput) => boolean;
+  deleteAssetRule: (assetId: string, ruleId: string) => void;
+  /** A log entry: resets the rules it names, moves the mileage, closes their reminder tasks. */
+  addAssetService: (assetId: string, input: ServiceInput) => string | null;
+  deleteAssetEntry: (assetId: string, entryId: string) => void;
+  addAssetPain: (assetId: string, text: string) => string | null;
+  setAssetPainSolved: (assetId: string, painId: string, solved: boolean) => void;
+  deleteAssetPain: (assetId: string, painId: string) => void;
+  setAssetMembers: (id: string, members: string[]) => void;
+  /** Rules that are (or soon will be) due → ordinary tasks; safe to call any time. */
+  syncMaintenance: () => void;
   addContact: (projectId: string, contact: Omit<ProjectContact, "id">) => string | null;
   updateContact: (projectId: string, contactId: string, patch: Partial<Omit<ProjectContact, "id">>) => void;
   deleteContact: (projectId: string, contactId: string) => void;
@@ -268,6 +304,7 @@ function seed(): Pick<
   | "habits"
   | "milestones"
   | "projects"
+  | "assets"
   | "workStart"
   | "workEnd"
   | "focus"
@@ -423,6 +460,7 @@ function seed(): Pick<
     focus: freshFocus(),
     workStart: "09:00",
     workEnd: "18:00",
+    assets: [],
     projects: [
       {
         id: "p-deck",
@@ -897,7 +935,7 @@ export const usePlanner = create<PlannerState>()(
             item.id === parentId && !(item.attachments ?? []).some((a) => a.id === meta.id)
               ? { ...item, attachments: [...(item.attachments ?? []), meta] }
               : item;
-          return kind === "task" ? { tasks: s.tasks.map(add) } : { projects: (s.projects ?? []).map(add) };
+          return kind === "task" ? { tasks: s.tasks.map(add) } : kind === "asset" ? { assets: (s.assets ?? []).map(add) } : { projects: (s.projects ?? []).map(add) };
         }),
       patchAttachment: (kind, parentId, attachId, patch) =>
         set((s) => {
@@ -905,13 +943,14 @@ export const usePlanner = create<PlannerState>()(
             item.id === parentId && item.attachments?.some((a) => a.id === attachId)
               ? { ...item, attachments: item.attachments.map((a) => (a.id === attachId ? { ...a, ...patch, updatedAt: Date.now() } : a)) }
               : item;
-          return kind === "task" ? { tasks: s.tasks.map(edit) } : { projects: (s.projects ?? []).map(edit) };
+          return kind === "task" ? { tasks: s.tasks.map(edit) } : kind === "asset" ? { assets: (s.assets ?? []).map(edit) } : { projects: (s.projects ?? []).map(edit) };
         }),
       removeAttachment: (kind, parentId, attachId) =>
         set((s) => {
           const drop = <T extends { id: string; attachments?: AttachmentMeta[] }>(item: T): T =>
             item.id === parentId ? { ...item, attachments: (item.attachments ?? []).filter((a) => a.id !== attachId) } : item;
           if (kind === "project") return { projects: (s.projects ?? []).map(drop) };
+          if (kind === "asset") return { assets: (s.assets ?? []).map(drop) };
           return {
             tasks: s.tasks.map((t) => {
               if (t.id !== parentId) return t;
@@ -960,6 +999,116 @@ export const usePlanner = create<PlannerState>()(
           ),
           tasks: s.tasks.map((t) => (t.contactId === contactId ? { ...t, contactId: null } : t)),
         })),
+      addAsset: (input) => {
+        const asset = createAsset(input, uid(), Date.now(), todayIso());
+        if (!asset) return null;
+        const me = currentLogin();
+        set((s) => ({ assets: [...(s.assets ?? []), me ? { ...asset, owner: me } : asset] }));
+        return asset.id;
+      },
+      updateAsset: (id, patch) => {
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === id ? patchAsset(a, patch) : a)) }));
+        // Switching the monthly reminder off drops the ones not done yet.
+        if (patch.kmRemind === false) {
+          const gone = new Set(openTasksFor(get().tasks, `${id}/km`));
+          if (gone.size) set((s) => ({ tasks: s.tasks.filter((t) => !gone.has(t.id)) }));
+        }
+        get().syncMaintenance();
+      },
+      deleteAsset: (id) => {
+        const gone = new Set(openTasksFor(get().tasks, `${id}/`));
+        set((s) => ({ assets: (s.assets ?? []).filter((a) => a.id !== id), tasks: gone.size ? s.tasks.filter((t) => !gone.has(t.id)) : s.tasks }));
+      },
+      setAssetKm: (id, km) => {
+        const today = todayIso();
+        const found = (get().assets ?? []).find((a) => a.id === id);
+        const next = found ? setMileage(found, km, today, uid()) : null;
+        if (!next) return false;
+        const done = new Set([kmTaskId(id, today.slice(0, 7))]);
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) => (a.id === id ? next : a)),
+          tasks: s.tasks.map((t) => (done.has(t.id) && !t.done ? { ...t, done: true, completedAt: syncNow() } : t)),
+        }));
+        get().syncMaintenance();
+        return true;
+      },
+      addAssetRule: (assetId, input) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const built = found ? buildRule(found, input, { rule: uid(), entry: uid() }, todayIso()) : null;
+        if (!found || !built) return null;
+        let next: Asset = { ...found, rules: [...(found.rules ?? []), built.rule] };
+        if (built.entry) next = { ...next, log: [...(found.log ?? []), built.entry] };
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)) }));
+        get().syncMaintenance();
+        return built.rule.id;
+      },
+      updateAssetRule: (assetId, ruleId, input) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const old = found?.rules.find((r) => r.id === ruleId);
+        const built = found && old ? buildRule(found, input, { rule: ruleId, entry: uid() }, old.since) : null;
+        if (!found || !old || !built) return false;
+        // Keep the history of the rule; «last time» is derived from the log.
+        const rule = { ...built.rule, since: old.since, sinceKm: old.sinceKm ?? built.rule.sinceKm, lastDoneAt: old.lastDoneAt ?? null, lastDoneKm: old.lastDoneKm ?? null, ...(old.notified ? { notified: old.notified } : {}) };
+        if (!rule.everyKm) delete rule.everyKm;
+        const next = { ...found, rules: found.rules.map((r) => (r.id === ruleId ? rule : r)) };
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)) }));
+        get().syncMaintenance();
+        return true;
+      },
+      deleteAssetRule: (assetId, ruleId) => {
+        const gone = new Set(openTasksFor(get().tasks, `${assetId}/${ruleId}`));
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) => (a.id === assetId ? removeRule(a, ruleId) : a)),
+          tasks: gone.size ? s.tasks.filter((t) => !gone.has(t.id)) : s.tasks,
+        }));
+      },
+      addAssetService: (assetId, input) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const done = found ? logService(found, input, { entry: input.id && /^[\w-]{6,64}$/.test(input.id) ? input.id : uid(), reading: uid() }, todayIso()) : null;
+        if (!found || !done) return null;
+        const close = new Set((done.entry.ruleIds ?? []).flatMap((ruleId) => openTasksFor(get().tasks, `${assetId}/${ruleId}`)));
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) => (a.id === assetId ? done.asset : a)),
+          tasks: close.size ? s.tasks.map((t) => (close.has(t.id) ? { ...t, done: true, completedAt: syncNow() } : t)) : s.tasks,
+        }));
+        get().syncMaintenance();
+        return done.entry.id;
+      },
+      deleteAssetEntry: (assetId, entryId) => {
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? removeEntry(a, entryId) : a)) }));
+        get().syncMaintenance();
+      },
+      addAssetPain: (assetId, text) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const next = found ? addPain(found, text, uid(), Date.now()) : null;
+        if (!found || !next) return null;
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)) }));
+        return next.pains[next.pains.length - 1]!.id;
+      },
+      setAssetPainSolved: (assetId, painId, solved) =>
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? setPainSolved(a, painId, solved, Date.now()) : a)) })),
+      deleteAssetPain: (assetId, painId) =>
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? removePain(a, painId) : a)) })),
+      setAssetMembers: (id, members) =>
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === id ? { ...a, members: [...new Set(members)] } : a)) })),
+      syncMaintenance: () => {
+        const s = get();
+        // Tasks belong to one person: reminders are made only for the cards this person owns.
+        const me = currentLogin();
+        const mine = (s.assets ?? []).filter((a) => !a.owner || !me || a.owner === me);
+        const plan = planMaintenance(mine, s.tasks, todayIso(), Date.now());
+        if (planIsEmpty(plan)) return;
+        const patches = new Map(plan.patch.map((p) => [p.id, p.patch]));
+        set((st) => ({
+          tasks: [...st.tasks.map((t) => (patches.has(t.id) ? { ...t, ...patches.get(t.id)! } : t)), ...plan.create.filter((c) => !st.tasks.some((t) => t.id === c.id))],
+          assets: (st.assets ?? []).map((a) => {
+            const marks = plan.ruleNotified.filter((n) => n.assetId === a.id);
+            const km = plan.kmNotified.find((n) => n.assetId === a.id);
+            if (!marks.length && !km) return a;
+            return { ...a, ...(km ? { kmNotified: km.month } : {}), rules: a.rules.map((r) => { const m = marks.find((n) => n.ruleId === r.id); return m ? { ...r, notified: m.notified } : r; }) };
+          }),
+        }));
+      },
       addList: (name) => {
         const id = uid();
         const clean = name.trim() || "Новый список";
@@ -1328,6 +1477,7 @@ renameList: (id, name) =>
           ...saved,
           milestones: fillRemindAt(saved.milestones, current.milestones).map((m) => (Array.isArray(m.items) ? m : { ...m, items: [] })),
           projects: saved.projects ?? current.projects,
+          assets: (saved.assets ?? current.assets).map((a) => ({ ...a, notes: a.notes ?? "", rules: a.rules ?? [], log: a.log ?? [], pains: a.pains ?? [], readings: a.readings ?? [] })),
           workStart: saved.workStart ?? current.workStart,
           workEnd: saved.workEnd ?? current.workEnd,
           focus: saved.focus ?? current.focus,

@@ -27,7 +27,7 @@
  */
 import { usePlanner } from "@/lib/planner-store";
 import { DEFAULT_ARCHIVE_DAYS, normalizeArchiveDays } from "@/lib/task-done";
-import type { Habit, Milestone, Project, Task, TaskList } from "@/lib/planner-types";
+import type { Asset, Habit, Milestone, Project, Task, TaskList } from "@/lib/planner-types";
 import { setClockOffset, syncNow } from "@/lib/sync/clock";
 import { activeScope, dropScope, onOtherTabSaved, readJson as readLocal, setScope, wipeActiveScope, writeJson } from "@/lib/offline/device-store";
 import { acknowledge, diffChanges, emptyOutbox, failed, parseOutbox, pendingCount, record, type Outbox } from "@/lib/offline/outbox";
@@ -243,6 +243,7 @@ export function localData(): SyncData {
     habits: s.habits as unknown as SyncEntity[],
     milestones: s.milestones as unknown as SyncEntity[],
     projects: s.projects as unknown as SyncEntity[],
+    assets: s.assets as unknown as SyncEntity[],
     settings: { workStart: s.workStart, workEnd: s.workEnd, ...(s.archiveDays !== DEFAULT_ARCHIVE_DAYS ? { archiveDays: s.archiveDays } : {}), updatedAt: s.settingsUpdatedAt ?? 0 },
     tombstones: s.tombstones,
   };
@@ -255,6 +256,11 @@ function fillTask(task: SyncEntity): SyncEntity {
 
 function fillProject(project: SyncEntity): SyncEntity {
   return Array.isArray(project.stages) ? project : { ...project, stages: [] };
+}
+
+function fillAsset(asset: SyncEntity): SyncEntity {
+  const list = (value: unknown) => (Array.isArray(value) ? value : []);
+  return { ...asset, notes: typeof asset.notes === "string" ? asset.notes : "", rules: list(asset.rules), log: list(asset.log), pains: list(asset.pains), readings: list(asset.readings) };
 }
 
 function fillMilestone(item: SyncEntity): SyncEntity {
@@ -274,6 +280,7 @@ function applyData(data: SyncData): void {
       habits: data.habits.map(fillHabit) as unknown as Habit[],
       milestones: data.milestones.map(fillMilestone) as unknown as Milestone[],
       projects: data.projects.map(fillProject) as unknown as Project[],
+      assets: data.assets.map(fillAsset) as unknown as Asset[],
       workStart: data.settings.workStart,
       workEnd: data.settings.workEnd,
       settingsUpdatedAt: data.settings.updatedAt,

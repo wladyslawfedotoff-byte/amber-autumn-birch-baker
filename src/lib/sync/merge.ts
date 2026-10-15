@@ -20,7 +20,7 @@
  * directly with --experimental-strip-types.
  */
 
-export const COLLECTIONS = ["lists", "tasks", "habits", "milestones", "projects"] as const;
+export const COLLECTIONS = ["lists", "tasks", "habits", "milestones", "projects", "assets"] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export type SyncEntity = { id: string; updatedAt?: number } & Record<string, unknown>;
@@ -47,6 +47,7 @@ export type SyncData = {
   habits: SyncEntity[];
   milestones: SyncEntity[];
   projects: SyncEntity[];
+  assets: SyncEntity[];
   settings: SyncSettings;
   tombstones: Tombstones;
 };
@@ -56,7 +57,7 @@ export const MAX_ITEMS_PER_COLLECTION = 50_000;
 export const MAX_ID_LENGTH = 200;
 
 export function emptyTombstones(): Tombstones {
-  return { lists: {}, tasks: {}, habits: {}, milestones: {}, projects: {} };
+  return { lists: {}, tasks: {}, habits: {}, milestones: {}, projects: {}, assets: {} };
 }
 
 export function emptyData(): SyncData {
@@ -67,6 +68,7 @@ export function emptyData(): SyncData {
     habits: [],
     milestones: [],
     projects: [],
+    assets: [],
     settings: { workStart: "09:00", workEnd: "18:00", updatedAt: 0 },
     tombstones: emptyTombstones(),
   };
@@ -131,6 +133,7 @@ export const ENTITY_SPECIAL: Record<Collection, EntitySpecial> = {
   habits: { sets: ["checks", "members"], keyed: ["log"] },
   milestones: { sets: ["members"], keyed: ["items"] },
   projects: { sets: ["members"], keyed: ["contacts", "attachments"] },
+  assets: { sets: ["members"], keyed: ["rules", "log", "pains", "readings", "attachments"] },
 };
 
 function specialFor(special: EntitySpecial | Collection | undefined): EntitySpecial {

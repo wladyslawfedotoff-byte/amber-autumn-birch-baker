@@ -8,6 +8,7 @@ import type { SyncData, SyncEntity } from "../../../src/lib/sync/merge.ts";
 import type { Proposal, ProposalItem } from "../../../src/lib/assistant/types.ts";
 import type { HabitFreq, HabitSection, Priority } from "../../../src/lib/planner-types.ts";
 import type { ToolSpec } from "./provider.ts";
+import { MAINT_SPECS, MAINT_WRITE, runMaintTool } from "./maint.ts";
 
 export type ToolContext = {
   data: SyncData;
@@ -158,9 +159,10 @@ export const TOOL_SPECS: ToolSpec[] = [
     { habits: objects({ name: str, goal: { type: "integer" }, unit: str, section: { type: "string", enum: ["morning", "afternoon", "evening", "other"] }, days: { type: "array", items: { type: "integer" }, description: "1=пн…7=вс" }, times_per_week: { type: "integer" } }, ["name"]) },
     ["habits"],
   ),
+  ...MAINT_SPECS,
 ];
 
-export const WRITE_TOOLS = new Set(["create_tasks", "update_tasks", "complete_tasks", "break_down_task", "plan_day", "create_habits"]);
+export const WRITE_TOOLS = new Set(["create_tasks", "update_tasks", "complete_tasks", "break_down_task", "plan_day", "create_habits", ...MAINT_WRITE]);
 
 /* ---- helpers for arguments --------------------------------------------- */
 
@@ -252,6 +254,9 @@ export function runTool(name: string, rawArgs: string | Args, ctx: ToolContext):
     const proposal: Proposal = { id: ctx.newId(), title, items, status: "pending" };
     return { content: JSON.stringify({ ok: true, proposal: proposal.id, note: `${note} Показано пользователю, применится после «Применить».` }), proposal };
   };
+
+  const maint = runMaintTool(name, args, ctx);
+  if (maint) return maint;
 
   switch (name) {
     case "list_tasks": {

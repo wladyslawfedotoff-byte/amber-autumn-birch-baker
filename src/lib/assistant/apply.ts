@@ -2,7 +2,8 @@
  * «Применить»: turns the confirmed items of a proposal into ordinary store
  * actions, so the changes sync like anything typed by hand.
  */
-import type { Habit, Priority, Task } from "../planner-types.ts";
+import type { Asset, Habit, Priority, Task } from "../planner-types.ts";
+import type { AssetInput, RuleInput, ServiceInput } from "../maintenance/ops.ts";
 import type { ProposalItem } from "./types.ts";
 
 export type ApplyApi = {
@@ -14,6 +15,14 @@ export type ApplyApi = {
   toggleTask: (id: string) => void;
   addSubtask: (taskId: string, title: string) => void;
   addHabit: (name: string, extra?: Partial<Habit>) => string | null;
+  /** «Обслуживание»; without it those items are skipped. */
+  maint?: {
+    assets: Pick<Asset, "id" | "rules">[];
+    addAsset: (input: AssetInput) => string | null;
+    addRule: (assetId: string, input: RuleInput) => string | null;
+    addService: (assetId: string, input: ServiceInput) => string | null;
+    setKm: (assetId: string, km: number) => boolean;
+  };
 };
 
 const INBOX = /^(входящие|inbox)$/i;
@@ -93,6 +102,36 @@ export function applyItems(items: ProposalItem[], api: ApplyApi): { applied: num
         applied++;
         break;
       }
+      case "asset": {
+        const id = api.maint?.addAsset({ name: item.name, kind: item.kind, plate: item.plate ?? undefined, model: item.model ?? undefined, km: item.km ?? null });
+        if (!id) {
+          skipped++;
+          break;
+        }
+        for (const rule of item.rules) api.maint?.addRule(id, rule);
+        applied++;
+        break;
+      }
+      case "service": {
+        const asset = api.maint?.assets.find((a) => a.id === item.assetId);
+        // Only rules that still exist: a rule deleted meanwhile is simply not reset.
+        const ruleIds = item.ruleIds.filter((id) => asset?.rules.some((r) => r.id === id));
+        const id = asset ? api.maint?.addService(item.assetId, { title: item.title, date: item.date, km: item.km, cost: item.cost, place: item.place, note: item.note, ruleIds }) : null;
+        if (id) applied++;
+        else skipped++;
+        break;
+      }
+      case "rule": {
+        const id = api.maint?.assets.some((a) => a.id === item.assetId) ? api.maint.addRule(item.assetId, item.rule) : null;
+        if (id) applied++;
+        else skipped++;
+        break;
+      }
+      case "mileage": {
+        if (api.maint?.assets.some((a) => a.id === item.assetId) && api.maint.setKm(item.assetId, item.km)) applied++;
+        else skipped++;
+        break;
+      }
       case "habit": {
         const id = api.addHabit(item.name, {
           goal: item.goal,
@@ -120,14 +159,23 @@ export function itemTitle(item: ProposalItem): string {
     case "subtasks":
       return item.taskTitle;
     case "habit":
+    case "asset":
       return item.name;
+    case "service":
+      return `${item.assetName}: ${item.title}`;
+    case "rule":
+      return `${item.assetName}: ${item.rule.title}`;
+    case "mileage":
+      return `${item.assetName}: ${item.km} км`;
   }
 }
 
 /** Editable text of an item (title / habit name); null = not editable. */
 export function withTitle(item: ProposalItem, title: string): ProposalItem {
   if (item.op === "create") return { ...item, title };
-  if (item.op === "habit") return { ...item, name: title };
+  if (item.op === "habit" || item.op === "asset") return { ...item, name: title };
+  if (item.op === "service") return { ...item, title: title.replace(`${item.assetName}: `, "") };
+  if (item.op === "rule") return { ...item, rule: { ...item.rule, title: title.replace(`${item.assetName}: `, "") } };
   if (item.op === "update") return { ...item, title };
   return item;
 }

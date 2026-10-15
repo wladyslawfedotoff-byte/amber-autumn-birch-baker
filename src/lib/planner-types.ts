@@ -1,4 +1,5 @@
 import type { TaskColor } from "./task-colors";
+import type { MaintRule } from "./maintenance/rules";
 
 export type Priority = 0 | 1 | 2 | 3;
 
@@ -28,6 +29,8 @@ export type AttachmentMeta = {
   createdAt: number;
   /** Photo capture time (EXIF DateTimeOriginal, else upload time), ms. */
   takenAt?: number;
+  /** «Обслуживание»: the file belongs to this service-log entry (missing = to the card itself). */
+  entryId?: string;
   /** Sync stamp when the meta row itself changes. */
   updatedAt?: number;
 };
@@ -69,6 +72,60 @@ export type Subtask = {
   updatedAt?: number;
 };
 
+/** «Обслуживание»: what a card is. Decides which fields it shows. */
+export type AssetKind = "car" | "device" | "consumable" | "other";
+
+/** A service-log entry: what was done, when, at what mileage, for how much. Resets the rules it names. */
+export type ServiceEntry = {
+  id: string;
+  title: string;
+  /** ISO day. */
+  date: string;
+  km?: number | null;
+  cost?: number | null;
+  place?: string;
+  note?: string;
+  /** Rules this entry counts for (their «last done» moves to this entry). */
+  ruleIds?: string[];
+  updatedAt?: number;
+};
+
+/** «Что болит»: stays until marked solved. */
+export type PainNote = { id: string; text: string; createdAt: number; solvedAt?: number | null; updatedAt?: number };
+
+/** One mileage value on a day (feeds «км в месяц»). */
+export type KmReading = { id: string; date: string; km: number; updatedAt?: number };
+
+/** «Обслуживание»: a car, an appliance, a consumable… with rules, history, notes and files. */
+export type Asset = {
+  id: string;
+  name: string;
+  kind: AssetKind;
+  plate?: string;
+  model?: string;
+  /** ISO day. */
+  boughtAt?: string | null;
+  /** Cars: current mileage and the day it was set. */
+  km?: number | null;
+  kmAt?: string | null;
+  notes: string;
+  /** «Скоро» threshold of this card (default 14 days / 500 km). */
+  soonDays?: number;
+  soonKm?: number;
+  /** Monthly reminder «Обновите пробег». */
+  kmRemind?: boolean;
+  /** Last month («YYYY-MM») a reminder task was made for. */
+  kmNotified?: string;
+  rules: MaintRule[];
+  log: ServiceEntry[];
+  pains: PainNote[];
+  readings: KmReading[];
+  /** Files of the card and of its log entries (`entryId`). */
+  attachments?: AttachmentMeta[];
+  createdAt: number;
+  updatedAt?: number;
+} & Shared;
+
 export type Task = {
   id: string;
   title: string;
@@ -109,6 +166,8 @@ export type Task = {
   afterId?: string | null;
   /** Files on this task (photos, PDF, scans). */
   attachments?: AttachmentMeta[];
+  /** «Обслуживание»: made by a rule or a mileage reminder — «assetId/ruleId» or «assetId/km». */
+  maint?: string;
   /** Links on this task. */
   links?: TaskLink[];
   /** People for this task (name + phone). */
@@ -291,6 +350,7 @@ export type View =
   | "assist"
   | "schedule"
   | "projects"
+  | "maintenance"
   | "settings"
   | "shared"
   | `list:${string}`

@@ -35,6 +35,10 @@ export function references(data: SyncData): { ids: Set<string>; parents: Set<str
     parents.add(`project:${project.id}`);
     collect(project);
   }
+  for (const asset of data.assets ?? []) {
+    parents.add(`asset:${asset.id}`);
+    collect(asset);
+  }
   return { ids, parents };
 }
 

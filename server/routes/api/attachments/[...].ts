@@ -20,7 +20,7 @@ import { safeDisplayName, validAttachId } from "../../../lib/attachments/names.t
 const MAX_FIELDS = 16;
 
 async function readUpload(req: Request, maxBytes: number): Promise<
-  | { ok: true; bytes: Uint8Array; name: string; mime: string; parentKind: "task" | "project"; parentId: string; id?: string; takenAt?: number }
+  | { ok: true; bytes: Uint8Array; name: string; mime: string; parentKind: "task" | "project" | "asset"; parentId: string; id?: string; takenAt?: number }
   | { ok: false; status: number; error: string; message?: string }
 > {
   const type = (req.headers.get("content-type") ?? "").toLowerCase();
@@ -45,7 +45,7 @@ async function readUpload(req: Request, maxBytes: number): Promise<
 
   const parentKindRaw = String(form.get("parentKind") ?? "");
   const parentId = String(form.get("parentId") ?? "");
-  if ((parentKindRaw !== "task" && parentKindRaw !== "project") || !parentId || parentId.length > 200) {
+  if ((parentKindRaw !== "task" && parentKindRaw !== "project" && parentKindRaw !== "asset") || !parentId || parentId.length > 200) {
     return { ok: false, status: 400, error: "bad_parent" };
   }
   const mime = (file.type || "application/octet-stream").toLowerCase().split(";")[0]!.trim();
@@ -80,7 +80,7 @@ export default async function attachmentsApi(event: ServerEvent): Promise<Respon
   if (!id && method === "GET") {
     const parentKind = event.url.searchParams.get("parentKind");
     const parentId = event.url.searchParams.get("parentId") ?? "";
-    if ((parentKind !== "task" && parentKind !== "project") || !parentId) {
+    if ((parentKind !== "task" && parentKind !== "project" && parentKind !== "asset") || !parentId) {
       return json(400, { error: "bad_parent" });
     }
     const access = await canAccessParent(user, { kind: parentKind, id: parentId });

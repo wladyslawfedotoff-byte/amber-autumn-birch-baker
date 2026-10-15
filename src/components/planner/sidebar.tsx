@@ -25,6 +25,7 @@ import {
   type PinKey,
 } from "@/lib/ui-prefs";
 import { projectProgress } from "@/lib/projects";
+import { summarize } from "@/lib/maintenance/ops";
 import { useShareScope } from "@/lib/use-share-scope";
 
 /** Smart lists as tiles (in this order). */
@@ -33,7 +34,7 @@ type ViewNav = Extract<NavId, View>;
 
 const TILES: ViewNav[] = ["inbox", "tomorrow", "week", "checklist", "shared"];
 /** Sections as a slim row of icon chips. */
-const TOOLS: ViewNav[] = ["today", "calendar", "schedule", "habits", "assist", "focus", "matrix", "dates"];
+const TOOLS: ViewNav[] = ["today", "calendar", "schedule", "habits", "assist", "focus", "matrix", "dates", "maintenance"];
 
 const label = (id: NavId) => NAV_ITEMS.find((item) => item.id === id)?.label ?? id;
 
@@ -134,6 +135,8 @@ export function Sidebar({
     return 0;
   }
 
+  const assetsAll = usePlanner((s) => s.assets) ?? [];
+  const maintAttention = assetsAll.filter((a) => summarize(a, today).status !== "ok").length;
   const habitLeft = habitsForDay(habits, today).filter((h) => !h.checks.includes(today)).length;
 
   function openProject(id: string) {
@@ -260,7 +263,7 @@ export function Sidebar({
             {tools.map((id) => {
               const Icon = NAV_ICONS[id];
               const active = view === id || (id === "today" && view.startsWith("day:"));
-              const badge = id === "habits" && habitLeft > 0 ? String(habitLeft) : null;
+              const badge = id === "habits" && habitLeft > 0 ? String(habitLeft) : id === "maintenance" && maintAttention > 0 ? String(maintAttention) : null;
               return (
                 // Three in a row when they fit; a long label takes its own width and wraps (never truncated).
                 <li key={id} className="min-w-fit grow basis-[30%]">
