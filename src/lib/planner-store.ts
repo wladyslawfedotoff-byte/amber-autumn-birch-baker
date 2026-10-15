@@ -1,3 +1,4 @@
+import { NAME_MAX, cleanPhone, cleanTitle, normalizeUrl } from "@/lib/objects/links";
 import { create, type StateCreator } from "zustand";
 import { placeItem } from "@/lib/reorder";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -171,8 +172,12 @@ type PlannerState = {
   moveSubtask: (taskId: string, subId: string, delta: -1 | 1) => void;
   /** Drag-and-drop: put the checklist item at `toIndex`. */
   placeSubtask: (taskId: string, subId: string, toIndex: number) => void;
-  /** Checklist / task photo «до» or «после» (attachment id; null clears). */
-  setPhotoSlot: (taskId: string, subId: string | null, slot: "before" | "after", attachId: string | null) => void;
+  /** «Ссылка» on a task; returns the id or null when the URL is not http(s). */
+  addTaskLink: (taskId: string, url: string, title?: string) => string | null;
+  removeTaskLink: (taskId: string, linkId: string) => void;
+  /** «Контакт» on a task; returns the id or null without a name and phone. */
+  addTaskContact: (taskId: string, contact: { name: string; phone?: string | null }) => string | null;
+  removeTaskContact: (taskId: string, contactId: string) => void;
   /** «Ждёт»: returns false when the link would form a cycle. */
   setTaskDependsOn: (taskId: string, dependsOn: string | null) => boolean;
   /** File meta on a task or project (the bytes go to the NAS separately). */
@@ -855,18 +860,30 @@ export const usePlanner = create<PlannerState>()(
         set((s) => ({
           tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, subtasks: placeItem(t.subtasks ?? [], subId, toIndex) } : t)),
         })),
-      setPhotoSlot: (taskId, subId, slot, attachId) =>
+      addTaskLink: (taskId, url, title) => {
+        const href = normalizeUrl(url);
+        if (!href) return null;
+        const id = uid();
+        const clean = cleanTitle(title);
         set((s) => ({
-          tasks: s.tasks.map((t) => {
-            if (t.id !== taskId) return t;
-            const key = slot === "before" ? "beforeId" : "afterId";
-            if (!subId) return { ...t, [key]: attachId };
-            return {
-              ...t,
-              subtasks: (t.subtasks ?? []).map((sub) => (sub.id === subId ? { ...sub, [key]: attachId } : sub)),
-            };
-          }),
-        })),
+          tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, links: [...(t.links ?? []), clean ? { id, url: href, title: clean } : { id, url: href }] } : t)),
+        }));
+        return id;
+      },
+      removeTaskLink: (taskId, linkId) =>
+        set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, links: (t.links ?? []).filter((l) => l.id !== linkId) } : t)) })),
+      addTaskContact: (taskId, contact) => {
+        const phone = cleanPhone(contact.phone);
+        const name = cleanTitle(contact.name).slice(0, NAME_MAX) || phone || "";
+        if (!name) return null;
+        const id = uid();
+        set((s) => ({
+          tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, contacts: [...(t.contacts ?? []), phone ? { id, name, phone } : { id, name }] } : t)),
+        }));
+        return id;
+      },
+      removeTaskContact: (taskId, contactId) =>
+        set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, contacts: (t.contacts ?? []).filter((c) => c.id !== contactId) } : t)) })),
       setTaskDependsOn: (taskId, dependsOn) => {
         const tasks = get().tasks;
         if (dependsOn && wouldCycle(taskId, dependsOn, tasks)) return false;
