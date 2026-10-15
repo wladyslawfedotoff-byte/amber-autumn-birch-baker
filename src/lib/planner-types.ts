@@ -54,6 +54,9 @@ export type TaskLink = {
   updatedAt?: number;
 };
 
+/** A link / contact of an «Обслуживание» card; with `entryId` it belongs to a log entry or a «что болит» note. */
+export type AssetLink = TaskLink & { entryId?: string };
+
 /** «Контакт» on a task (own, not from the project card). */
 export type TaskContact = {
   id: string;
@@ -61,6 +64,7 @@ export type TaskContact = {
   phone?: string;
   updatedAt?: number;
 };
+export type AssetContact = TaskContact & { entryId?: string };
 
 export type Subtask = {
   id: string;
@@ -91,7 +95,20 @@ export type ServiceEntry = {
 };
 
 /** «Что болит»: stays until marked solved. */
-export type PainNote = { id: string; text: string; createdAt: number; solvedAt?: number | null; updatedAt?: number };
+export type PainNote = {
+  id: string;
+  text: string;
+  createdAt: number;
+  solvedAt?: number | null;
+  /** «Что сделать»: the fix to make (free text). */
+  todo?: string;
+  /** «Запланировать»: a day, or a mileage, at which the task `maintpain-<id>` reminds. */
+  planDate?: string | null;
+  planKm?: number | null;
+  /** The mileage task was made once (a deleted one is not made again). */
+  taskMade?: boolean;
+  updatedAt?: number;
+};
 
 /** One mileage value on a day (feeds «км в месяц»). */
 export type KmReading = { id: string; date: string; km: number; updatedAt?: number };
@@ -120,8 +137,11 @@ export type Asset = {
   log: ServiceEntry[];
   pains: PainNote[];
   readings: KmReading[];
-  /** Files of the card and of its log entries (`entryId`). */
+  /** Files of the card and of its log entries / notes (`entryId`). */
   attachments?: AttachmentMeta[];
+  /** Links and contacts, same idea (`entryId` = log entry or note id; none = the card itself). */
+  links?: AssetLink[];
+  contacts?: AssetContact[];
   createdAt: number;
   updatedAt?: number;
 } & Shared;
@@ -166,7 +186,7 @@ export type Task = {
   afterId?: string | null;
   /** Files on this task (photos, PDF, scans). */
   attachments?: AttachmentMeta[];
-  /** «Обслуживание»: made by a rule or a mileage reminder — «assetId/ruleId» or «assetId/km». */
+  /** «Обслуживание»: made by a rule or a mileage reminder — «assetId/ruleId», «assetId/km» or «assetId/pain:noteId». */
   maint?: string;
   /** Links on this task. */
   links?: TaskLink[];

@@ -6,7 +6,17 @@ import {
   logService,
   patchAsset,
   removeEntry,
+  painTaskId,
+  parsePainRef,
+  addAssetContactTo,
+  addAssetLinkTo,
   removePain,
+  resolvePainPlan,
+  type PainPlanInput,
+  removeReading,
+  updatePain,
+  updateReading,
+  updateService,
   removeRule,
   setMileage,
   setPainSolved,
@@ -14,7 +24,8 @@ import {
   type RuleInput,
   type ServiceInput,
 } from "@/lib/maintenance/ops";
-import { kmTaskId, openTasksFor, planIsEmpty, planMaintenance } from "@/lib/maintenance/plan";
+import { kmTaskId, openTasksFor, painTask, planIsEmpty, planMaintenance } from "@/lib/maintenance/plan";
+import { usePainPrompt } from "@/lib/maintenance/prompt";
 import { create, type StateCreator } from "zustand";
 import { placeItem } from "@/lib/reorder";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -214,8 +225,21 @@ type PlannerState = {
   deleteAssetRule: (assetId: string, ruleId: string) => void;
   /** A log entry: resets the rules it names, moves the mileage, closes their reminder tasks. */
   addAssetService: (assetId: string, input: ServiceInput) => string | null;
+  /** `parentId` = log entry or note id; null = the card itself. */
+  addAssetLink: (assetId: string, parentId: string | null, url: string, title?: string) => boolean;
+  removeAssetLink: (assetId: string, linkId: string) => void;
+  addAssetContact: (assetId: string, parentId: string | null, contact: { name: string; phone?: string | null }) => boolean;
+  removeAssetContact: (assetId: string, contactId: string) => void;
+  /** Drops links and contacts of a log entry / note that was never saved. */
+  discardAssetChildren: (assetId: string, parentId: string) => void;
+  updateAssetEntry: (assetId: string, entryId: string, input: ServiceInput) => boolean;
   deleteAssetEntry: (assetId: string, entryId: string) => void;
-  addAssetPain: (assetId: string, text: string) => string | null;
+  updateAssetPain: (assetId: string, painId: string, text: string, todo?: string) => boolean;
+  updateAssetReading: (assetId: string, readingId: string, km: number | string) => boolean;
+  deleteAssetReading: (assetId: string, readingId: string) => void;
+  addAssetPain: (assetId: string, text: string, todo?: string) => string | null;
+  planAssetPain: (assetId: string, painId: string, input: PainPlanInput) => boolean;
+  unplanAssetPain: (assetId: string, painId: string) => void;
   setAssetPainSolved: (assetId: string, painId: string, solved: boolean) => void;
   deleteAssetPain: (assetId: string, painId: string) => void;
   setAssetMembers: (id: string, members: string[]) => void;
@@ -696,6 +720,12 @@ function stamped(config: PersistedCreator): PersistedCreator {
   };
 }
 
+function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
+  const out = {} as Pick<T, K>;
+  for (const key of keys) out[key] = obj[key];
+  return out;
+}
+
 export const usePlanner = create<PlannerState>()(
   persist(
     stamped((set, get) => ({
@@ -740,12 +770,25 @@ export const usePlanner = create<PlannerState>()(
             return next;
           }),
         })),
-      toggleTask: (id) =>
+      toggleTask: (id) => {
+        const before = get().tasks.find((t) => t.id === id);
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === id ? toggleTaskDone(t, { me: currentLogin() || null, today: todayIso(), now: syncNow() }) : t,
           ),
-        })),
+        }));
+        // The task of a planned «что болит» note: ticking it solves the note (and offers a history entry).
+        const ref = parsePainRef(before?.maint);
+        const after = get().tasks.find((t) => t.id === id);
+        if (!ref || !before || !after || before.done === after.done) return;
+        const asset = (get().assets ?? []).find((a) => a.id === ref.assetId);
+        const pain = asset?.pains.find((p) => p.id === ref.painId);
+        if (!asset || !pain) return;
+        const solvedAt = after.done ? pain.solvedAt || Date.now() : null;
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === asset.id ? setPainSolved(a, pain.id, !!solvedAt, solvedAt || 0) : a)) }));
+        if (after.done) usePainPrompt.getState().show({ assetId: asset.id, painId: pain.id, title: (pain.todo || pain.text).slice(0, 160) });
+        else usePainPrompt.getState().clear();
+      },
       clearTaskTime: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? clearTime(t) : t)) })),
       clearTaskDate: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? clearDate(t) : t)) })),
       undoRepeat: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? undoRepeatTick(t) : t)) })),
@@ -1074,21 +1117,120 @@ export const usePlanner = create<PlannerState>()(
         get().syncMaintenance();
         return done.entry.id;
       },
+      addAssetLink: (assetId, parentId, url, title) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const next = found ? addAssetLinkTo(found, parentId, uid(), url, title) : null;
+        if (!next) return false;
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)) }));
+        return true;
+      },
+      removeAssetLink: (assetId, linkId) =>
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? { ...a, links: (a.links ?? []).filter((l) => l.id !== linkId) } : a)) })),
+      addAssetContact: (assetId, parentId, contact) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const next = found ? addAssetContactTo(found, parentId, uid(), contact) : null;
+        if (!next) return false;
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)) }));
+        return true;
+      },
+      removeAssetContact: (assetId, contactId) =>
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? { ...a, contacts: (a.contacts ?? []).filter((c) => c.id !== contactId) } : a)) })),
+      discardAssetChildren: (assetId, parentId) =>
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) =>
+            a.id === assetId ? { ...a, links: (a.links ?? []).filter((l) => l.entryId !== parentId), contacts: (a.contacts ?? []).filter((c) => c.entryId !== parentId) } : a,
+          ),
+        })),
+      updateAssetEntry: (assetId, entryId, input) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const done = found ? updateService(found, entryId, input, uid()) : null;
+        if (!found || !done) return false;
+        // Rules this entry now resets: their open reminder is done.
+        const before = new Set(found.log.find((e) => e.id === entryId)?.ruleIds ?? []);
+        const close = new Set((done.entry.ruleIds ?? []).filter((r) => !before.has(r)).flatMap((ruleId) => openTasksFor(get().tasks, `${assetId}/${ruleId}`)));
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) => (a.id === assetId ? done.asset : a)),
+          tasks: close.size ? s.tasks.map((t) => (close.has(t.id) ? { ...t, done: true, completedAt: syncNow() } : t)) : s.tasks,
+        }));
+        get().syncMaintenance();
+        return true;
+      },
+      updateAssetPain: (assetId, painId, text, todo) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const next = found ? updatePain(found, painId, text, todo) : null;
+        if (!found || !next) return false;
+        const pain = next.pains.find((p) => p.id === painId)!;
+        // The reminder shows the same words.
+        const taskId = painTaskId(painId);
+        const open = get().tasks.some((t) => t.id === taskId && !t.done);
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)),
+          tasks: open ? s.tasks.map((t) => (t.id === taskId ? { ...t, ...pick(painTask(next, pain, t.due ?? todayIso(), 0), ["title", "notes"]) } : t)) : s.tasks,
+        }));
+        return true;
+      },
+      planAssetPain: (assetId, painId, input) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const pain = found?.pains.find((p) => p.id === painId);
+        const plan = found && pain ? resolvePainPlan(found, input, todayIso()) : null;
+        if (!found || !pain || !plan) return false;
+        const nextPain = { ...pain, planDate: plan.planDate, planKm: plan.planKm, taskMade: plan.planDate !== null, solvedAt: null };
+        const next: Asset = { ...found, pains: found.pains.map((p) => (p.id === painId ? nextPain : p)) };
+        const taskId = painTaskId(painId);
+        const made = painTask(next, nextPain, plan.planDate ?? todayIso(), Date.now());
+        set((s) => {
+          const others = s.tasks.filter((t) => t.id !== taskId);
+          const existing = s.tasks.find((t) => t.id === taskId);
+          let tasks = s.tasks;
+          if (plan.planDate) tasks = existing ? s.tasks.map((t) => (t.id === taskId ? { ...t, ...pick(made, ["title", "notes", "due", "remindAt"]), done: false, completedAt: null } : t)) : [...s.tasks, made];
+          else tasks = others; // mileage-based: the task is made when the mileage gets close
+          return { assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)), tasks };
+        });
+        get().syncMaintenance();
+        return true;
+      },
+      unplanAssetPain: (assetId, painId) => {
+        const taskId = painTaskId(painId);
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) => (a.id === assetId ? { ...a, pains: a.pains.map((p) => (p.id === painId ? { ...p, planDate: null, planKm: null, taskMade: false } : p)) } : a)),
+          tasks: s.tasks.filter((t) => t.id !== taskId || t.done),
+        }));
+      },
+      updateAssetReading: (assetId, readingId, km) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const next = found ? updateReading(found, readingId, km) : null;
+        if (!next) return false;
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)) }));
+        get().syncMaintenance();
+        return true;
+      },
+      deleteAssetReading: (assetId, readingId) => {
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? removeReading(a, readingId) : a)) }));
+        get().syncMaintenance();
+      },
       deleteAssetEntry: (assetId, entryId) => {
         set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? removeEntry(a, entryId) : a)) }));
         get().syncMaintenance();
       },
-      addAssetPain: (assetId, text) => {
+      addAssetPain: (assetId, text, todo) => {
         const found = (get().assets ?? []).find((a) => a.id === assetId);
-        const next = found ? addPain(found, text, uid(), Date.now()) : null;
+        const next = found ? addPain(found, text, uid(), Date.now(), todo) : null;
         if (!found || !next) return null;
         set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)) }));
         return next.pains[next.pains.length - 1]!.id;
       },
-      setAssetPainSolved: (assetId, painId, solved) =>
-        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? setPainSolved(a, painId, solved, Date.now()) : a)) })),
-      deleteAssetPain: (assetId, painId) =>
-        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? removePain(a, painId) : a)) })),
+      setAssetPainSolved: (assetId, painId, solved) => {
+        const taskId = painTaskId(painId);
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) => (a.id === assetId ? setPainSolved(a, painId, solved, Date.now()) : a)),
+          // Solved by hand: the planned task is done too.
+          tasks: solved ? s.tasks.map((t) => (t.id === taskId && !t.done ? { ...t, done: true, completedAt: syncNow() } : t)) : s.tasks,
+        }));
+      },
+      deleteAssetPain: (assetId, painId) => {
+        const taskId = painTaskId(painId);
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? removePain(a, painId) : a)), tasks: s.tasks.filter((t) => t.id !== taskId || t.done) }));
+      },
       setAssetMembers: (id, members) =>
         set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === id ? { ...a, members: [...new Set(members)] } : a)) })),
       syncMaintenance: () => {
@@ -1104,8 +1246,9 @@ export const usePlanner = create<PlannerState>()(
           assets: (st.assets ?? []).map((a) => {
             const marks = plan.ruleNotified.filter((n) => n.assetId === a.id);
             const km = plan.kmNotified.find((n) => n.assetId === a.id);
-            if (!marks.length && !km) return a;
-            return { ...a, ...(km ? { kmNotified: km.month } : {}), rules: a.rules.map((r) => { const m = marks.find((n) => n.ruleId === r.id); return m ? { ...r, notified: m.notified } : r; }) };
+            const madePains = new Set(plan.painMade.filter((n) => n.assetId === a.id).map((n) => n.painId));
+            if (!marks.length && !km && !madePains.size) return a;
+            return { ...a, ...(madePains.size ? { pains: a.pains.map((p) => (madePains.has(p.id) ? { ...p, taskMade: true } : p)) } : {}), ...(km ? { kmNotified: km.month } : {}), rules: a.rules.map((r) => { const m = marks.find((n) => n.ruleId === r.id); return m ? { ...r, notified: m.notified } : r; }) };
           }),
         }));
       },

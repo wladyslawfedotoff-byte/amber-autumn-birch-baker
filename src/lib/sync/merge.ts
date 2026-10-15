@@ -133,7 +133,7 @@ export const ENTITY_SPECIAL: Record<Collection, EntitySpecial> = {
   habits: { sets: ["checks", "members"], keyed: ["log"] },
   milestones: { sets: ["members"], keyed: ["items"] },
   projects: { sets: ["members"], keyed: ["contacts", "attachments"] },
-  assets: { sets: ["members"], keyed: ["rules", "log", "pains", "readings", "attachments"] },
+  assets: { sets: ["members"], keyed: ["rules", "log", "pains", "readings", "attachments", "links", "contacts"] },
 };
 
 function specialFor(special: EntitySpecial | Collection | undefined): EntitySpecial {

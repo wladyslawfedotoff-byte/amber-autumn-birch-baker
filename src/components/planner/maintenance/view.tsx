@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BarChart3, ChevronRight, Plus, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Empty } from "@/components/planner/empty-state";
@@ -6,6 +6,7 @@ import { Fab } from "@/components/planner/quick-composer";
 import { todayIso } from "@/lib/dates";
 import { groupKm, stateText } from "@/lib/maintenance/rules";
 import { sortAssets, type AssetSummary } from "@/lib/maintenance/ops";
+import { usePainPrompt } from "@/lib/maintenance/prompt";
 import { usePlanner } from "@/lib/planner-store";
 import type { Asset } from "@/lib/planner-types";
 import { AssetCardView } from "./card";
@@ -41,15 +42,26 @@ function Row({ asset, summary, onOpen }: { asset: Asset; summary: AssetSummary; 
   );
 }
 
-export function MaintenanceView() {
+export function MaintenanceView({ onOpenTask }: { onOpenTask?: (taskId: string) => void }) {
   const assets = usePlanner((s) => s.assets) ?? [];
   const [openId, setOpenId] = useState<string | null>(null);
   const [stats, setStats] = useState(false);
   const [creating, setCreating] = useState(false);
   const asset = assets.find((a) => a.id === openId) ?? null;
+  const prompt = usePainPrompt((s) => s.open);
+  const consume = usePainPrompt((s) => s.consume);
+  const [start, setStart] = useState<{ assetId: string; title: string } | null>(null);
+  useEffect(() => {
+    if (!prompt) return;
+    setStats(false);
+    setOpenId(prompt.assetId);
+    setStart({ assetId: prompt.assetId, title: prompt.title });
+    consume();
+  }, [prompt, consume]);
+  const started = useCallback(() => setStart(null), []);
 
   if (stats) return <StatsView assets={assets} onBack={() => setStats(false)} />;
-  if (asset) return <AssetCardView asset={asset} onBack={() => setOpenId(null)} onStats={() => setStats(true)} />;
+  if (asset) return <AssetCardView asset={asset} onBack={() => setOpenId(null)} onStats={() => setStats(true)} onOpenTask={onOpenTask} startService={start?.assetId === asset.id ? start : null} onStarted={started} />;
 
   const sorted = sortAssets(assets, todayIso());
   const attention = sorted.filter((x) => x.summary.status !== "ok");

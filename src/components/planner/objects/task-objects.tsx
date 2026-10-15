@@ -73,37 +73,68 @@ function PhotoChip({ item, onOpen, onRemove }: { item: AttachmentMeta; onOpen: (
   );
 }
 
+export type StripTarget = { kind: "task" | "project" | "asset"; id: string; entryId?: string };
+type StripLink = { id: string; url: string; title?: string };
+type StripContact = { id: string; name: string; phone?: string };
+
 /**
- * Everything attached to a task in one compact strip: photos, files, links,
- * contacts. Empty task → only the «＋ Файл · Ссылка · Контакт» row.
+ * ONE attach component for the whole app — tasks, «Обслуживание» cards, service
+ * entries and «что болит» notes: photos, files, links (and contacts where the
+ * parent supports them) as one chip strip, plus the «＋ Файл · Ссылка · Контакт» row.
  */
-export function TaskObjects({ task, projectContacts }: { task: Task; projectContacts: ProjectContact[] }) {
+export function ObjectStrip({
+  target,
+  files,
+  links: rawLinks,
+  contacts = [],
+  onAddLink,
+  onRemoveLink,
+  onAddContact,
+  onRemoveContact,
+  linked,
+  onUnlink,
+  projectContacts = [],
+  onPickProjectContact,
+  label = "Файлы, ссылки и контакты",
+}: {
+  target: StripTarget;
+  files: AttachmentMeta[];
+  links: StripLink[];
+  contacts?: StripContact[];
+  onAddLink: (href: string, title: string) => boolean;
+  onRemoveLink: (id: string) => void;
+  /** Omit where contacts make no sense: the «Контакт» button is not shown. */
+  onAddContact?: (contact: { name: string; phone?: string | null }) => boolean;
+  onRemoveContact?: (id: string) => void;
+  /** A contact taken from the project card (tasks only). */
+  linked?: ProjectContact;
+  onUnlink?: () => void;
+  projectContacts?: ProjectContact[];
+  onPickProjectContact?: (id: string) => void;
+  label?: string;
+}) {
   const input = useRef<HTMLInputElement>(null);
   const { attachMaxBytes } = useCapabilities();
   const uploads = useUploads();
-  const removeTaskLink = usePlanner((s) => s.removeTaskLink);
-  const removeTaskContact = usePlanner((s) => s.removeTaskContact);
-  const updateTask = usePlanner((s) => s.updateTask);
   const [lightbox, setLightbox] = useState<AttachmentMeta | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sheet, setSheet] = useState<"link" | "contact" | null>(null);
-  const files = task.attachments ?? [];
   const photos = files.filter((f) => f.mime.startsWith("image/"));
   const docs = files.filter((f) => !f.mime.startsWith("image/"));
   // Synced data is re-checked before it becomes an href (another device could send anything).
-  const links = (task.links ?? []).flatMap((l) => {
+  const links = rawLinks.flatMap((l) => {
     const url = typeof l.url === "string" ? normalizeUrl(l.url) : null;
     return url ? [{ ...l, url }] : [];
   });
-  const contacts = task.contacts ?? [];
-  const linked = task.contactId ? projectContacts.find((c) => c.id === task.contactId) : undefined;
-  const pendingHere = pendingCountFor(uploads.queue, "task", task.id);
+  const pendingHere = target.entryId
+    ? files.filter((f) => isPending(f.id)).length
+    : pendingCountFor(uploads.queue, target.kind, target.id);
   const any = files.length + links.length + contacts.length + (linked ? 1 : 0) > 0;
-  const target = { kind: "task" as const, id: task.id };
+  const fileTarget = { kind: target.kind, id: target.id };
 
   const pick = async (list: FileList | null) => {
     if (!list?.length) return;
-    const result = await addFiles(list, target, attachMaxBytes);
+    const result = await addFiles(list, { ...fileTarget, ...(target.entryId ? { entryId: target.entryId } : {}) }, attachMaxBytes);
     if (result.rejected.length) setNotice(result.rejected.map((r) => `${r.name}: ${r.reason}`).join(" · "));
     else if (result.added.length && !online()) setNotice("Без сети: файл сохранён на телефоне и уйдёт, когда появится связь.");
     else setNotice(null);
@@ -111,11 +142,11 @@ export function TaskObjects({ task, projectContacts }: { task: Task; projectCont
   };
 
   return (
-    <section className="mt-3" aria-label="Файлы, ссылки и контакты" data-testid="task-objects">
+    <section className="mt-3" aria-label={label} data-testid="task-objects">
       {any ? (
         <ul className="flex flex-wrap items-start gap-2" data-testid="object-strip">
           {photos.map((item) => (
-            <PhotoChip key={item.id} item={item} onOpen={() => setLightbox(item)} onRemove={() => void deleteFile(target, item.id)} />
+            <PhotoChip key={item.id} item={item} onOpen={() => setLightbox(item)} onRemove={() => void deleteFile(fileTarget, item.id)} />
           ))}
           {docs.map((item) => (
             <li key={item.id} className={cn(chip, "w-[calc(50%-0.25rem)]")} data-testid="object-file">
@@ -128,7 +159,7 @@ export function TaskObjects({ task, projectContacts }: { task: Task; projectCont
                   <span className="block text-[0.7rem] text-subtle">{isPending(item.id) ? "на телефоне" : sizeLabel(item.size)}</span>
                 </span>
               </button>
-              <RemoveButton label={`Удалить ${item.name}`} onClick={() => void deleteFile(target, item.id)} />
+              <RemoveButton label={`Удалить ${item.name}`} onClick={() => void deleteFile(fileTarget, item.id)} />
             </li>
           ))}
           {links.map((link) => (
@@ -140,7 +171,7 @@ export function TaskObjects({ task, projectContacts }: { task: Task; projectCont
                   <span className="block truncate text-[0.7rem] text-subtle">{siteName(link.url)} ↗</span>
                 </span>
               </a>
-              <RemoveButton label={`Удалить ссылку ${link.title || siteName(link.url)}`} onClick={() => removeTaskLink(task.id, link.id)} />
+              <RemoveButton label={`Удалить ссылку ${link.title || siteName(link.url)}`} onClick={() => onRemoveLink(link.id)} />
             </li>
           ))}
           {linked ? (
@@ -151,7 +182,7 @@ export function TaskObjects({ task, projectContacts }: { task: Task; projectCont
                 <span className="block truncate text-[0.7rem] text-subtle">{[linked.role, linked.phone].filter(Boolean).join(" · ") || "из проекта"}</span>
               </span>
               <ContactActions name={linked.name} phone={linked.phone} />
-              <RemoveButton label={`Убрать ${linked.name}`} onClick={() => updateTask(task.id, { contactId: null })} />
+              <RemoveButton label={`Убрать ${linked.name}`} onClick={() => onUnlink?.()} />
             </li>
           ) : null}
           {contacts.map((c) => (
@@ -162,7 +193,7 @@ export function TaskObjects({ task, projectContacts }: { task: Task; projectCont
                 {c.phone ? <span className="block truncate text-[0.7rem] text-subtle">{c.phone}</span> : null}
               </span>
               <ContactActions name={c.name} phone={c.phone} />
-              <RemoveButton label={`Удалить ${c.name}`} onClick={() => removeTaskContact(task.id, c.id)} />
+              <RemoveButton label={`Удалить ${c.name}`} onClick={() => onRemoveContact?.(c.id)} />
             </li>
           ))}
         </ul>
@@ -177,10 +208,14 @@ export function TaskObjects({ task, projectContacts }: { task: Task; projectCont
         <button type="button" className="h-10 px-1.5" onClick={() => setSheet("link")}>
           Ссылка
         </button>
-        <span aria-hidden="true">·</span>
-        <button type="button" className="h-10 px-1.5" onClick={() => setSheet("contact")}>
-          Контакт
-        </button>
+        {onAddContact ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <button type="button" className="h-10 px-1.5" onClick={() => setSheet("contact")}>
+              Контакт
+            </button>
+          </>
+        ) : null}
         {pendingHere ? (
           <span className="ml-auto pr-1 text-xs text-warn" data-testid="attach-pending">
             ждут: {pendingHere}
@@ -196,14 +231,42 @@ export function TaskObjects({ task, projectContacts }: { task: Task; projectCont
       </div>
       {notice ? <p className="mt-1 text-xs text-muted">{notice}</p> : null}
       {lightbox ? <AttachmentLightbox item={lightbox} onClose={() => setLightbox(null)} /> : null}
-      <LinkSheet open={sheet === "link"} taskId={task.id} onClose={() => setSheet(null)} />
-      <ContactSheet
-        open={sheet === "contact"}
-        task={task}
-        projectContacts={projectContacts.filter((c) => c.id !== task.contactId)}
-        onClose={() => setSheet(null)}
-      />
+      <LinkSheet open={sheet === "link"} onAdd={onAddLink} onClose={() => setSheet(null)} />
+      {onAddContact ? (
+        <ContactSheet open={sheet === "contact"} projectContacts={projectContacts.filter((c) => c.id !== linked?.id)} onAdd={onAddContact} onPickProject={onPickProjectContact} onClose={() => setSheet(null)} />
+      ) : null}
     </section>
+  );
+}
+
+/** Task: its own files, links and contacts, plus the one taken from the project card. */
+export function TaskObjects({ task, projectContacts }: { task: Task; projectContacts: ProjectContact[] }) {
+  const addTaskLink = usePlanner((s) => s.addTaskLink);
+  const removeTaskLink = usePlanner((s) => s.removeTaskLink);
+  const addTaskContact = usePlanner((s) => s.addTaskContact);
+  const removeTaskContact = usePlanner((s) => s.removeTaskContact);
+  const updateTask = usePlanner((s) => s.updateTask);
+  const linked = task.contactId ? projectContacts.find((c) => c.id === task.contactId) : undefined;
+  return (
+    <ObjectStrip
+      target={{ kind: "task", id: task.id }}
+      files={task.attachments ?? []}
+      links={task.links ?? []}
+      contacts={task.contacts ?? []}
+      linked={linked}
+      onUnlink={() => updateTask(task.id, { contactId: null })}
+      projectContacts={projectContacts}
+      onPickProjectContact={(id) => {
+        if (task.contactId) {
+          const c = projectContacts.find((x) => x.id === id);
+          if (c) addTaskContact(task.id, { name: c.name, phone: c.phone });
+        } else updateTask(task.id, { contactId: id });
+      }}
+      onAddLink={(href, title) => addTaskLink(task.id, href, title) !== null}
+      onRemoveLink={(id) => removeTaskLink(task.id, id)}
+      onAddContact={(c) => addTaskContact(task.id, c) !== null}
+      onRemoveContact={(id) => removeTaskContact(task.id, id)}
+    />
   );
 }
 
@@ -230,8 +293,7 @@ async function suggestTitle(url: string, signal: AbortSignal): Promise<string | 
   }
 }
 
-export function LinkSheet({ open, taskId, onClose }: { open: boolean; taskId: string; onClose: () => void }) {
-  const addTaskLink = usePlanner((s) => s.addTaskLink);
+export function LinkSheet({ open, onAdd, onClose }: { open: boolean; onAdd: (href: string, title: string) => boolean; onClose: () => void }) {
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [suggested, setSuggested] = useState<string | null>(null);
@@ -261,7 +323,7 @@ export function LinkSheet({ open, taskId, onClose }: { open: boolean; taskId: st
   }, [href]);
   const save = () => {
     if (!href) return;
-    if (addTaskLink(taskId, href, title)) onClose();
+    if (onAdd(href, title)) onClose();
   };
   return (
     <Sheet open={open} title="Ссылка" onClose={onClose} action={{ label: "Добавить", onClick: save, disabled: !href }}>
@@ -308,17 +370,17 @@ export function LinkSheet({ open, taskId, onClose }: { open: boolean; taskId: st
 
 export function ContactSheet({
   open,
-  task,
   projectContacts,
+  onAdd,
+  onPickProject,
   onClose,
 }: {
   open: boolean;
-  task: Task;
   projectContacts: ProjectContact[];
+  onAdd: (contact: { name: string; phone?: string | null }) => boolean;
+  onPickProject?: (id: string) => void;
   onClose: () => void;
 }) {
-  const addTaskContact = usePlanner((s) => s.addTaskContact);
-  const updateTask = usePlanner((s) => s.updateTask);
   const card = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -345,13 +407,13 @@ export function ContactSheet({
     fill(parseVcard(await file.text()));
   };
   const save = () => {
-    if (addTaskContact(task.id, { name, phone })) onClose();
+    if (onAdd({ name, phone })) onClose();
   };
   const canSave = Boolean(name.trim() || phone.trim());
   return (
     <Sheet open={open} title="Контакт" onClose={onClose} action={{ label: "Добавить", onClick: save, disabled: !canSave }}>
       <div className="space-y-2 pb-2">
-        {projectContacts.length ? (
+        {onPickProject && projectContacts.length ? (
           <div data-testid="project-contact-pick">
             <p className="mb-1 text-xs text-subtle">Из проекта</p>
             <div className="flex flex-wrap gap-1.5">
@@ -360,8 +422,7 @@ export function ContactSheet({
                   key={c.id}
                   type="button"
                   onClick={() => {
-                    if (task.contactId) addTaskContact(task.id, { name: c.name, phone: c.phone });
-                    else updateTask(task.id, { contactId: c.id });
+                    onPickProject?.(c.id);
                     onClose();
                   }}
                   className="inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border border-line bg-elevated px-3 text-sm text-fg"
