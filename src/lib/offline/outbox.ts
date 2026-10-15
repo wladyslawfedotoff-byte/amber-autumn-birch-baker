@@ -11,7 +11,7 @@
  * Pure: node --test loads this file directly.
  */
 
-export const OUTBOX_COLLECTIONS = ["lists", "tasks", "habits", "milestones", "projects"] as const;
+export const OUTBOX_COLLECTIONS = ["lists", "tasks", "habits", "milestones", "projects", "assets"] as const;
 export type OutboxCollection = (typeof OUTBOX_COLLECTIONS)[number] | "settings";
 
 export type OutboxEntry = {

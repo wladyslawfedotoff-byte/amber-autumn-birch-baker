@@ -66,3 +66,24 @@ test("restored task un-marks its files; young uploads and empty data are left al
     assert.ok(await store.get("backback01"));
   });
 });
+
+test("«Обслуживание»: files of a card and of its log entries are kept; those of a deleted card are cleaned", async () => {
+  await withStore(async (store) => {
+    const t0 = 1_000 * DAY;
+    const putAsset = (id: string, asset: string) =>
+      store.put({ owner: "user1", parent: { kind: "asset", id: asset }, name: `${id}.jpg`, mime: "image/jpeg", bytes: new Uint8Array([1]), id, now: t0 });
+    await putAsset("cardfile001", "car");
+    await putAsset("receipt0001", "car");
+    await putAsset("lostfile001", "deleted-car");
+    const data = emptyData();
+    // the only entities are cards: the «empty document» guard must not skip the cleanup
+    data.assets = [{ id: "car", name: "Легковая", attachments: [{ id: "cardfile001" }, { id: "receipt0001", entryId: "e1" }] }];
+    const opts = { store, data, graceMs: 30 * DAY };
+    await runCleanup({ ...opts, now: t0 + 2 * DAY });
+    const r = await runCleanup({ ...opts, now: t0 + 40 * DAY });
+    assert.equal(r.removed, 1);
+    assert.ok(await store.readBytes("cardfile001"));
+    assert.ok(await store.readBytes("receipt0001"));
+    assert.equal(await store.get("lostfile001"), null);
+  });
+});

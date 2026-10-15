@@ -227,3 +227,15 @@ test("bottom inset: a short Home Screen frame does not add it again", () => {
   assert.equal(frameEndsAboveScreen({ standalone: true, innerWidth: 852, innerHeight: 393, screenWidth: 393, screenHeight: 852, safeTop: 0, keyboard: false }), false);
   assert.equal(frameEndsAboveScreen({ standalone: true, innerWidth: 852, innerHeight: 393, screenWidth: 393, screenHeight: 852, safeTop: 20, keyboard: false }), false);
 });
+
+test("«Обслуживание»: a new section in the menu by default; can sit in the bar or be hidden", () => {
+  assert.ok(NAV_ITEMS.some((item) => item.id === "maintenance" && item.tab));
+  const prefs = { tabBar: DEFAULT_TABS, drawerHidden: [] as NavId[] };
+  assert.equal(placementOf("maintenance", prefs), "menu", "existing devices keep their bar; the item shows up in the menu");
+  const full = { tabBar: ["today", "calendar", "schedule", "habits", "focus"] as TabId[], drawerHidden: [] as NavId[] };
+  assert.equal(setPlacement(full, "maintenance", "bottom"), full, "bar is full");
+  const swapped = setPlacement(setPlacement(full, "focus", "menu"), "maintenance", "bottom");
+  assert.ok(swapped.tabBar.includes("maintenance"));
+  assert.deepEqual(setPlacement(prefs, "maintenance", "hidden").drawerHidden, ["maintenance"]);
+  assert.deepEqual(normalizeTabs(["today", "maintenance"]), ["today", "maintenance"]);
+});

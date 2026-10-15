@@ -4,7 +4,7 @@
  *
  * Pure logic + injected storage so node --test can run it.
  */
-export type ParentKind = "task" | "project";
+export type ParentKind = "task" | "project" | "asset";
 
 export type QueuedUpload = {
   id: string;
@@ -34,7 +34,7 @@ export function parseQueue(raw: unknown): UploadQueue {
     (item): item is QueuedUpload =>
       !!item &&
       typeof item.id === "string" &&
-      (item.parentKind === "task" || item.parentKind === "project") &&
+      (item.parentKind === "task" || item.parentKind === "project" || item.parentKind === "asset") &&
       typeof item.parentId === "string" &&
       typeof item.name === "string" &&
       typeof item.mime === "string" &&

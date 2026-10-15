@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import { dataDir } from "../sync-store.ts";
 import { resolveInside, safeDisplayName, validAttachId } from "./names.ts";
 
-export type AttachParent = { kind: "task" | "project"; id: string };
+export type AttachParent = { kind: "task" | "project" | "asset"; id: string };
 
 export type AttachMeta = {
   id: string;
@@ -41,7 +41,7 @@ function parse(raw: string): MetaFile {
     for (const [id, item] of Object.entries(value.items)) {
       if (!validAttachId(id) || !item || typeof item !== "object") continue;
       if (typeof item.owner !== "string" || !item.owner) continue;
-      if (!item.parent || (item.parent.kind !== "task" && item.parent.kind !== "project")) continue;
+      if (!item.parent || (item.parent.kind !== "task" && item.parent.kind !== "project" && item.parent.kind !== "asset")) continue;
       if (typeof item.parent.id !== "string" || !item.parent.id) continue;
       if (typeof item.mime !== "string" || typeof item.size !== "number") continue;
       out.items[id] = {

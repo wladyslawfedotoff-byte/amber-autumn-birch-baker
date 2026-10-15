@@ -1,7 +1,7 @@
 import { Users, UserCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
-import type { Milestone, Task, TaskList } from "@/lib/planner-types";
+import type { Asset, Milestone, Task, TaskList } from "@/lib/planner-types";
 import { isSharedTask, ownerOf } from "@/lib/queries";
 import { displayName, useProfile, type Capabilities } from "@/lib/use-capabilities";
 
@@ -174,6 +174,40 @@ export function MilestoneShareBar({ item }: { item: Milestone }) {
               on={on}
               label={user.login === me ? "Я" : user.name}
               onClick={() => setMilestoneMembers(item.id, on ? members.filter((login) => login !== user.login) : [...members, user.login])}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** «Обслуживание»: who else sees the card and its history. Reminders (tasks, push) go to the owner only. */
+export function AssetShareBar({ asset }: { asset: Asset }) {
+  const profile = useProfile();
+  const setAssetMembers = usePlanner((s) => s.setAssetMembers);
+  if (!profile.multiUser || !profile.login) return null;
+  const me = profile.login;
+  const owner = ownerOf(asset, profile.dataOwner || me);
+  const members = asset.members ?? [];
+  const people = others(profile, [owner]);
+  if (!people.length) return null;
+  return (
+    <div className="mt-3">
+      <p className="flex items-center gap-1 text-xs font-medium text-subtle">
+        <Users className="size-3.5" aria-hidden="true" />
+        {owner === me ? "Общая карточка — кто ещё видит и ведёт историю" : `Карточка ${displayName(owner, profile)} — с вами поделились`}
+      </p>
+      <p className="mt-1 text-xs text-muted">Видят и дополняют карточку, пробег, записи и файлы. Напоминания приходят владельцу.</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {people.map((user) => {
+          const on = members.includes(user.login);
+          return (
+            <Chip
+              key={user.login}
+              on={on}
+              label={user.login === me ? "Я" : user.name}
+              onClick={() => setAssetMembers(asset.id, on ? members.filter((login) => login !== user.login) : [...members, user.login])}
             />
           );
         })}

@@ -81,10 +81,15 @@ export function AttachmentsBlock({
   kind,
   parentId,
   items,
+  entryId,
+  label,
 }: {
-  kind: "task" | "project";
+  kind: "task" | "project" | "asset";
   parentId: string;
   items: AttachmentMeta[];
+  /** «Обслуживание»: the files belong to one log entry. */
+  entryId?: string;
+  label?: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const { attachMaxBytes } = useCapabilities();
@@ -95,7 +100,7 @@ export function AttachmentsBlock({
 
   const pick = async (list: FileList | null) => {
     if (!list?.length) return;
-    const result = await addFiles(list, { kind, id: parentId }, attachMaxBytes);
+    const result = await addFiles(list, { kind, id: parentId, ...(entryId ? { entryId } : {}) }, attachMaxBytes);
     if (result.rejected.length) setNotice(result.rejected.map((r) => `${r.name}: ${r.reason}`).join(" · "));
     else if (result.added.length && !online()) setNotice("Без сети: файл сохранён на телефоне и уйдёт, когда появится связь.");
     else setNotice(null);
@@ -103,11 +108,11 @@ export function AttachmentsBlock({
   };
 
   return (
-    <section className="mt-3" aria-labelledby={`attach-${parentId}`}>
+    <section className="mt-3" aria-labelledby={`attach-${entryId ?? parentId}`}>
       <div className="flex items-center gap-2">
-        <div id={`attach-${parentId}`}>
+        <div id={`attach-${entryId ?? parentId}`}>
           <FieldLabel hint="Фото с камеры или из галереи (в том числе HEIC с iPhone — на сервере станет JPEG), PDF, сканы, документы и таблицы. Дата съёмки из EXIF показывается под фото. Без сети файл сначала остаётся на телефоне.">
-            Вложения
+            {label ?? "Вложения"}
           </FieldLabel>
         </div>
         {pendingHere ? (

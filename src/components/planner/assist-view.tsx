@@ -10,6 +10,9 @@ import { countInbox, countToday } from "@/lib/queries";
 import { isLongText, suggestChips } from "@/lib/assistant/suggest";
 import { groupHistory } from "@/lib/assistant/history";
 import { usePlanner } from "@/lib/planner-store";
+import { draftRule, kindLabel, summarize } from "@/lib/maintenance/ops";
+import { groupKm, ruleLine } from "@/lib/maintenance/rules";
+import { money } from "@/lib/maintenance/stats";
 import { applyItems, itemTitle, withTitle } from "@/lib/assistant/apply";
 import { assistantApi, streamChat } from "@/lib/assistant/client";
 import { cancelOfflineQuestion, queueOfflineQuestion } from "@/lib/offline/assist-queue";
@@ -135,6 +138,25 @@ function itemMeta(item: ProposalItem): string {
     case "subtasks":
       parts.push(item.steps.join(" · "));
       break;
+    case "asset":
+      parts.push(kindLabel(item.kind));
+      if (item.plate) parts.push(item.plate);
+      if (item.km != null) parts.push(`${groupKm(item.km)} км`);
+      for (const rule of item.rules) parts.push(`${rule.title}: ${ruleLine(draftRule(rule))}`);
+      break;
+    case "service":
+      parts.push(formatShortDay(item.date));
+      if (item.km != null) parts.push(`${groupKm(item.km)} км`);
+      if (item.cost) parts.push(money(item.cost));
+      if (item.place) parts.push(item.place);
+      parts.push(item.ruleNames.length ? `сбросит: ${item.ruleNames.join(", ")}` : "без сброса правил");
+      break;
+    case "rule":
+      parts.push(ruleLine(draftRule(item.rule)));
+      break;
+    case "mileage":
+      parts.push(item.was != null ? `было ${groupKm(item.was)} км` : "обновить пробег");
+      break;
     case "habit":
       parts.push(item.goal ? `${item.goal}${item.unit ? ` ${item.unit}` : ""} в день` : "отметка в день");
       if (item.freq.kind === "weekly") parts.push(`${item.freq.times} р. в неделю`);
@@ -147,7 +169,7 @@ function itemMeta(item: ProposalItem): string {
 function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; onApply: (items: ProposalItem[]) => void; onDismiss: () => void }) {
   const [items, setItems] = useState(proposal.items);
   const pending = proposal.status === "pending";
-  const editable = (item: ProposalItem) => item.op === "create" || item.op === "habit";
+  const editable = (item: ProposalItem) => item.op === "create" || item.op === "habit" || item.op === "asset" || item.op === "service" || item.op === "rule";
   const updates = items.filter((item): item is Extract<ProposalItem, { op: "update" }> => item.op === "update");
   const timeline = proposal.kind === "plan" && updates.length === items.length && items.length > 0;
   const remove = (key: string) => setItems(items.filter((it) => it.key !== key));
@@ -495,12 +517,14 @@ export function AssistView({
       toggleTask: s.toggleTask,
       addSubtask: s.addSubtask,
       addHabit: s.addHabit,
+      maint: { assets: s.assets ?? [], addAsset: s.addAsset, addRule: s.addAssetRule, addService: s.addAssetService, setKm: s.setAssetKm },
     });
     setMessages((list) =>
       list.map((m) => (m.id === message.id ? { ...m, proposals: m.proposals?.map((p) => (p.id === proposal.id ? { ...p, items, status: "applied" } : p)) } : m)),
     );
     if (conversationId) void assistantApi.setProposal(conversationId, proposal.id, "applied", items).catch(() => undefined);
-    if (items.length === 1 && items[0]!.op !== "create" && items[0]!.op !== "habit" && result.applied) onOpen(items[0]!.taskId);
+    const only = items.length === 1 ? items[0]! : null;
+    if (only && result.applied && (only.op === "update" || only.op === "complete" || only.op === "subtasks")) onOpen(only.taskId);
   }
 
   function dismiss(message: ChatMessage, proposal: Proposal) {
@@ -581,6 +605,7 @@ export function AssistView({
   }
 
   const tasks = usePlanner((st) => st.tasks);
+  const assets = usePlanner((st) => st.assets);
   const project = usePlanner((st) => (projectId ? st.projects?.find((item) => item.id === projectId) : undefined));
   const isLongDraft = isLongText(draft);
   // Rebuilt when the data or the draft changes; the hour is read on render (good enough for «вечер»).
@@ -593,8 +618,9 @@ export function AssistView({
       hour: new Date().getHours(),
       draft,
       project: project ? project.title || "Без названия" : null,
+      maintOverdue: (assets ?? []).filter((a) => summarize(a, todayIso()).status === "overdue").length,
     });
-  }, [tasks, draft, project]);
+  }, [tasks, draft, project, assets]);
   const historyGroups = useMemo(() => groupHistory(history ?? [], historyQuery), [history, historyQuery]);
 
   if (statusError) return <p className="py-10 text-center text-sm text-muted">Помощник сейчас недоступен. Проверьте связь с сервером.</p>;
@@ -711,7 +737,7 @@ export function AssistView({
                 onClick={() => void send(chip.ask)}
                 className={cn(
                   "h-8 max-w-full truncate rounded-full px-3 text-[0.8125rem]",
-                  chip.id === "from-text" || chip.id === "overdue" ? "bg-accent/12 text-accent" : "card-lift bg-elevated text-fg",
+                  chip.id === "from-text" || chip.id === "overdue" || chip.id === "maint" ? "bg-accent/12 text-accent" : "card-lift bg-elevated text-fg",
                 )}
               >
                 {chip.label}

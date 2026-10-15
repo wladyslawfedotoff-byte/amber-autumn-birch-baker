@@ -11,6 +11,7 @@ import { FocusView, formatFocusClock } from "@/components/planner/focus-view";
 import { HabitsView } from "@/components/planner/habits-view";
 import { MatrixView } from "@/components/planner/matrix-view";
 import { ProjectsView } from "@/components/planner/projects-view";
+import { MaintenanceView } from "@/components/planner/maintenance/view";
 import { ReminderBanner, ReminderBell, ReminderPanel, useReminderChime, useReminderHits } from "@/components/planner/reminder-ui";
 import { ScheduleScreen } from "@/components/planner/schedule-screen";
 import { SettingsView } from "@/components/planner/settings-view";
@@ -55,6 +56,7 @@ function viewTitle(view: View, lists: { id: string; name: string }[]): string {
   if (view === "assist") return "Помощник";
   if (view === "schedule") return "Расписание";
   if (view === "projects") return "Проекты";
+  if (view === "maintenance") return "Обслуживание";
   if (view === "settings") return "Настройки";
   if (view === "shared") return "Общие";
   if (view.startsWith("tag:")) return `#${view.slice(4)}`;
@@ -169,6 +171,20 @@ export function PlannerApp() {
     setSelectedId(id);
   }, [tasks]);
 
+  // «Обслуживание»: rules that became «скоро» turn into ordinary tasks (idempotent; also hourly and on return to the app).
+  const assetsAll = usePlanner((s) => s.assets);
+  const syncMaintenance = usePlanner((s) => s.syncMaintenance);
+  useEffect(() => {
+    syncMaintenance();
+    const timer = window.setInterval(syncMaintenance, 60 * 60 * 1000);
+    const visible = () => document.visibilityState === "visible" && syncMaintenance();
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, [assetsAll, syncMaintenance]);
+
   // Questions to the assistant asked without network go to the server queue
   // once the server is reachable again (on start, «online», after a sync recovers).
   const reachable = !useServerSyncStatus().offline;
@@ -273,6 +289,7 @@ export function PlannerApp() {
     if (view === "assist") return "";
     if (view === "schedule") return "";
     if (view === "projects") return "";
+    if (view === "maintenance") return "";
     if (view === "settings") return "";
     if (view === "shared") return "Видны не только вам";
     if (view.startsWith("tag:")) {
@@ -516,6 +533,7 @@ export function PlannerApp() {
             />
           ) : null}
           {!query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} onOpenChange={onProjectShown} /> : null}
+          {!query.trim() && view === "maintenance" ? <MaintenanceView /> : null}
           {!query.trim() && view === "settings" ? <SettingsView onView={openView} /> : null}
         </div>
         {quick ? (

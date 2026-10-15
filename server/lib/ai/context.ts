@@ -8,9 +8,10 @@
  */
 import { TOOL_SPECS, TASKS, brief, freeSlots, plural, tasksOf, type TaskLike, type ToolContext } from "./tools.ts";
 import type { ToolSpec } from "./provider.ts";
+import { assetsOf, maintAnswer, maintContext } from "./maint.ts";
 import type { AnswerView, Chip, Proposal, ProposalItem } from "../../../src/lib/assistant/types.ts";
 
-export type IntentKind = "about" | "overdue" | "today" | "free" | "plan" | "create" | "update" | "complete" | "breakdown" | "habit" | "general";
+export type IntentKind = "about" | "overdue" | "today" | "free" | "plan" | "create" | "update" | "complete" | "breakdown" | "habit" | "maint" | "general";
 export type Intent = { kind: IntentKind; dates: string[]; local: boolean };
 
 const WEEKDAYS_SHORT = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
@@ -65,6 +66,16 @@ export function isMetaQuestion(question: string): boolean {
   return META.test(q) && !ACT.test(q);
 }
 
+/** «Обслуживание»: mileage, service entries, rules, «что пора менять». */
+const MAINT = /(пробег|одометр|(^|[^а-я])км($|[^а-я])|техобслуж|обслуживани|заменил[аи]?($|[^а-я])|поменял[аи]?($|[^а-я])|(завед|созда|добав|запиш)[а-я]* [^.]{0,25}(карточк|машин|автомобил|техник|расходник|правил)|пора (менять|заменить)|что менять|замен[аы] масл|масл[оа] (в|на|менял))/;
+/** A plain status question, answered by the app itself. */
+const MAINT_STATUS = /^(а )?(что|какие|как|покажи)[^.?]{0,30}(обслуживани|пора (менять|заменить)|что менять|техобслуж)|обслуживани[^.?]{0,20}(просроч|скоро)|просроч[^.?]{0,20}обслуживани/;
+
+function maintHint(ctx: ToolContext): string {
+  const bad = maintAnswer(ctx).text.split("\n").filter((l) => l.startsWith("- ")).length;
+  return bad ? `Обслуживание: нужно внимание ${bad}` : "";
+}
+
 /** What the user wants. `local` = this app can answer it alone. */
 export function intentOf(question: string, today: string): Intent {
   const q = question.toLowerCase().replace(/ё/g, "е").trim();
@@ -78,6 +89,7 @@ export function intentOf(question: string, today: string): Intent {
   if (/привычк/.test(q)) return { kind: "habit", dates, local: false };
   if (/(разбей|разложи|на шаги|подзадач)/.test(q)) return { kind: "breakdown", dates, local: false };
   if (/(спланируй|распланируй|план (на )?дня|план на (сегодня|завтра|день)|расставь|распиши (мой )?день|составь (план|расписание))/.test(q)) return { kind: "plan", dates: dates.length ? dates : [today], local: false };
+  if (MAINT.test(q) && !/(задач|напомни)/.test(q)) return { kind: "maint", dates, local: short && MAINT_STATUS.test(q) && !writes };
   if (/(отметь|выполнил|сделал[аи]?\b|закрой задач|готово)/.test(q)) return { kind: "complete", dates, local: false };
   if (/(перенеси|перенести|сдвинь|поменяй|измени|переименуй|поставь .* на|в другой список)/.test(q)) return { kind: "update", dates, local: false };
   if (/(добав|создай|создать|запиши|напомни|новая задача|новую задачу)/.test(q)) return { kind: "create", dates, local: false };
@@ -166,9 +178,12 @@ export function contextFor(intent: Intent, question: string, ctx: ToolContext): 
     }
     case "habit":
       break;
+    case "maint":
+      out.push(maintContext(ctx));
+      break;
     default: {
       const week = open.filter((t) => t.due !== null && t.due > today && t.due <= addDays(today, 7)).sort(byDue);
-      out.push(...section(ctx, "Сегодня", on(today), 12), ...section(ctx, "Просрочено", overdue, 8), ...section(ctx, "7 дней", week, 10), `Без даты: ${open.filter((t) => !t.due).length}`, `Свободно сегодня: ${freeLine(ctx, today).split(": ")[1]}`);
+      out.push(...section(ctx, "Сегодня", on(today), 12), ...section(ctx, "Просрочено", overdue, 8), ...section(ctx, "7 дней", week, 10), `Без даты: ${open.filter((t) => !t.due).length}`,...(assetsOf(ctx).length ? [maintHint(ctx)].filter(Boolean) : []), `Свободно сегодня: ${freeLine(ctx, today).split(": ")[1]}`);
     }
   }
   return out.join("\n");
@@ -185,6 +200,7 @@ const TOOLS_FOR: Record<IntentKind, string[] | null> = {
   complete: ["search_tasks", "complete_tasks"],
   breakdown: ["search_tasks", "break_down_task"],
   habit: ["create_habits"],
+  maint: ["create_asset", "add_service", "create_rule", "set_mileage"],
   // Habits and step breakdowns have their own keyword intents, so an unclear question skips them.
   general: ["search_tasks", "create_tasks", "update_tasks", "complete_tasks", "plan_day", "free_slots"],
 };
@@ -221,7 +237,8 @@ export const CAPABILITIES = [
   "- перенести, переименовать, сменить список или приоритет;",
   "- отметить задачи выполненными;",
   "- спланировать день и разбить задачу на шаги;",
-  "- завести привычку.",
+  "- завести привычку;",
+  "- вести «Обслуживание»: карточку машины или техники, запись «заменил масло» (обновит пробег и срок), правило «каждые 10 000 км или 12 мес.», новый пробег.",
   "",
   "Всё уже подключено, открывать доступ не нужно. Изменения приходят карточкой — нажмите «Применить».",
 ].join("\n");
@@ -300,6 +317,8 @@ export function localAnswer(intent: Intent, ctx: ToolContext): LocalAnswer | nul
         chips: [ask(`Что ${first === today ? "на сегодня" : `на ${name}`}?`, `Что у меня ${first === today ? "сегодня" : name}?`), ask("Спланировать день", first === today ? "Спланируй мой день" : `Спланируй ${name}`)],
       };
     }
+    case "maint":
+      return maintAnswer(ctx);
     default:
       return null;
   }
