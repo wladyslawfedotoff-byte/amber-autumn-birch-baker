@@ -148,19 +148,3 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
     </section>
   );
 }
-
-/** Compact chip in task detail when a project contact is linked. */
-export function ContactChip({ contact }: { contact: ProjectContact }) {
-  return (
-    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line bg-elevated px-2.5 py-1 text-xs text-fg" data-testid="contact-chip">
-      <UserRound className="size-3.5 shrink-0 text-muted" aria-hidden="true" />
-      <span className="min-w-0 truncate font-medium">{contact.name}</span>
-      {contact.role ? <span className="truncate text-muted">· {contact.role}</span> : null}
-      {contact.phone ? (
-        <a href={`tel:${contact.phone.replace(/\s/g, "")}`} className="shrink-0 text-accent" aria-label={`Позвонить ${contact.name}`} onClick={(e) => e.stopPropagation()}>
-          <Phone className="size-3.5" />
-        </a>
-      ) : null}
-    </span>
-  );
-}

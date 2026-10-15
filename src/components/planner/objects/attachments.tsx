@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { File as FileIcon, FileSpreadsheet, FileText, Image as ImageIcon, Paperclip, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/hint";
-import { cn } from "@/lib/cn";
 import type { AttachmentMeta } from "@/lib/planner-types";
 import {
   ACCEPT,
@@ -14,22 +13,19 @@ import {
   localPreview,
   online,
   pendingCountFor,
-  photoStampOn,
   readText,
-  setPhotoStamp,
   useUploads,
 } from "@/lib/attachments/runtime";
 import { formatTakenAt } from "@/lib/attachments/exif";
-import { usePlanner } from "@/lib/planner-store";
 import { useCapabilities } from "@/lib/use-capabilities";
 
-function sizeLabel(bytes: number): string {
+export function sizeLabel(bytes: number): string {
   if (bytes < 1024) return `${bytes} Б`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
   return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
 }
 
-function Thumb({ item }: { item: AttachmentMeta }) {
+export function Thumb({ item }: { item: AttachmentMeta }) {
   const [src, setSrc] = useState<string | null>(null);
   const pending = isPending(item.id);
   useEffect(() => {
@@ -51,7 +47,7 @@ function Thumb({ item }: { item: AttachmentMeta }) {
   return <KindIcon mime={item.mime} />;
 }
 
-function KindIcon({ mime }: { mime: string }) {
+export function KindIcon({ mime }: { mime: string }) {
   const kind = fileKind(mime);
   const cls = "size-6 text-muted";
   if (kind === "image") return <ImageIcon className={cls} />;
@@ -95,7 +91,6 @@ export function AttachmentsBlock({
   const uploads = useUploads();
   const [lightbox, setLightbox] = useState<AttachmentMeta | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [stamp, setStamp] = useState(() => photoStampOn());
   const pendingHere = pendingCountFor(uploads.queue, kind, parentId);
 
   const pick = async (list: FileList | null) => {
@@ -183,52 +178,44 @@ export function AttachmentsBlock({
           <Upload className="size-4" aria-hidden="true" />
           Камера
         </Button>
-        <button
-          type="button"
-          className={cn("rounded-md px-2 py-1.5 text-xs", stamp ? "bg-accent/15 text-accent" : "text-muted")}
-          aria-pressed={stamp}
-          title="На новых фото в правом нижнем углу будет дата съёмки"
-          onClick={() => {
-            const next = !stamp;
-            setPhotoStamp(next);
-            setStamp(next);
-          }}
-        >
-          {stamp ? "Дата на фото: вкл" : "Дата на фото"}
-        </button>
       </div>
       {notice ? <p className="mt-1 text-xs text-muted">{notice}</p> : null}
 
-      {lightbox ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label={lightbox.name}
-          onClick={() => setLightbox(null)}
-        >
-          <button type="button" className="absolute right-3 top-3 rounded-full bg-black/40 p-2 text-white" aria-label="Закрыть" onClick={() => setLightbox(null)}>
-            <X className="size-5" />
-          </button>
-          <div className="max-h-full max-w-full" onClick={(event) => event.stopPropagation()}>
-            {lightbox.mime.startsWith("image/") ? (
-              <LightboxImage item={lightbox} />
+      {lightbox ? <AttachmentLightbox item={lightbox} onClose={() => setLightbox(null)} /> : null}
+    </section>
+  );
+}
+
+/** Full-screen view of one attachment (photo with its capture date underneath, or «Открыть»). */
+export function AttachmentLightbox({ item, onClose }: { item: AttachmentMeta; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={item.name}
+      onClick={() => onClose()}
+    >
+      <button type="button" className="absolute right-3 top-3 rounded-full bg-black/40 p-2 text-white" aria-label="Закрыть" onClick={() => onClose()}>
+        <X className="size-5" />
+      </button>
+      <div className="max-h-full max-w-full" onClick={(event) => event.stopPropagation()}>
+        {item.mime.startsWith("image/") ? (
+          <LightboxImage item={item} />
+        ) : (
+          <div className="flex flex-col items-center gap-3">
+            {fileKind(item.mime) === "text" ? <TextPreview item={item} /> : <p className="max-w-[80vw] truncate rounded-lg bg-surface px-4 py-2 text-fg">{item.name}</p>}
+            {isPending(item.id) ? (
+              <span className="text-sm text-white/80">Ещё не отправлен — откроется после отправки.</span>
             ) : (
-              <div className="flex flex-col items-center gap-3">
-                {fileKind(lightbox.mime) === "text" ? <TextPreview item={lightbox} /> : <p className="max-w-[80vw] truncate rounded-lg bg-surface px-4 py-2 text-fg">{lightbox.name}</p>}
-                {isPending(lightbox.id) ? (
-                  <span className="text-sm text-white/80">Ещё не отправлен — откроется после отправки.</span>
-                ) : (
-                  <a href={fileUrl(lightbox.id)} download={lightbox.name} className="rounded-lg bg-accent px-4 py-2 font-medium text-accent-fg" target="_blank" rel="noreferrer">
-                    Открыть
-                  </a>
-                )}
-              </div>
+              <a href={fileUrl(item.id)} download={item.name} className="rounded-lg bg-accent px-4 py-2 font-medium text-accent-fg" target="_blank" rel="noreferrer">
+                Открыть
+              </a>
             )}
           </div>
-        </div>
-      ) : null}
-    </section>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -246,97 +233,9 @@ function LightboxImage({ item }: { item: AttachmentMeta }) {
   }, [item.id]);
   if (!src) return <div className="size-40 animate-pulse rounded-lg bg-elevated" />;
   return (
-    <div className="relative">
-      <img src={src} alt={item.name} className="max-h-[80vh] max-w-full rounded-lg object-contain" />
-      {item.takenAt ? (
-        <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-black/55 px-2 py-0.5 text-[0.7rem] font-medium text-amber-200">
-          {formatTakenAt(item.takenAt)}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-/** Tiny chip used next to a checklist row for «до» / «после». */
-export function PhotoSlot({
-  label,
-  attachId,
-  parentId,
-  subId: _subId,
-  onSet,
-}: {
-  label: string;
-  attachId?: string | null;
-  parentId: string;
-  subId: string;
-  onSet: (id: string | null) => void;
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  const { attachMaxBytes } = useCapabilities();
-  const takenAt = usePlanner((s) => s.tasks.find((task) => task.id === parentId)?.attachments?.find((a) => a.id === attachId)?.takenAt);
-  const [src, setSrc] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(false);
-  useEffect(() => {
-    let gone = false;
-    if (!attachId) {
-      setSrc(null);
-      return;
-    }
-    void (async () => {
-      const local = isPending(attachId) ? await localPreview(attachId) : null;
-      if (!gone) setSrc(local ?? fileUrl(attachId));
-    })();
-    return () => {
-      gone = true;
-    };
-  }, [attachId]);
-
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <button
-        type="button"
-        aria-label={attachId ? `${label}: открыть` : `Добавить фото «${label}»`}
-        onClick={() => {
-          if (attachId) setZoom(true);
-          else input.current?.click();
-        }}
-        className={cn(
-          "flex size-11 items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-elevated text-[0.65rem] text-muted",
-          attachId && "border-solid",
-        )}
-      >
-        {src ? <img src={src} alt="" className="size-full object-cover" /> : label}
-      </button>
-      {takenAt ? <span className="max-w-[4.5rem] truncate text-center text-[0.55rem] leading-tight text-muted">{formatTakenAt(takenAt)}</span> : null}
-      {attachId ? (
-        <button type="button" className="text-[0.65rem] text-danger" onClick={() => onSet(null)}>
-          убрать
-        </button>
-      ) : null}
-      {zoom && src ? (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-2 bg-black/70 p-4" role="dialog" aria-modal="true" aria-label={`Фото «${label}»`} onClick={() => setZoom(false)}>
-          <div className="relative" onClick={(event) => event.stopPropagation()}>
-            <img src={src} alt={`Фото «${label}»`} className="max-h-[80vh] max-w-full rounded-lg object-contain" />
-            {takenAt ? <span className="absolute bottom-2 right-2 rounded bg-black/55 px-2 py-0.5 text-[0.7rem] font-medium text-amber-200">{formatTakenAt(takenAt)}</span> : null}
-          </div>
-        </div>
-      ) : null}
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="sr-only"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (!file) return;
-          void addFiles([file], { kind: "task", id: parentId }, attachMaxBytes).then((result) => {
-            const first = result.added[0];
-            if (first) onSet(first.id);
-          });
-          event.target.value = "";
-        }}
-      />
-    </div>
+    <figure className="flex flex-col items-center gap-1.5">
+      <img src={src} alt={item.name} className="max-h-[78vh] max-w-full rounded-lg object-contain" />
+      {item.takenAt ? <figcaption className="text-xs text-white/80">{formatTakenAt(item.takenAt)}</figcaption> : null}
+    </figure>
   );
 }

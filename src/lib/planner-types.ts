@@ -43,13 +43,28 @@ export type ProjectContact = {
   updatedAt?: number;
 };
 
+/** «Ссылка» on a task: http(s) only. */
+export type TaskLink = {
+  id: string;
+  url: string;
+  title?: string;
+  updatedAt?: number;
+};
+
+/** «Контакт» on a task (own, not from the project card). */
+export type TaskContact = {
+  id: string;
+  name: string;
+  phone?: string;
+  updatedAt?: number;
+};
+
 export type Subtask = {
   id: string;
   title: string;
   done: boolean;
-  /** Attachment id: photo «до». */
+  /** Legacy (1.9.0) photo «до» / «после»: the photo itself is a normal task attachment; not shown any more. */
   beforeId?: string | null;
-  /** Attachment id: photo «после». */
   afterId?: string | null;
   updatedAt?: number;
 };
@@ -89,11 +104,15 @@ export type Task = {
   lastDue?: string | null;
   /** Colour from our 10-colour palette (see task-colors.ts). */
   color?: TaskColor | null;
-  /** Task-level photo «до» / «после» (attachment ids). */
+  /** Legacy (1.9.0) task-level photo «до» / «после»; the photos stay in `attachments`. */
   beforeId?: string | null;
   afterId?: string | null;
   /** Files on this task (photos, PDF, scans). */
   attachments?: AttachmentMeta[];
+  /** Links on this task. */
+  links?: TaskLink[];
+  /** People for this task (name + phone). */
+  contacts?: TaskContact[];
   /** This task waits until `dependsOn` is done («Ждёт»). */
   dependsOn?: string | null;
   /** Contact from the project card linked to this task. */

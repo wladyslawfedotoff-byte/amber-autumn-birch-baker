@@ -1,6 +1,5 @@
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Check, ChevronDown, ChevronUp, Copy, GripVertical, ListChecks, Plus, X } from "lucide-react";
-import { PhotoSlot } from "@/components/planner/objects/attachments";
 import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/hint";
 import { cn } from "@/lib/cn";
@@ -48,9 +47,7 @@ export function SubtasksBlock({ task }: { task: Task }) {
   const deleteSubtask = usePlanner((s) => s.deleteSubtask);
   const moveSubtask = usePlanner((s) => s.moveSubtask);
   const placeSubtask = usePlanner((s) => s.placeSubtask);
-  const setPhotoSlot = usePlanner((s) => s.setPhotoSlot);
   const [draft, setDraft] = useState("");
-  const [photos, setPhotos] = useState(false);
   const [drag, setDrag] = useState<{ id: string; order: string[] } | null>(null);
   const real = task.subtasks ?? [];
   const order = drag?.order ?? real.map((s) => s.id);
@@ -109,7 +106,7 @@ export function SubtasksBlock({ task }: { task: Task }) {
     <section className="mt-3" aria-labelledby={`subtasks-${task.id}`} data-testid="checklist-block">
       <div className="flex items-center gap-2">
         <div id={`subtasks-${task.id}`}>
-          <FieldLabel hint="Шаги дела со счётчиком «0/2» в списке. Потяните ⋮⋮ пальцем, чтобы поменять порядок (стрелки — для клавиатуры). Фото «до» и «после» — по желанию.">
+          <FieldLabel hint="Шаги дела со счётчиком «0/2» в списке. Потяните ⋮⋮ пальцем, чтобы поменять порядок (стрелки — для клавиатуры).">
             Чек-лист
           </FieldLabel>
         </div>
@@ -171,20 +168,9 @@ export function SubtasksBlock({ task }: { task: Task }) {
                 <X className="size-4" />
               </Button>
             </div>
-            {photos ? (
-              <div className="mb-1 ml-8 flex gap-3" data-testid="checklist-photos">
-                <PhotoSlot label="до" attachId={item.beforeId} parentId={task.id} subId={item.id} onSet={(id) => setPhotoSlot(task.id, item.id, "before", id)} />
-                <PhotoSlot label="после" attachId={item.afterId} parentId={task.id} subId={item.id} onSet={(id) => setPhotoSlot(task.id, item.id, "after", id)} />
-              </div>
-            ) : null}
           </li>
         ))}
       </ul>
-      {subs.length ? (
-        <button type="button" className="mt-1 text-xs text-muted underline-offset-2 hover:underline" onClick={() => setPhotos((v) => !v)} aria-pressed={photos}>
-          {photos ? "Скрыть фото до/после" : "Фото до / после"}
-        </button>
-      ) : null}
       <form
         className="mt-1 flex gap-2"
         onSubmit={(event) => {

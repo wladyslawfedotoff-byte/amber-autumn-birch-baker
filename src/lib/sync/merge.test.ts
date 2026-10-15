@@ -392,3 +392,22 @@ test("regression: another tab's older save does not wipe a subtask just added he
   const bEdit = stamp(b, 3000, (ts) => ts.map((t) => ({ ...t, title: "Поездка в Казань" })));
   assert.equal(adoptOtherTab(a, bEdit).tasks.find((t) => t.id === "trip")!.title, "Поездка в Казань");
 });
+
+test("task links and contacts merge by id across devices (one adds, the other deletes)", () => {
+  const base = doc({
+    tasks: [{ id: "t", title: "Приёмка", links: [{ id: "l1", url: "https://a.example/" }], contacts: [{ id: "c1", name: "Прораб", phone: "+7 900" }], updatedAt: 100 }],
+  });
+  type Item = { id: string };
+  const ids = (d: Doc, key: string) => ((d.tasks[0]![key] ?? []) as Item[]).map((x) => x.id);
+  const phone = edit(base, "tasks", 1000, (ts) =>
+    ts.map((t) => ({ ...t, links: [...(t.links as Item[]), { id: "l2", url: "https://b.example/" }], contacts: [] })),
+  );
+  const laptop = edit(base, "tasks", 1001, (ts) =>
+    ts.map((t) => ({ ...t, links: [], contacts: [...(t.contacts as Item[]), { id: "c2", name: "Сантехник" }] })),
+  );
+  const [p, l] = converge(phone, laptop);
+  assert.deepEqual(ids(p, "links"), ["l2"]);
+  assert.deepEqual(ids(p, "contacts"), ["c2"]);
+  assert.deepEqual(ids(l, "links"), ids(p, "links"));
+  assert.deepEqual(ids(l, "contacts"), ids(p, "contacts"));
+});

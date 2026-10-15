@@ -1,3 +1,4 @@
+import { objectCount } from "@/lib/objects/count";
 import { Check, ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Lock, Paperclip, Plus } from "lucide-react";
 import { useState, type PointerEvent, type Ref } from "react";
 import { cn } from "@/lib/cn";
@@ -54,7 +55,7 @@ export function TaskRow({
     const prereq = s.tasks.find((item) => item.id === task.dependsOn);
     return prereq && !prereq.done ? prereq : null;
   });
-  const files = (task.attachments ?? []).length;
+  const files = objectCount(task);
   const [open, setOpen] = useSubtasksOpen(task.id, !task.done);
   const [step, setStep] = useState("");
   const preview = notesPreview(task.notes);
@@ -145,7 +146,7 @@ export function TaskRow({
                 </span>
               ) : null}
               {files > 0 ? (
-                <span className="flex items-center gap-0.5" aria-label={`Вложений: ${files}`}>
+                <span className="flex items-center gap-0.5" aria-label={`Вложения, ссылки, контакты: ${files}`} data-testid="objects-badge">
                   <Paperclip className="size-3" aria-hidden="true" />
                   <span className="tabular-nums">{files}</span>
                 </span>
