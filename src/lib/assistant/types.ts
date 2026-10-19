@@ -53,7 +53,25 @@ export type ProposalItem =
   | { op: "complete"; key: string; taskId: string; taskTitle: string }
   | { op: "subtasks"; key: string; taskId: string; taskTitle: string; steps: string[] }
   | { op: "habit"; key: string; name: string; goal: number | null; unit: string | null; section: HabitSection; freq: HabitFreq }
-  | { op: "asset"; key: string; name: string; kind: AssetKind; plate?: string | null; model?: string | null; km?: number | null; rules: RuleDraft[] }
+  | {
+      op: "asset";
+      key: string;
+      name: string;
+      kind: AssetKind;
+      plate?: string | null;
+      model?: string | null;
+      km?: number | null;
+      rules: RuleDraft[];
+      /** Tech: purchase and warranty (all optional). */
+      price?: number | null;
+      boughtAt?: string | null;
+      warrantyMonths?: number | null;
+      warrantyUntil?: string | null;
+    }
+  | { op: "fuel"; key: string; assetId: string; assetName: string; date: string; liters: number; sum?: number | null; km?: number | null; full?: boolean }
+  | { op: "part"; key: string; assetId: string; assetName: string; name: string; boughtAt?: string | null; price?: number | null; warrantyMonths?: number | null; warrantyUntil?: string | null }
+  /** A «Что болит» note: a new one or an existing one (`painId`), planned as a task by date / in N days / at a mileage. */
+  | { op: "pain"; key: string; assetId: string; assetName: string; painId: string | null; text: string; todo?: string; date?: string | null; days?: number | null; km?: number | null }
   | {
       op: "service";
       key: string;

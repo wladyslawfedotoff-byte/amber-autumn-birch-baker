@@ -11,12 +11,15 @@ import { usePlanner } from "@/lib/planner-store";
 import type { Asset } from "@/lib/planner-types";
 import { AssetCardView } from "./card";
 import { NewAssetSheet } from "./sheets";
-import { Badge, KindIcon, subtitle } from "./shared";
+import { leadWarranty, warrantyText } from "@/lib/maintenance/warranty";
+import { Badge, KindIcon, WarrBadge, subtitle } from "./shared";
 import { StatsView } from "./stats";
 
 function lineOf(asset: Asset, summary: AssetSummary): string {
   const lead = summary.lead;
   if (!lead) {
+    const w = asset.kind === "car" ? null : leadWarranty(asset, todayIso());
+    if (w) return `${w.subject.part ? `${w.subject.part.name}: ` : "Гарантия: "}${warrantyText(w.state)}`;
     if (!asset.rules.length) return asset.kind === "car" && asset.km != null ? `${groupKm(asset.km)} км · правил пока нет` : "Правил пока нет — откройте и добавьте";
     return "Все правила выполнены";
   }
@@ -26,6 +29,7 @@ function lineOf(asset: Asset, summary: AssetSummary): string {
 
 function Row({ asset, summary, onOpen }: { asset: Asset; summary: AssetSummary; onOpen: () => void }) {
   const hasRule = summary.lead !== null;
+  const warr = asset.kind === "car" || (hasRule && summary.status !== "ok") ? null : leadWarranty(asset, todayIso());
   return (
     <li>
       <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 rounded-xl bg-elevated px-3 py-2.5 text-left">
@@ -36,7 +40,7 @@ function Row({ asset, summary, onOpen }: { asset: Asset; summary: AssetSummary; 
           <span className="block truncate text-xs text-subtle">{lineOf(asset, summary)}</span>
         </span>
         {summary.openPains > 0 ? <TriangleAlert className="size-4 shrink-0 text-warn" aria-label={`Что болит: ${summary.openPains}`} /> : null}
-        {hasRule ? <Badge status={summary.status} /> : <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />}
+        {hasRule && !warr ? <Badge status={summary.status} /> : warr ? <WarrBadge state={warr.state} short /> : <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />}
       </button>
     </li>
   );
@@ -64,8 +68,12 @@ export function MaintenanceView({ onOpenTask }: { onOpenTask?: (taskId: string) 
   if (asset) return <AssetCardView asset={asset} onBack={() => setOpenId(null)} onStats={() => setStats(true)} onOpenTask={onOpenTask} startService={start?.assetId === asset.id ? start : null} onStarted={started} />;
 
   const sorted = sortAssets(assets, todayIso());
-  const attention = sorted.filter((x) => x.summary.status !== "ok");
-  const fine = sorted.filter((x) => x.summary.status === "ok");
+  // Two worlds: cars, and tech (a third group only for consumables and other things).
+  const groups = [
+    { id: "car", title: "Авто", items: sorted.filter((x) => x.asset.kind === "car") },
+    { id: "device", title: "Техника", items: sorted.filter((x) => x.asset.kind === "device") },
+    { id: "rest", title: "Расходники и другое", items: sorted.filter((x) => x.asset.kind === "consumable" || x.asset.kind === "other") },
+  ].filter((g) => g.items.length);
   return (
     <div className="mx-auto w-full max-w-3xl">
       <div className="mb-2 hidden justify-end gap-2 md:flex">
@@ -80,37 +88,30 @@ export function MaintenanceView({ onOpenTask }: { onOpenTask?: (taskId: string) 
       </div>
       {assets.length === 0 ? (
         <>
-          <Empty title="Пока ничего нет" hint="Добавьте карточку — Автомобиль, Техника, Расходник или Другое. Пора напомнит, когда пора менять или обслуживать." />
+          <Empty title="Пока ничего нет" hint="Добавьте карточку — Автомобиль (пробег, заправки, расходы), Техника (гарантии, чеки, компоненты), Расходник или Другое. Пора напомнит, когда пора менять, обслуживать или проверить гарантию." />
           <ul className="mx-auto max-w-sm space-y-1 px-4 text-[0.8125rem] text-muted">
             <li className="rounded-lg border border-dashed border-line px-3 py-2">Легковая — масло каждые 10 000 км или 12 мес.</li>
             <li className="rounded-lg border border-dashed border-line px-3 py-2">Фильтр воды — менять раз в 6 мес.</li>
-            <li className="rounded-lg border border-dashed border-line px-3 py-2">Пылесос — фильтр раз в год</li>
+            <li className="rounded-lg border border-dashed border-line px-3 py-2">Домашний ПК — видеокарта, гарантия 36 мес.</li>
           </ul>
         </>
       ) : (
         <>
-          {attention.length ? (
-            <section aria-label="Нужно внимание">
-              <p className="mb-1 px-1 text-xs font-medium text-subtle">Нужно внимание</p>
+          {groups.map((g, i) => (
+            <section key={g.id} aria-label={g.title} className={i ? "mt-4" : ""}>
+              <p className="mb-1 flex items-baseline gap-1.5 px-1 text-xs font-medium text-subtle">
+                {g.title}
+                <span className="font-normal">{g.items.length}</span>
+              </p>
               <ul className="space-y-1.5">
-                {attention.map((x) => (
+                {g.items.map((x) => (
                   <Row key={x.asset.id} asset={x.asset} summary={x.summary} onOpen={() => setOpenId(x.asset.id)} />
                 ))}
               </ul>
             </section>
-          ) : null}
-          {fine.length ? (
-            <section aria-label="Всё в порядке" className={attention.length ? "mt-4" : ""}>
-              <p className="mb-1 px-1 text-xs font-medium text-subtle">{attention.length ? "Всё в порядке" : "Карточки"}</p>
-              <ul className="space-y-1.5">
-                {fine.map((x) => (
-                  <Row key={x.asset.id} asset={x.asset} summary={x.summary} onOpen={() => setOpenId(x.asset.id)} />
-                ))}
-              </ul>
-            </section>
-          ) : null}
+          ))}
           <button type="button" onClick={() => setStats(true)} className="mt-3 flex h-11 items-center gap-1.5 px-1 text-[0.8125rem] font-medium text-accent md:hidden">
-            <BarChart3 className="size-4" aria-hidden="true" /> Статистика: км по месяцам и расходы
+            <BarChart3 className="size-4" aria-hidden="true" /> Статистика: авто и техника
           </button>
         </>
       )}

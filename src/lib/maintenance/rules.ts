@@ -25,6 +25,10 @@ export type MaintRule = {
   sinceKm?: number | null;
   lastDoneAt?: string | null;
   lastDoneKm?: number | null;
+  /** «ins» = insurance or tax: what it costs is counted apart from maintenance. */
+  cat?: "ins";
+  /** Usual cost of one time (pre-fills the history entry). */
+  cost?: number;
   /** Cycle key a reminder task was already made for (see plan.ts). */
   notified?: string;
   updatedAt?: number;

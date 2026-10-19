@@ -4,11 +4,14 @@ import { FieldLabel } from "@/components/ui/hint";
 import { cn } from "@/lib/cn";
 import { todayIso } from "@/lib/dates";
 import { groupKm } from "@/lib/maintenance/rules";
-import { kmPerMonth, money, spendByYear } from "@/lib/maintenance/stats";
+import { fuelStats, ownership, spendSplit, spendTotal } from "@/lib/maintenance/fuel";
+import { kmPerMonth, money } from "@/lib/maintenance/stats";
 import type { Asset } from "@/lib/planner-types";
-import { MONTHS_FULL, MONTHS_SHORT } from "./shared";
+import { SpendBar, SpendLegend } from "./fuel-ui";
+import { SPEND_COLORS } from "./form-helpers";
+import { MONTHS_FULL, MONTHS_SHORT, Seg } from "./shared";
+import { TechStats } from "./tech-stats";
 
-const label = "mb-1 px-1 text-xs font-medium text-subtle";
 
 function KmChart({ asset, currentMonth }: { asset: Asset; currentMonth: string }) {
   const months = kmPerMonth(asset.readings ?? []).slice(-8);
@@ -51,81 +54,159 @@ function KmChart({ asset, currentMonth }: { asset: Asset; currentMonth: string }
   );
 }
 
-export function StatsView({ assets, onBack }: { assets: Asset[]; onBack: () => void }) {
-  const cars = assets.filter((a) => a.kind === "car");
+const fmt1 = (n: number) => n.toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).replace(/\u00a0|\u202f/g, " ");
+
+function monthsBack(n: number, from: string): string[] {
+  const out: string[] = [];
+  let y = Number(from.slice(0, 4));
+  let m = Number(from.slice(5, 7));
+  for (let i = 0; i < n; i++) {
+    out.unshift(`${y}-${String(m).padStart(2, "0")}`);
+    m--;
+    if (m === 0) {
+      m = 12;
+      y--;
+    }
+  }
+  return out;
+}
+
+/** Cars only: money per month and per year (fuel / maintenance / insurance), consumption and ₽ per km. */
+function CarMoney({ car }: { car: Asset }) {
+  const { byMonth, byYear } = spendSplit(car);
+  const years = Object.keys(byYear).sort().reverse();
+  const [year, setYear] = useState<string | null>(null);
+  const picked = year && years.includes(year) ? year : years[0];
+  if (!picked) {
+    return (
+      <section className="mt-5">
+        <FieldLabel className="mb-1">Расходы на машину</FieldLabel>
+        <p className="rounded-xl bg-elevated px-3 py-3 text-[0.8125rem] text-muted">Добавьте заправки и стоимость записей истории — здесь появятся расходы по месяцам и годам, расход топлива и ₽ на км.</p>
+      </section>
+    );
+  }
+  const months = monthsBack(8, todayIso().slice(0, 7));
+  const maxMonth = Math.max(1, ...months.map((m) => spendTotal(byMonth[m] ?? { fuel: 0, service: 0, ins: 0 })));
+  const own = ownership(car, picked);
+  const fuel = fuelStats(car.fuel ?? [], { from: `${picked}-01-01`, to: `${picked}-12-31` });
+  const maxYear = Math.max(1, ...years.map((y) => spendTotal(byYear[y]!)));
+  return (
+    <>
+      <section className="mt-5">
+        <FieldLabel hint="Топливо — по заправкам, обслуживание и страховка/налоги — по записям истории с суммой. Каждая запись считается в месяц своей даты." className="mb-1">
+          Расходы по месяцам
+        </FieldLabel>
+        <div className="rounded-xl bg-elevated px-3 pt-2 pb-3">
+          <div className="flex h-[7.5rem] items-end gap-2" role="img" aria-label={`Расходы по месяцам: ${months.map((m) => `${MONTHS_FULL[Number(m.slice(5)) - 1]} ${money(spendTotal(byMonth[m] ?? { fuel: 0, service: 0, ins: 0 }))}`).join(", ")}`}>
+            {months.map((m) => {
+              const row = byMonth[m] ?? { fuel: 0, service: 0, ins: 0 };
+              const total = spendTotal(row);
+              const h = Math.round((total / maxMonth) * 84);
+              return (
+                <div key={m} className="flex h-full min-w-0 flex-1 flex-col justify-end text-center text-[0.625rem] text-subtle">
+                  <span className="mb-0.5 truncate tabular-nums">{total ? (Math.round(total / 100) / 10).toLocaleString("ru-RU") : ""}</span>
+                  <div className="flex flex-col-reverse overflow-hidden rounded-t" style={{ height: `${total ? Math.max(4, h) : 0}px` }}>
+                    {(["fuel", "service", "ins"] as const).map((k) => (row[k] > 0 ? <i key={k} className="block w-full" style={{ height: `${(row[k] / total) * 100}%`, background: SPEND_COLORS[k] }} /> : null))}
+                  </div>
+                  <span className="mt-0.5">{MONTHS_SHORT[Number(m.slice(5)) - 1]}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted">Цифры над столбиками — тысячи ₽.</p>
+        </div>
+      </section>
+      <section className="mt-5">
+        <FieldLabel hint="Итог года — всё, что потрачено на машину. ₽ на км — итог, делённый на километры за год по обновлениям пробега." className="mb-1">
+          Расходы по годам
+        </FieldLabel>
+        <ul className="space-y-1.5">
+          {years.map((y) => {
+            const sp = byYear[y]!;
+            const o = ownership(car, y);
+            return (
+              <li key={y}>
+                <button type="button" onClick={() => setYear(y)} aria-pressed={y === picked} className={cn("w-full rounded-xl bg-elevated px-3 py-2 text-left", y === picked && "ring-1 ring-accent")}>
+                  <span className="flex items-baseline justify-between font-semibold">
+                    <span>{y}</span>
+                    <span className="tabular-nums">{money(spendTotal(sp))}</span>
+                  </span>
+                  <span className="mt-1.5 block" style={{ width: `${Math.round((spendTotal(sp) / maxYear) * 100)}%` }}>
+                    <SpendBar spend={sp} />
+                  </span>
+                  <span className="mt-1 block text-xs text-subtle">{o.perKm !== null ? `≈ ${fmt1(o.perKm)} ₽ на км · ${groupKm(o.km)} км` : "км за год неизвестны"}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="mt-2 rounded-xl bg-elevated px-3 py-2.5">
+          <p className="text-xs font-medium text-subtle">{picked}: из чего состоит</p>
+          <SpendLegend spend={own.spend} />
+          <div className="mt-2 flex gap-4 border-t border-line pt-2 text-[0.8125rem]">
+            <span className="text-muted">
+              Расход <b className="font-semibold text-fg tabular-nums">{fuel.per100 !== null ? `${fmt1(fuel.per100)} л/100 км` : "—"}</b>
+            </span>
+            <span className="text-muted">
+              Топливо на км <b className="font-semibold text-fg tabular-nums">{fuel.perKm !== null ? `${fmt1(fuel.perKm)} ₽` : "—"}</b>
+            </span>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function AutoStats({ cars }: { cars: Asset[] }) {
   const [carId, setCarId] = useState<string | null>(null);
   const car = cars.find((c) => c.id === carId) ?? cars.find((c) => (c.readings?.length ?? 0) >= 2) ?? cars[0];
-  const all = assets.flatMap((a) => a.log);
-  const byYear = Object.entries(spendByYear(all)).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  const maxYear = Math.max(1, ...byYear.map(([, v]) => v));
-  const [year, setYear] = useState<string | null>(null);
-  const picked = year && byYear.some(([y]) => y === year) ? year : byYear[0]?.[0];
-  const perAsset = picked
-    ? assets
-        .map((a) => ({ a, v: spendByYear(a.log)[picked] ?? 0 }))
-        .filter((x) => x.v > 0)
-        .sort((x, y) => y.v - x.v)
-    : [];
+  if (!car) return <p className="rounded-xl bg-elevated px-3 py-3 text-[0.8125rem] text-muted">Добавьте автомобиль — здесь появятся километры по месяцам, расход топлива и расходы на машину.</p>;
+  return (
+    <>
+      <section>
+        <FieldLabel hint="Считается по обновлениям пробега. Если пробег не обновляли несколько месяцев, цифры за эти месяцы примерные — они заштрихованы и подписаны «за N мес.»." className="mb-1">
+          Километры по месяцам
+        </FieldLabel>
+        {cars.length > 1 ? (
+          <div className="flex flex-wrap gap-1.5 pb-2">
+            {cars.map((c) => (
+              <button key={c.id} type="button" aria-pressed={c.id === car.id} onClick={() => setCarId(c.id)} className={cn("h-8 rounded-full border px-3 text-[0.8125rem]", c.id === car.id ? "border-accent bg-accent text-accent-fg" : "border-line text-muted")}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="px-1 pb-1 text-[0.8125rem] text-muted">{car.name}</p>
+        )}
+        <KmChart asset={car} currentMonth={todayIso().slice(0, 7)} />
+      </section>
+      <CarMoney car={car} />
+    </>
+  );
+}
+
+export function StatsView({ assets, onBack }: { assets: Asset[]; onBack: () => void }) {
+  const cars = assets.filter((a) => a.kind === "car");
+  const tech = assets.filter((a) => a.kind !== "car");
+  const [tab, setTab] = useState<"auto" | "tech">(cars.length || !tech.length ? "auto" : "tech");
   return (
     <div className="mx-auto w-full max-w-3xl pb-10">
       <button type="button" onClick={onBack} className="-mt-1 flex h-11 items-center gap-0.5 pr-3 text-sm text-muted" aria-label="Назад">
         <ChevronLeft className="size-4" aria-hidden="true" />
         Обслуживание
       </button>
-      {car ? (
-        <section>
-          <FieldLabel hint="Считается по обновлениям пробега. Если пробег не обновляли несколько месяцев, цифры за эти месяцы примерные — они заштрихованы и подписаны «за N мес.»." className="mb-1">
-            Километры по месяцам
-          </FieldLabel>
-          {cars.length > 1 ? (
-            <div className="flex flex-wrap gap-1.5 pb-2">
-              {cars.map((c) => (
-                <button key={c.id} type="button" aria-pressed={c.id === car.id} onClick={() => setCarId(c.id)} className={cn("h-8 rounded-full border px-3 text-[0.8125rem]", c.id === car.id ? "border-accent bg-accent text-accent-fg" : "border-line text-muted")}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="px-1 pb-1 text-[0.8125rem] text-muted">{car.name}</p>
-          )}
-          <KmChart asset={car} currentMonth={todayIso().slice(0, 7)} />
-        </section>
-      ) : null}
-      <section className="mt-5">
-        <FieldLabel hint="Сумма по записям истории с указанной стоимостью, по году записи." className="mb-1">
-          Расходы на обслуживание по годам
-        </FieldLabel>
-        {byYear.length ? (
-          <>
-            <ul className="space-y-1.5">
-              {byYear.map(([y, v]) => (
-                <li key={y}>
-                  <button type="button" onClick={() => setYear(y)} aria-pressed={y === picked} className={cn("w-full rounded-xl bg-elevated px-3 py-2 text-left", y === picked && "ring-1 ring-accent")}>
-                    <span className="flex items-baseline justify-between font-semibold">
-                      <span>{y}</span>
-                      <span className="tabular-nums">{money(v)}</span>
-                    </span>
-                    <span className="mt-1.5 block h-[5px] overflow-hidden rounded-full bg-line" aria-hidden="true">
-                      <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.round((v / maxYear) * 100)}%` }} />
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <p className={`${label} mt-4`}>{picked} по объектам</p>
-            <ul className="space-y-1.5">
-              {perAsset.map(({ a, v }) => (
-                <li key={a.id} className="flex items-center gap-2 rounded-xl bg-elevated px-3 py-2.5 text-[0.9375rem]">
-                  <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                  <span className="font-semibold tabular-nums">{money(v)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <p className="rounded-xl bg-elevated px-3 py-3 text-[0.8125rem] text-muted">Укажите стоимость в записях истории — здесь появятся суммы по годам и по объектам.</p>
-        )}
-      </section>
+      <div className="mb-3">
+        <Seg
+          label="Раздел статистики"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { id: "auto", label: "Авто" },
+            { id: "tech", label: "Техника" },
+          ]}
+        />
+      </div>
+      {tab === "auto" ? <AutoStats cars={cars} /> : <TechStats assets={tech} />}
     </div>
   );
 }

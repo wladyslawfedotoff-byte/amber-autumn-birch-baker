@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Manual end-to-end check of 1.10.0 («Обслуживание») in the iPhone browser
+ * Manual end-to-end check of 1.10.0+ («Обслуживание») in the iPhone browser
  * engine (390×844 @2x) against a running production build:
  *
  *   APP_USERS=user1 USER_USER1_PASSWORD=… DATA_DIR=$(mktemp -d) PORT=8091 node .output/server/index.mjs
@@ -34,11 +34,11 @@ const dialog = (page, name) => page.getByRole("dialog", { name });
 async function login(context) {
   const page = await context.newPage();
   page.on("pageerror", (error) => console.error("pageerror:", error.message));
-  await page.goto(`${BASE}/`);
+  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   await page.getByLabel("Логин").fill("user1");
   await page.fill("#password", USER1);
   await page.click("button[type=submit]");
-  await page.waitForURL(`${BASE}/`, { timeout: 15_000 });
+  await page.waitForURL(`${BASE}/`, { timeout: 15_000, waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Добавить задачу", exact: true }).waitFor();
   return page;
 }
@@ -62,8 +62,14 @@ async function addEntry(page, { title, date, km, cost, place }) {
 }
 
 const browser = await webkit.launch();
-try {
+async function mk() {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: "ru-RU", timezoneId: "Europe/Moscow", serviceWorkers: "block" });
+  // Third-party scripts outside the app are not needed for the check and can hang the load.
+  await context.route(/^https:\/\/(?!fonts\.)/, (route) => route.abort());
+  return context;
+}
+try {
+  const context = await mk();
   const page = await login(context);
 
   await openMaint(page);
@@ -232,13 +238,10 @@ try {
   await dd.getByLabel("Модель").fill("Беспроводной");
   await dd.getByRole("button", { name: "Создать" }).click();
   await page.getByRole("button", { name: "Назад к списку" }).click();
-  await page.getByText("Нужно внимание").waitFor();
-  const order = await page.locator("main li button, li button").allInnerTexts();
-  const first = order.findIndex((t) => t.includes("Фильтр воды"));
-  const second = order.findIndex((t) => t.includes("Легковая"));
-  const third = order.findIndex((t) => t.includes("Пылесос"));
-  if (!(first >= 0 && first < second && second < third)) fail(`urgency order wrong: ${order.map((t) => t.split("\n")[0]).join(" | ")}`);
-  ok("list sorted by urgency: overdue → soon/ok");
+  await page.getByRole("region", { name: "Авто" }).getByText("Легковая", { exact: true }).waitFor();
+  await page.getByRole("region", { name: "Техника" }).getByText("Пылесос", { exact: true }).waitFor();
+  await page.getByRole("region", { name: "Расходники и другое" }).getByText("Фильтр воды", { exact: true }).waitFor();
+  ok("list grouped: Авто / Техника / Расходники и другое");
   await shot(page, "08-list");
 
   // --- reminder tasks -------------------------------------------------------
@@ -279,7 +282,7 @@ try {
 
   // --- persistence + a second device ---------------------------------------
   await page.waitForTimeout(2500);
-  const other = await login(await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: "ru-RU", timezoneId: "Europe/Moscow", serviceWorkers: "block" }));
+  const other = await login(await mk());
   await openMaint(other);
   await other.getByText("Легковая", { exact: true }).first().waitFor({ timeout: 15_000 });
   await other.getByText("Фильтр воды", { exact: true }).first().waitFor();

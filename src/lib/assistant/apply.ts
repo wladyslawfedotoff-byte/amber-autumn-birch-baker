@@ -3,7 +3,7 @@
  * actions, so the changes sync like anything typed by hand.
  */
 import type { Asset, Habit, Priority, Task } from "../planner-types.ts";
-import type { AssetInput, RuleInput, ServiceInput } from "../maintenance/ops.ts";
+import type { AssetInput, FuelInput, PainPlanInput, PartInput, RuleInput, ServiceInput } from "../maintenance/ops.ts";
 import type { ProposalItem } from "./types.ts";
 
 export type ApplyApi = {
@@ -17,11 +17,15 @@ export type ApplyApi = {
   addHabit: (name: string, extra?: Partial<Habit>) => string | null;
   /** «Обслуживание»; without it those items are skipped. */
   maint?: {
-    assets: Pick<Asset, "id" | "rules">[];
+    assets: (Pick<Asset, "id" | "rules"> & { pains?: Asset["pains"] })[];
     addAsset: (input: AssetInput) => string | null;
     addRule: (assetId: string, input: RuleInput) => string | null;
     addService: (assetId: string, input: ServiceInput) => string | null;
     setKm: (assetId: string, km: number) => boolean;
+    addFuel?: (assetId: string, input: FuelInput) => string | null;
+    addPart?: (assetId: string, input: PartInput) => string | null;
+    addPain?: (assetId: string, text: string, todo?: string) => string | null;
+    planPain?: (assetId: string, painId: string, input: PainPlanInput) => boolean;
   };
 };
 
@@ -103,7 +107,7 @@ export function applyItems(items: ProposalItem[], api: ApplyApi): { applied: num
         break;
       }
       case "asset": {
-        const id = api.maint?.addAsset({ name: item.name, kind: item.kind, plate: item.plate ?? undefined, model: item.model ?? undefined, km: item.km ?? null });
+        const id = api.maint?.addAsset({ name: item.name, kind: item.kind, plate: item.plate ?? undefined, model: item.model ?? undefined, km: item.km ?? null, boughtAt: item.boughtAt ?? null, price: item.price ?? null, warrantyMonths: item.warrantyMonths ?? null, warrantyUntil: item.warrantyUntil ?? null });
         if (!id) {
           skipped++;
           break;
@@ -124,6 +128,32 @@ export function applyItems(items: ProposalItem[], api: ApplyApi): { applied: num
       case "rule": {
         const id = api.maint?.assets.some((a) => a.id === item.assetId) ? api.maint.addRule(item.assetId, item.rule) : null;
         if (id) applied++;
+        else skipped++;
+        break;
+      }
+      case "fuel": {
+        const id = api.maint?.assets.some((a) => a.id === item.assetId) ? api.maint.addFuel?.(item.assetId, { date: item.date, liters: item.liters, sum: item.sum ?? null, km: item.km ?? null, full: item.full !== false }) : null;
+        if (id) applied++;
+        else skipped++;
+        break;
+      }
+      case "part": {
+        const id = api.maint?.assets.some((a) => a.id === item.assetId) ? api.maint.addPart?.(item.assetId, { name: item.name, boughtAt: item.boughtAt ?? null, price: item.price ?? null, warrantyMonths: item.warrantyMonths ?? null, warrantyUntil: item.warrantyUntil ?? null }) : null;
+        if (id) applied++;
+        else skipped++;
+        break;
+      }
+      case "pain": {
+        const asset = api.maint?.assets.find((a) => a.id === item.assetId);
+        // An existing note is only reused while it still exists; otherwise a new one is made.
+        const known = item.painId && asset?.pains?.some((p) => p.id === item.painId) ? item.painId : null;
+        const id = asset ? (known ?? api.maint?.addPain?.(item.assetId, item.text, item.todo)) : null;
+        if (!id) {
+          skipped++;
+          break;
+        }
+        const planned = item.date || item.days || item.km ? api.maint?.planPain?.(item.assetId, id, { date: item.date ?? null, days: item.days ?? null, km: item.km ?? null }) : true;
+        if (planned) applied++;
         else skipped++;
         break;
       }
@@ -167,6 +197,12 @@ export function itemTitle(item: ProposalItem): string {
       return `${item.assetName}: ${item.rule.title}`;
     case "mileage":
       return `${item.assetName}: ${item.km} км`;
+    case "fuel":
+      return `${item.assetName}: заправка ${item.liters} л`;
+    case "part":
+      return `${item.assetName}: ${item.name}`;
+    case "pain":
+      return `${item.assetName}: ${item.text}`;
   }
 }
 
@@ -175,6 +211,8 @@ export function withTitle(item: ProposalItem, title: string): ProposalItem {
   if (item.op === "create") return { ...item, title };
   if (item.op === "habit" || item.op === "asset") return { ...item, name: title };
   if (item.op === "service") return { ...item, title: title.replace(`${item.assetName}: `, "") };
+  if (item.op === "part") return { ...item, name: title.replace(`${item.assetName}: `, "") };
+  if (item.op === "pain") return { ...item, text: title.replace(`${item.assetName}: `, "") };
   if (item.op === "rule") return { ...item, rule: { ...item.rule, title: title.replace(`${item.assetName}: `, "") } };
   if (item.op === "update") return { ...item, title };
   return item;

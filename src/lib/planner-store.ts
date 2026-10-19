@@ -9,6 +9,14 @@ import {
   painTaskId,
   parsePainRef,
   addAssetContactTo,
+  addFill,
+  addPart,
+  removeFill,
+  removePart,
+  updateFill,
+  updatePart,
+  type FuelInput,
+  type PartInput,
   addAssetLinkTo,
   removePain,
   resolvePainPlan,
@@ -232,6 +240,13 @@ type PlannerState = {
   removeAssetContact: (assetId: string, contactId: string) => void;
   /** Drops links and contacts of a log entry / note that was never saved. */
   discardAssetChildren: (assetId: string, parentId: string) => void;
+  /* Cars: fuel. Tech: components. */
+  addAssetFuel: (assetId: string, input: FuelInput) => string | null;
+  updateAssetFuel: (assetId: string, fillId: string, input: FuelInput) => boolean;
+  deleteAssetFuel: (assetId: string, fillId: string) => void;
+  addAssetPart: (assetId: string, input: PartInput) => string | null;
+  updateAssetPart: (assetId: string, partId: string, input: PartInput) => boolean;
+  deleteAssetPart: (assetId: string, partId: string) => void;
   updateAssetEntry: (assetId: string, entryId: string, input: ServiceInput) => boolean;
   deleteAssetEntry: (assetId: string, entryId: string) => void;
   updateAssetPain: (assetId: string, painId: string, text: string, todo?: string) => boolean;
@@ -1141,6 +1156,49 @@ export const usePlanner = create<PlannerState>()(
             a.id === assetId ? { ...a, links: (a.links ?? []).filter((l) => l.entryId !== parentId), contacts: (a.contacts ?? []).filter((c) => c.entryId !== parentId) } : a,
           ),
         })),
+      addAssetFuel: (assetId, input) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const done = found ? addFill(found, input, { fill: input.id && /^[\w-]{6,64}$/.test(input.id) ? input.id : uid(), reading: uid() }, todayIso()) : null;
+        if (!done) return null;
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? done.asset : a)) }));
+        get().syncMaintenance();
+        return done.fill.id;
+      },
+      updateAssetFuel: (assetId, fillId, input) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const done = found ? updateFill(found, fillId, input, uid(), todayIso()) : null;
+        if (!done) return false;
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? done.asset : a)) }));
+        get().syncMaintenance();
+        return true;
+      },
+      deleteAssetFuel: (assetId, fillId) => {
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? removeFill(a, fillId) : a)) }));
+        get().syncMaintenance();
+      },
+      addAssetPart: (assetId, input) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const done = found ? addPart(found, input, input.id && /^[\w-]{6,64}$/.test(input.id) ? input.id : uid()) : null;
+        if (!done) return null;
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? done.asset : a)) }));
+        get().syncMaintenance();
+        return done.part.id;
+      },
+      updateAssetPart: (assetId, partId, input) => {
+        const found = (get().assets ?? []).find((a) => a.id === assetId);
+        const next = found ? updatePart(found, partId, input) : null;
+        if (!next) return false;
+        set((s) => ({ assets: (s.assets ?? []).map((a) => (a.id === assetId ? next : a)) }));
+        get().syncMaintenance();
+        return true;
+      },
+      deleteAssetPart: (assetId, partId) => {
+        const gone = new Set(openTasksFor(get().tasks, `${assetId}/warr:${partId}`));
+        set((s) => ({
+          assets: (s.assets ?? []).map((a) => (a.id === assetId ? removePart(a, partId) : a)),
+          tasks: gone.size ? s.tasks.filter((t) => !gone.has(t.id)) : s.tasks,
+        }));
+      },
       updateAssetEntry: (assetId, entryId, input) => {
         const found = (get().assets ?? []).find((a) => a.id === assetId);
         const done = found ? updateService(found, entryId, input, uid()) : null;
@@ -1241,14 +1299,18 @@ export const usePlanner = create<PlannerState>()(
         const plan = planMaintenance(mine, s.tasks, todayIso(), Date.now());
         if (planIsEmpty(plan)) return;
         const patches = new Map(plan.patch.map((p) => [p.id, p.patch]));
+        const dropped = new Set(plan.remove);
         set((st) => ({
-          tasks: [...st.tasks.map((t) => (patches.has(t.id) ? { ...t, ...patches.get(t.id)! } : t)), ...plan.create.filter((c) => !st.tasks.some((t) => t.id === c.id))],
+          tasks: [...st.tasks.filter((t) => !dropped.has(t.id)).map((t) => (patches.has(t.id) ? { ...t, ...patches.get(t.id)! } : t)), ...plan.create.filter((c) => !st.tasks.some((t) => t.id === c.id))],
           assets: (st.assets ?? []).map((a) => {
             const marks = plan.ruleNotified.filter((n) => n.assetId === a.id);
             const km = plan.kmNotified.find((n) => n.assetId === a.id);
             const madePains = new Set(plan.painMade.filter((n) => n.assetId === a.id).map((n) => n.painId));
-            if (!marks.length && !km && !madePains.size) return a;
-            return { ...a, ...(madePains.size ? { pains: a.pains.map((p) => (madePains.has(p.id) ? { ...p, taskMade: true } : p)) } : {}), ...(km ? { kmNotified: km.month } : {}), rules: a.rules.map((r) => { const m = marks.find((n) => n.ruleId === r.id); return m ? { ...r, notified: m.notified } : r; }) };
+            const warn = plan.warnMade.filter((n) => n.assetId === a.id);
+            if (!marks.length && !km && !madePains.size && !warn.length) return a;
+            const warnOf = (id: string) => warn.find((n) => n.subjectId === id)?.until;
+            return { ...a, ...(madePains.size ? { pains: a.pains.map((p) => (madePains.has(p.id) ? { ...p, taskMade: true } : p)) } : {}),
+              ...(warn.length ? { ...(warnOf(a.id) ? { warnMade: warnOf(a.id) } : {}), parts: (a.parts ?? []).map((p) => (warnOf(p.id) ? { ...p, warnMade: warnOf(p.id) } : p)) } : {}), ...(km ? { kmNotified: km.month } : {}), rules: a.rules.map((r) => { const m = marks.find((n) => n.ruleId === r.id); return m ? { ...r, notified: m.notified } : r; }) };
           }),
         }));
       },
