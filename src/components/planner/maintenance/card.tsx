@@ -10,7 +10,9 @@ import { groupKm, ruleLine, stateText, type MaintRule } from "@/lib/maintenance/
 import { kmPerMonth, money, spendByYear } from "@/lib/maintenance/stats";
 import { usePlanner } from "@/lib/planner-store";
 import type { Asset, ServiceEntry } from "@/lib/planner-types";
+import { FuelBlock, OwnershipBlock } from "./fuel-ui";
 import { PainSheet, planText } from "./pains";
+import { TechBlock } from "./tech-ui";
 import { Badge, Bar, MONTHS_FULL, field, progressOf } from "./shared";
 import { EditAssetSheet, EntrySheet, MileageSheet, RuleSheet, ServiceSheet } from "./sheets";
 
@@ -42,7 +44,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
   const deletePain = usePlanner((s) => s.deleteAssetPain);
   const [editing, setEditing] = useState(false);
   const [mileage, setMileage] = useState(false);
-  const [rule, setRule] = useState<MaintRule | "new" | null>(null);
+  const [rule, setRule] = useState<MaintRule | "new" | "ins" | null>(null);
   const [service, setService] = useState<{ title: string; ruleIds: string[] } | "new" | null>(null);
   const [entry, setEntry] = useState<string | null>(null);
   // «Записать в историю» offered after the task of a planned note was ticked.
@@ -66,7 +68,9 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
   const spend = Object.entries(spendByYear(asset.log)).sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 3);
   const open = asset.pains.filter((p) => !p.solvedAt);
   const solved = asset.pains.filter((p) => p.solvedAt);
-  const sub = [asset.plate && `Номер ${asset.plate}`, asset.model, asset.boughtAt && `куплено ${formatShortDay(asset.boughtAt)} ${asset.boughtAt.slice(0, 4)}`].filter(Boolean).join(" · ");
+  const insRules = summary.rules.filter((r) => r.rule.cat === "ins");
+  const mainRules = summary.rules.filter((r) => r.rule.cat !== "ins");
+  const sub = [asset.plate && `Номер ${asset.plate}`, asset.model, car && asset.boughtAt && `куплено ${formatShortDay(asset.boughtAt)} ${asset.boughtAt.slice(0, 4)}`].filter(Boolean).join(" · ");
   const openedEntry: ServiceEntry | undefined = entry ? asset.log.find((e) => e.id === entry) : undefined;
   const entryToEdit: ServiceEntry | undefined = editEntry ? asset.log.find((e) => e.id === editEntry) : undefined;
 
@@ -117,14 +121,16 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
         </>
       ) : null}
 
+      {car ? <FuelBlock asset={asset} /> : <TechBlock asset={asset} />}
+
       <Section
         title="Что скоро"
         hint="Правило — что и когда делать: каждые N км, каждые N месяцев, в конкретную дату — или несколько условий сразу (сработает то, что раньше). Запись в историю с отметкой правила начинает отсчёт заново."
         action={{ label: "Правило", onClick: () => setRule("new") }}
       >
-        {summary.rules.length ? (
+        {mainRules.length ? (
           <ul className="space-y-1.5">
-            {summary.rules.map(({ rule: r, state }) => {
+            {mainRules.map(({ rule: r, state }) => {
               const progress = progressOf(r, state);
               return (
                 <li key={r.id}>
@@ -142,10 +148,37 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
           </ul>
         ) : (
           <p className="rounded-xl border border-dashed border-line px-3 py-3 text-[0.8125rem] text-muted">
-            Правил пока нет. Например: «замена масла — каждые 10 000 км или 12 мес.» или «страховка — в декабре».
+            Правил пока нет. Например: {car ? "«замена масла — каждые 10 000 км или 12 мес.»" : "«почистить от пыли — раз в 12 мес.»"}.
           </p>
         )}
       </Section>
+
+      {car ? (
+        <Section
+          title="Страховка и налоги"
+          hint="Ежегодные платежи со сроком: ОСАГО, КАСКО, транспортный налог. Укажите обычную сумму — при записи в историю она подставится, а в итогах попадёт в «Страховка и налог», отдельно от обслуживания."
+          action={{ label: "Платёж", onClick: () => setRule("ins") }}
+        >
+          {insRules.length ? (
+            <ul className="space-y-1.5">
+              {insRules.map(({ rule: r, state }) => (
+                <li key={r.id}>
+                  <button type="button" onClick={() => setRule(r)} className="w-full rounded-xl bg-elevated px-3 py-2.5 text-left">
+                    <span className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold">{r.title}</span>
+                      {r.cost ? <span className="text-[0.8125rem] text-muted tabular-nums">{money(r.cost)}</span> : null}
+                      {state.finished ? <Badge status="ok">сделано</Badge> : <Badge status={state.status}>{stateText(r, state)}</Badge>}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-subtle">{ruleLine(r)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rounded-xl border border-dashed border-line px-3 py-3 text-[0.8125rem] text-muted">Платежей нет. Например: «ОСАГО — каждый год в декабре, 12 000 ₽» или «Транспортный налог — до 1 декабря».</p>
+          )}
+        </Section>
+      ) : null}
 
       <Section title="Что болит" hint="Заметка о проблеме висит здесь, пока вы не отметите «Решено» — чтобы не забыть сказать мастеру. Можно записать, что сделать, и запланировать это задачей: на дату, через N дней или при нужном пробеге. На сроки правил не влияет." action={{ label: "Записать", onClick: () => setPainOpen(true) }}>
         {painOpen ? (
@@ -187,7 +220,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
             ))}
           </ul>
         ) : !painOpen ? (
-          <p className="px-1 text-[0.8125rem] text-subtle">Ничего не беспокоит. Например: «стук спереди на кочках» — со временем можно запланировать ремонт.</p>
+          <p className="px-1 text-[0.8125rem] text-subtle">Ничего не беспокоит. Например: {car ? "«стук спереди на кочках»" : "«шумит кулер»"} — со временем можно запланировать ремонт.</p>
         ) : null}
         {solved.length ? (
           <div className="mt-1">
@@ -243,7 +276,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
             })}
           </ul>
         ) : (
-          <p className="rounded-xl border border-dashed border-line px-3 py-3 text-[0.8125rem] text-muted">Записей пока нет. Добавьте то, что уже делали, — например, «замена масла, 6 400 ₽» с фото чека.</p>
+          <p className="rounded-xl border border-dashed border-line px-3 py-3 text-[0.8125rem] text-muted">Записей пока нет. Добавьте то, что уже делали, — например, {car ? "«замена масла, 6 400 ₽»" : "«чистка от пыли, 1 500 ₽»"} с фото чека.</p>
         )}
         {log.length > 5 ? (
           <button type="button" onClick={() => setShowAll(!showAll)} className="mt-1 h-9 px-1 text-[0.8125rem] text-accent">
@@ -252,7 +285,9 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
         ) : null}
       </Section>
 
-      {spend.length ? (
+      {car ? <OwnershipBlock asset={asset} /> : null}
+
+      {!car && spend.length ? (
         <p className="mt-3 flex items-baseline gap-2 px-1 text-[0.8125rem] text-muted">
           <span>Расходы</span>
           <span className="ml-auto text-right tabular-nums">{spend.map(([y, v]) => `${y}: ${money(v)}`).join(" · ")}</span>
@@ -275,7 +310,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
       {painSheet ? <PainSheet key={painSheet} asset={asset} painId={painSheet} onClose={() => setPainSheet(null)} onOpenTask={onOpenTask} /> : null}
       {editing ? <EditAssetSheet assetId={asset.id} onClose={() => setEditing(false)} onDeleted={onBack} /> : null}
       {mileage ? <MileageSheet assetId={asset.id} onClose={() => setMileage(false)} /> : null}
-      {rule ? <RuleSheet key={rule === "new" ? "new" : rule.id} assetId={asset.id} rule={rule === "new" ? null : rule} onClose={() => setRule(null)} onDone={(r) => setService({ title: r.title, ruleIds: [r.id] })} /> : null}
+      {rule ? <RuleSheet key={typeof rule === "string" ? rule : rule.id} assetId={asset.id} rule={rule === "new" || rule === "ins" ? null : rule} insDefault={rule === "ins"} onClose={() => setRule(null)} onDone={(r) => setService({ title: r.title, ruleIds: [r.id] })} /> : null}
       {service ? <ServiceSheet assetId={asset.id} preset={service === "new" ? null : service} onClose={() => setService(null)} /> : null}
       {entryToEdit ? <ServiceSheet key={entryToEdit.id} assetId={asset.id} preset={null} editing={entryToEdit} onClose={() => setEditEntry(null)} /> : null}
       {openedEntry && !entryToEdit ? (

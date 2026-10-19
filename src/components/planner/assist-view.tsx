@@ -142,6 +142,8 @@ function itemMeta(item: ProposalItem): string {
       parts.push(kindLabel(item.kind));
       if (item.plate) parts.push(item.plate);
       if (item.km != null) parts.push(`${groupKm(item.km)} км`);
+      if (item.price) parts.push(money(item.price));
+      if (item.warrantyMonths || item.warrantyUntil) parts.push(item.warrantyMonths ? `гарантия ${item.warrantyMonths} мес.` : `гарантия до ${item.warrantyUntil}`);
       for (const rule of item.rules) parts.push(`${rule.title}: ${ruleLine(draftRule(rule))}`);
       break;
     case "service":
@@ -153,6 +155,21 @@ function itemMeta(item: ProposalItem): string {
       break;
     case "rule":
       parts.push(ruleLine(draftRule(item.rule)));
+      break;
+    case "fuel":
+      parts.push(formatShortDay(item.date), `${item.liters} л`);
+      if (item.sum) parts.push(money(item.sum));
+      if (item.km != null) parts.push(`${groupKm(item.km)} км`);
+      if (item.full === false) parts.push("неполный бак");
+      break;
+    case "part":
+      if (item.boughtAt) parts.push(formatShortDay(item.boughtAt));
+      if (item.price) parts.push(money(item.price));
+      parts.push(item.warrantyMonths ? `гарантия ${item.warrantyMonths} мес.` : item.warrantyUntil ? `гарантия до ${formatShortDay(item.warrantyUntil)} ${item.warrantyUntil.slice(0, 4)}` : "без гарантии");
+      break;
+    case "pain":
+      if (item.todo) parts.push(`сделать: ${item.todo}`);
+      parts.push(item.date ? `задача на ${formatShortDay(item.date)}` : item.days ? `задача через ${item.days} дн.` : item.km ? `задача при ${groupKm(item.km)} км` : item.painId ? "без плана" : "новая заметка");
       break;
     case "mileage":
       parts.push(item.was != null ? `было ${groupKm(item.was)} км` : "обновить пробег");
@@ -169,7 +186,7 @@ function itemMeta(item: ProposalItem): string {
 function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; onApply: (items: ProposalItem[]) => void; onDismiss: () => void }) {
   const [items, setItems] = useState(proposal.items);
   const pending = proposal.status === "pending";
-  const editable = (item: ProposalItem) => item.op === "create" || item.op === "habit" || item.op === "asset" || item.op === "service" || item.op === "rule";
+  const editable = (item: ProposalItem) => item.op === "create" || item.op === "habit" || item.op === "asset" || item.op === "service" || item.op === "rule" || item.op === "part" || item.op === "pain";
   const updates = items.filter((item): item is Extract<ProposalItem, { op: "update" }> => item.op === "update");
   const timeline = proposal.kind === "plan" && updates.length === items.length && items.length > 0;
   const remove = (key: string) => setItems(items.filter((it) => it.key !== key));
@@ -517,7 +534,7 @@ export function AssistView({
       toggleTask: s.toggleTask,
       addSubtask: s.addSubtask,
       addHabit: s.addHabit,
-      maint: { assets: s.assets ?? [], addAsset: s.addAsset, addRule: s.addAssetRule, addService: s.addAssetService, setKm: s.setAssetKm },
+      maint: { assets: s.assets ?? [], addAsset: s.addAsset, addRule: s.addAssetRule, addService: s.addAssetService, setKm: s.setAssetKm, addFuel: s.addAssetFuel, addPart: s.addAssetPart, addPain: s.addAssetPain, planPain: s.planAssetPain },
     });
     setMessages((list) =>
       list.map((m) => (m.id === message.id ? { ...m, proposals: m.proposals?.map((p) => (p.id === proposal.id ? { ...p, items, status: "applied" } : p)) } : m)),

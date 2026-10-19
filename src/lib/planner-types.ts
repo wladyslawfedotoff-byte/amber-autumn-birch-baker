@@ -91,6 +91,8 @@ export type ServiceEntry = {
   note?: string;
   /** Rules this entry counts for (their «last done» moves to this entry). */
   ruleIds?: string[];
+  /** «ins» = paid for insurance or tax (counted apart from maintenance). Set when the entry resets such a rule. */
+  cat?: "ins" | null;
   updatedAt?: number;
 };
 
@@ -107,6 +109,24 @@ export type PainNote = {
   planKm?: number | null;
   /** The mileage task was made once (a deleted one is not made again). */
   taskMade?: boolean;
+  updatedAt?: number;
+};
+
+/** A fuel fill-up of a car. `full` (default true) = the tank was filled up: consumption is counted between such fills. */
+export type FuelFill = { id: string; date: string; liters: number; sum: number; km?: number | null; full?: boolean; place?: string; updatedAt?: number };
+
+/** A component of a tech item (a PC part…): its own date, price, warranty, serial and files (`entryId` = its id). */
+export type TechPart = {
+  id: string;
+  name: string;
+  boughtAt?: string | null;
+  price?: number | null;
+  warrantyMonths?: number | null;
+  warrantyUntil?: string | null;
+  serial?: string;
+  note?: string;
+  /** The `warrantyUntil` day a reminder task was already made for (a deleted one is not made again). */
+  warnMade?: string;
   updatedAt?: number;
 };
 
@@ -129,6 +149,16 @@ export type Asset = {
   /** «Скоро» threshold of this card (default 14 days / 500 km). */
   soonDays?: number;
   soonKm?: number;
+  /** Tech: price, warranty (months from `boughtAt`, or until a date), serial; reminder `warnDays` before it ends (0 = off, default 30). */
+  price?: number | null;
+  warrantyMonths?: number | null;
+  warrantyUntil?: string | null;
+  serial?: string;
+  warnDays?: number;
+  warnMade?: string;
+  /** Cars: fuel fill-ups. Tech: components. */
+  fuel?: FuelFill[];
+  parts?: TechPart[];
   /** Monthly reminder «Обновите пробег». */
   kmRemind?: boolean;
   /** Last month («YYYY-MM») a reminder task was made for. */

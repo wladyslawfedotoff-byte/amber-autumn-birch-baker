@@ -13,6 +13,8 @@ import { money } from "@/lib/maintenance/stats";
 import { usePlanner } from "@/lib/planner-store";
 import type { Asset, AssetKind, ServiceEntry } from "@/lib/planner-types";
 import { MONTHS_FULL, field, newId, smallLabel } from "./shared";
+import { WarrantyPicker } from "./tech-ui";
+import { warrInput, warrModeOf, type WarrMode } from "./form-helpers";
 
 function DateField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
@@ -51,11 +53,14 @@ export function NewAssetSheet({ open, onClose, onCreated }: { open: boolean; onC
   const [months, setMonths] = useState("");
   const [lastAt, setLastAt] = useState("");
   const [notes, setNotes] = useState("");
+  const [price, setPrice] = useState("");
+  const [warr, setWarr] = useState<{ mode: WarrMode; months: string; until: string }>({ mode: "months", months: "", until: "" });
   const ok = name.trim().length > 0;
   const example = { car: "Легковая", device: "Пылесос", consumable: "Фильтр воды", other: "Газовый котёл" }[kind];
   const save = () => {
     if (!ok) return;
-    const id = addAsset({ name, kind, plate, km, model, boughtAt: boughtAt || null, notes });
+    const tech = kind === "device" || kind === "other";
+    const id = addAsset({ name, kind, plate, km, model, boughtAt: boughtAt || null, notes, ...(tech ? { price, ...warrInput(warr.mode, warr.months, warr.until) } : {}) });
     if (!id) return;
     if (kind === "consumable" && cleanNumber(months)) addRule(id, { title: "Замена", everyMonths: months, lastDoneAt: lastAt || null });
     setName("");
@@ -66,6 +71,8 @@ export function NewAssetSheet({ open, onClose, onCreated }: { open: boolean; onC
     setMonths("");
     setLastAt("");
     setNotes("");
+    setPrice("");
+    setWarr({ mode: "months", months: "", until: "" });
     onClose();
     onCreated(id);
   };
@@ -105,6 +112,12 @@ export function NewAssetSheet({ open, onClose, onCreated }: { open: boolean; onC
               <input type="date" value={boughtAt} onChange={(e) => setBoughtAt(e.target.value)} aria-label="Дата покупки" className={cn(field, "min-w-0 flex-1 text-left")} />
             </div>
           ) : null}
+          {kind === "device" || kind === "other" ? (
+            <>
+              <Num label="Цена" value={price} onChange={setPrice} placeholder="необязательно" suffix="₽" />
+              <WarrantyPicker {...warr} boughtAt={boughtAt} onChange={setWarr} />
+            </>
+          ) : null}
           {kind === "consumable" ? (
             <div className="flex gap-2">
               <Num label="Менять раз в" value={months} onChange={setMonths} placeholder="6" suffix="мес." />
@@ -114,7 +127,7 @@ export function NewAssetSheet({ open, onClose, onCreated }: { open: boolean; onC
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Заметка" aria-label="Заметка" rows={2} maxLength={2000} className={cn(field, "h-auto py-2.5")} />
         </div>
         <InlineHint label="Что куда писать" className="mt-1">
-          Автомобиль — номер и пробег, правила «каждые N км или N мес.». Техника — модель и дата покупки. Расходник — «менять раз в N мес.» и дата последней замены: Пора напомнит заранее. Правила и историю можно добавить в карточке.
+          Автомобиль — номер и пробег, правила «каждые N км или N мес.». Техника — модель, дата покупки, цена и гарантия (компьютер можно собрать из компонентов в карточке). Расходник — «менять раз в N мес.» и дата последней замены: Пора напомнит заранее. Правила и историю можно добавить в карточке.
         </InlineHint>
       </form>
     </Sheet>
@@ -130,7 +143,15 @@ export function EditAssetSheet({ assetId, onClose, onDeleted }: { assetId: strin
   const [confirm, setConfirm] = useState(false);
   const [soonDays, setSoonDays] = useState(String(asset?.soonDays ?? 14));
   const [soonKm, setSoonKm] = useState(String(asset?.soonKm ?? 500));
+  const [warnDays, setWarnDays] = useState(String(asset?.warnDays ?? 30));
+  const [warr, setWarr] = useState<{ mode: WarrMode; months: string; until: string }>({ mode: asset ? warrModeOf(asset) : "none", months: asset?.warrantyMonths ? String(asset.warrantyMonths) : "", until: asset?.warrantyUntil ?? "" });
+  const [bought, setBought] = useState(asset?.boughtAt ?? "");
   if (!asset) return null;
+  const tech = asset.kind !== "car";
+  const setWarranty = (v: { mode: WarrMode; months: string; until: string }) => {
+    setWarr(v);
+    update(asset.id, { warrantyMonths: v.mode === "months" ? v.months : null, warrantyUntil: v.mode === "until" ? v.until || null : null });
+  };
   return (
     <Sheet open title={`${kindLabel(asset.kind)}: изменить`} onClose={onClose}>
       <div className="space-y-2">
@@ -151,9 +172,30 @@ export function EditAssetSheet({ assetId, onClose, onDeleted }: { assetId: strin
           </label>
           <label className="block min-w-0 flex-1">
             <span className={smallLabel}>{asset.kind === "car" ? "Куплен" : "Куплено"}</span>
-            <input type="date" defaultValue={asset.boughtAt ?? ""} onChange={(e) => update(asset.id, { boughtAt: e.target.value || null })} className={cn(field, "text-left")} />
+            <input type="date" defaultValue={asset.boughtAt ?? ""} onChange={(e) => { setBought(e.target.value); update(asset.id, { boughtAt: e.target.value || null }); }} className={cn(field, "text-left")} />
           </label>
         </div>
+        {tech ? (
+          <>
+            <div className="flex gap-2">
+              <label className="block min-w-0 flex-1">
+                <span className={smallLabel}>Цена, ₽</span>
+                <input inputMode="decimal" aria-label="Цена, ₽" defaultValue={asset.price ?? ""} onChange={(e) => update(asset.id, { price: e.target.value })} placeholder="необязательно" className={field} />
+              </label>
+              <label className="block min-w-0 flex-1">
+                <span className={smallLabel}>Серийный номер</span>
+                <input aria-label="Серийный номер" defaultValue={asset.serial ?? ""} onChange={(e) => update(asset.id, { serial: e.target.value })} maxLength={80} className={field} />
+              </label>
+            </div>
+            <WarrantyPicker {...warr} boughtAt={bought} onChange={setWarranty} />
+            <div>
+              <FieldLabel hint="За сколько дней до конца гарантии Пора создаст задачу-напоминание и пришлёт пуш. 0 — не напоминать.">Напомнить о конце гарантии</FieldLabel>
+              <div className="mt-1 flex gap-2">
+                <Num label="За, дней" value={warnDays} onChange={(v) => { setWarnDays(v); if (cleanNumber(v) !== undefined) update(asset.id, { warnDays: Number(v) }); }} suffix="дн." />
+              </div>
+            </div>
+          </>
+        ) : null}
         <label className="block">
           <span className={smallLabel}>Заметка</span>
           <textarea defaultValue={asset.notes} onChange={(e) => update(asset.id, { notes: e.target.value })} rows={3} maxLength={2000} className={cn(field, "h-auto py-2.5")} />
@@ -256,11 +298,13 @@ export function MileageSheet({ assetId, onClose }: { assetId: string; onClose: (
 export function RuleSheet({
   assetId,
   rule,
+  insDefault = false,
   onClose,
   onDone,
 }: {
   assetId: string;
   rule: MaintRule | null;
+  insDefault?: boolean;
   onClose: () => void;
   onDone: (rule: MaintRule) => void;
 }) {
@@ -277,10 +321,14 @@ export function RuleSheet({
   const [year, setYear] = useState(rule?.fixedYear ? String(rule.fixedYear) : "");
   const [lastAt, setLastAt] = useState("");
   const [lastKm, setLastKm] = useState("");
+  const [ins, setIns] = useState(rule?.cat === "ins" || (!rule && insDefault));
+  const [cost, setCost] = useState(rule?.cost ? String(rule.cost) : "");
   const [confirm, setConfirm] = useState(false);
   if (!asset) return null;
   const car = asset.kind === "car";
   const input = {
+    cat: car && ins ? ("ins" as const) : null,
+    cost: car && ins ? cost : null,
     title,
     everyKm: car ? everyKm : null,
     everyMonths,
@@ -298,7 +346,7 @@ export function RuleSheet({
     onClose();
   };
   return (
-    <Sheet open title={rule ? "Правило" : "Новое правило"} onClose={onClose} action={{ label: rule ? "Сохранить" : "Добавить", onClick: save, disabled: !ok }}>
+    <Sheet open title={rule ? "Правило" : insDefault ? "Новый платёж" : "Новое правило"} onClose={onClose} action={{ label: rule ? "Сохранить" : "Добавить", onClick: save, disabled: !ok }}>
       <div className="space-y-2">
         <input autoFocus={!rule} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={car ? "Что делать — например, замена масла" : "Что делать — например, заменить фильтр"} aria-label="Что делать" maxLength={120} className={field} />
         <FieldLabel hint="Можно один срок или несколько сразу — тогда сработает тот, что наступит раньше. Например: каждые 10 000 км или 12 мес.">Когда</FieldLabel>
@@ -328,6 +376,18 @@ export function RuleSheet({
             </div>
             <p className="mt-2 text-xs text-muted">Без числа — «скоро» с 1-го числа месяца, срок до его конца. Без года повторяется каждый год, с годом — один раз.</p>
           </div>
+        ) : null}
+        {car ? (
+          <>
+            <label className="flex min-h-11 items-center gap-3 rounded-xl bg-elevated px-3 text-[0.9375rem]">
+              <span className="flex-1">
+                Страховка или налог
+                <span className="block text-xs text-subtle">считается отдельно от обслуживания</span>
+              </span>
+              <input type="checkbox" role="switch" checked={ins} onChange={(e) => setIns(e.target.checked)} className="ios-switch shrink-0" aria-label="Страховка или налог" />
+            </label>
+            {ins ? <Num label="Обычная сумма" value={cost} onChange={setCost} placeholder="необязательно" suffix="₽" /> : null}
+          </>
         ) : null}
         {!rule ? (
           <>
@@ -383,7 +443,8 @@ export function ServiceSheet({ assetId, preset, editing, onClose }: { assetId: s
   const [title, setTitle] = useState(editing?.title ?? preset?.title ?? "");
   const [date, setDate] = useState(editing?.date ?? todayIso());
   const [km, setKm] = useState(editing?.km != null ? String(editing.km) : "");
-  const [cost, setCost] = useState(editing?.cost ? String(editing.cost) : "");
+  const presetCost = !editing && preset ? (asset?.rules ?? []).find((r) => preset.ruleIds.includes(r.id) && r.cost)?.cost : undefined;
+  const [cost, setCost] = useState(editing?.cost ? String(editing.cost) : presetCost ? String(presetCost) : "");
   const [place, setPlace] = useState(editing?.place ?? "");
   const [note, setNote] = useState(editing?.note ?? "");
   const [picked, setPicked] = useState<string[] | null>(editing ? (editing.ruleIds ?? []) : preset ? preset.ruleIds : null);
