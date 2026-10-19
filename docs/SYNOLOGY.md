@@ -245,9 +245,9 @@ sudo docker compose up -d
 
 **Что должно быть в журнале** (по порядку):
 
-- `storage.import_ok backend=sqlite revision=… tasks=… lists=… …` — данные записаны в базу, прочитаны обратно и **совпали с исходными** (количество и контрольная сумма sha256 по каждому разделу — задачи, списки, привычки, вехи, проекты, карточки, пароли, подписки, вложения, беседы — и отдельно по каждому профилю);
+- `storage.import_ok file=/data/pora.db revision=… lists=… tasks=… habits=… … check=ok` — данные записаны в базу, прочитаны обратно и **совпали с исходными** (количество и контрольная сумма sha256 по каждому разделу — задачи, списки, привычки, вехи, проекты, карточки, пароли, подписки, вложения, беседы — и отдельно по каждому профилю);
 - `storage.import_user user=… tasks=… …` — по строке на профиль: сколько записей у него перенесено;
-- `storage.legacy_moved dir=/data/legacy-json-<дата>` — старые файлы отложены в эту папку (ничего не удаляется);
+- `storage.legacy_moved to=/data/legacy-json-<дата> files=pora.json,…` — старые файлы отложены в эту папку (ничего не удаляется);
 - `storage.ready backend=sqlite file=/data/pora.db`.
 
 При следующих запусках будет только `storage.ready backend=sqlite …` — повторного переноса нет. Проверьте в приложении, что задачи на месте (Настройки → «Подключение» → ревизия та же, что была). В `data/` теперь `pora.db`, `pora.db-wal`, `pora.db-shm`, папки `backup/`, `backups/`, `attachments/files/` и `legacy-json-<дата>/` (в ней `pora.json`, `users.json`, `push.json`, `attachments/meta.json`, `assistant/…` — как были).
