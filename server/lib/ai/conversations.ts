@@ -1,5 +1,7 @@
 /**
- * Per-user assistant data in DATA_DIR/assistant/<login>.json: conversations,
+ * Per-user assistant data — one JSON document per user in table
+ * `assistant_users` of pora.db (1.12.0+), or DATA_DIR/assistant/<login>.json
+ * (JSON fallback and 1.11): conversations,
  * questions waiting for a model («Отложить»), notices for the bell
  * and settings (consent per provider kind, «Разрешить облако», «Разрешить платные»). Only the
  * owner's requests ever read or write their file.
@@ -7,6 +9,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { allAssistant, deleteAssistant, readAssistant, writeAssistant } from "../db/records.ts";
+import { storageFor, type SqliteStorage } from "../db/storage.ts";
 import type { AiWhich, AssistantNotice, ChatMessage, Conversation, ConversationSummary, Proposal, ProposalItem, ProposalStatus, QueuedRequest } from "../../../src/lib/assistant/types.ts";
 
 export type AssistantSettings = { allowCloud: boolean; allowPaid: boolean; consent: Partial<Record<AiWhich, number>> };
@@ -38,18 +42,44 @@ function mark(data: UserFile, item: QueuedRequest, queued: boolean): ChatMessage
 export class AssistantStore {
   private queues = new Map<string, Promise<unknown>>();
   readonly dir: string;
+  private readonly dataDir: string | null;
+  private sql: SqliteStorage | null | undefined = undefined;
 
-  constructor(dir: string) {
+  /** `dataDir`: serve from that folder's storage (pora.db when active); without it, files in `dir` only. */
+  constructor(dir: string, options: { dataDir?: string } = {}) {
     this.dir = dir;
+    this.dataDir = options.dataDir ?? null;
+  }
+
+  private sqlite(): SqliteStorage | null {
+    if (this.sql === undefined) {
+      const storage = this.dataDir ? storageFor(this.dataDir) : null;
+      this.sql = storage?.mode === "sqlite" ? storage : null;
+    }
+    return this.sql;
   }
 
   private file(login: string): string {
     return join(this.dir, `${safeName(login)}.json`);
   }
 
+  private async raw(login: string): Promise<Partial<UserFile> | null> {
+    const sql = this.sqlite();
+    // Database errors propagate (never answer «empty» and then overwrite the chats).
+    if (sql) return readAssistant(sql.db, safeName(login)) as Partial<UserFile> | null;
+    return JSON.parse(await readFile(this.file(login), "utf8")) as Partial<UserFile>;
+  }
+
   private async load(login: string): Promise<UserFile> {
+    let parsed: Partial<UserFile> | null;
     try {
-      const parsed = JSON.parse(await readFile(this.file(login), "utf8")) as Partial<UserFile>;
+      parsed = await this.raw(login);
+    } catch (error) {
+      if (this.sqlite()) throw error;
+      return empty(login);
+    }
+    if (!parsed) return empty(login);
+    try {
       return {
         v: 1,
         login,
@@ -64,6 +94,11 @@ export class AssistantStore {
   }
 
   private async save(login: string, data: UserFile): Promise<void> {
+    const sql = this.sqlite();
+    if (sql) {
+      writeAssistant(sql.db, safeName(login), data);
+      return;
+    }
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
     const target = this.file(login);
     const tmp = `${target}.${randomUUID()}.tmp`;
@@ -259,6 +294,14 @@ export class AssistantStore {
 
   /** Logins with something in the queue (for the background worker). */
   async queuedLogins(): Promise<string[]> {
+    const sql = this.sqlite();
+    if (sql) {
+      const out: string[] = [];
+      for (const [key, parsed] of Object.entries(allAssistant(sql.db)) as [string, Partial<UserFile>][]) {
+        if (typeof parsed.login === "string" && parsed.queue?.length && safeName(parsed.login) === key) out.push(parsed.login);
+      }
+      return out;
+    }
     let names: string[];
     try {
       names = (await readdir(this.dir)).filter((name) => name.endsWith(".json"));
@@ -279,6 +322,11 @@ export class AssistantStore {
 
   /** Test helper / account cleanup. */
   async wipe(login: string): Promise<void> {
+    const sql = this.sqlite();
+    if (sql) {
+      deleteAssistant(sql.db, safeName(login));
+      return;
+    }
     await rm(this.file(login), { force: true });
   }
 }

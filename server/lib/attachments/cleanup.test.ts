@@ -12,7 +12,7 @@ const DAY = 24 * 60 * 60 * 1000;
 async function withStore(fn: (store: AttachStore) => Promise<void>) {
   const root = await mkdtemp(join(tmpdir(), "pora-clean-"));
   try {
-    await fn(new AttachStore(root));
+    await fn(new AttachStore(root, { dataDir: root }));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

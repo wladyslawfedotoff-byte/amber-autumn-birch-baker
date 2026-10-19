@@ -4,10 +4,39 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { TOMBSTONE_TTL_MS, emptyData, mergeData, pruneTombstones, sameData, stampCollection, type SyncData, type SyncEntity } from "../../src/lib/sync/merge.ts";
-import { SyncStore, backupFileName, backupsToDelete } from "./sync-store.ts";
+import { SyncStore, backupFileName, backupsToDelete, type StoredDoc } from "./sync-store.ts";
+import { existsSync } from "node:fs";
+import { openDb } from "./db/database.ts";
+import { readStoredDoc } from "./db/doc-tables.ts";
+import { closeStorage, forceJsonStorage } from "./db/storage.ts";
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), "pora-store-"));
+}
+
+/** A folder served from the 1.11 JSON file (fallback backend), for the file-format tests. */
+function tmpJson(): string {
+  const dir = tmp();
+  forceJsonStorage(dir);
+  return dir;
+}
+
+function cleanup(dir: string): void {
+  closeStorage(dir);
+  rmSync(dir, { recursive: true, force: true });
+}
+
+/** What is persisted, read independently of the store (second connection / the file). */
+function onDisk(dir: string): StoredDoc {
+  if (existsSync(join(dir, "pora.db"))) {
+    const db = openDb(join(dir, "pora.db"), { readonly: true });
+    try {
+      return readStoredDoc(db)!;
+    } finally {
+      db.close();
+    }
+  }
+  return JSON.parse(readFileSync(join(dir, "pora.json"), "utf8")) as StoredDoc;
 }
 
 /**
@@ -90,7 +119,7 @@ test("revision increases, stale If-Match gets 409 with the current doc", async (
     assert.equal(doc.data.tasks[0]!.title, "A");
     assert.deepEqual(readdirSync(dir).filter((n) => n.includes(".tmp-")), []);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
@@ -102,12 +131,12 @@ test("server merges even on a matching revision, so a sloppy client cannot drop 
     const r = await store.put(1, { ...emptyData(), tasks: [{ id: "b", title: "B", updatedAt: 2 }] });
     assert.deepEqual(r.doc.data.tasks.map((t) => t.id).sort(), ["a", "b"]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
-test("backups rotate and corrupt files are set aside and restored from the newest backup", async () => {
-  const dir = tmp();
+test("JSON backend: backups rotate and corrupt files are set aside and restored from the newest backup", async () => {
+  const dir = tmpJson();
   try {
     let clock = 1_000_000;
     const hour = 3600_000;
@@ -131,7 +160,7 @@ test("backups rotate and corrupt files are set aside and restored from the newes
     assert.ok(readdirSync(dir).some((n) => n.startsWith("pora.json.corrupt-")));
     assert.doesNotThrow(() => JSON.parse(readFileSync(join(dir, "pora.json"), "utf8")));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
@@ -159,7 +188,7 @@ test("BUG SCENARIO: task saved on the phone must not vanish and must reach the c
     assert.ok(computer.titles().includes("Купить хлеб (телефон)"), "phone task reached the computer");
     assert.deepEqual(computer.titles(), phone.titles());
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
@@ -178,10 +207,10 @@ test("concurrent pushes with the same base: second gets 409, merges, retries; no
     await computer.sync(store);
     assert.deepEqual(phone.titles(), ["Computer", "Phone"]);
     assert.deepEqual(computer.titles(), ["Computer", "Phone"]);
-    const disk = JSON.parse(readFileSync(join(dir, "pora.json"), "utf8"));
+    const disk = onDisk(dir);
     assert.equal(disk.data.tasks.length, 2);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
@@ -201,10 +230,10 @@ test("delete on one device propagates and is not undone by the other device's st
     await phone.sync(store);
     assert.deepEqual(phone.titles(), []);
     assert.deepEqual(computer.titles(), []);
-    const disk = JSON.parse(readFileSync(join(dir, "pora.json"), "utf8"));
-    assert.ok(disk.data.tombstones.tasks.x > 0, "tombstone stored on the server");
+    const disk = onDisk(dir);
+    assert.ok(disk.data.tombstones.tasks.x! > 0, "tombstone stored on the server");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
@@ -220,7 +249,7 @@ test("first connection of a device merges its local data with the server (never 
     assert.deepEqual(phone.titles(), ["C", "P"]);
     assert.deepEqual(computer.titles(), ["C", "P"]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
@@ -255,12 +284,12 @@ test("leftover temp files are removed at startup and health does not create file
     for (let i = 0; i < 5; i++) assert.equal(await store.isWritable(), true);
     assert.deepEqual(readdirSync(dir).sort(), before);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
-test("an external rewrite of pora.json (restore script) is picked up", async () => {
-  const dir = tmp();
+test("JSON backend: an external rewrite of pora.json (restore script) is picked up", async () => {
+  const dir = tmpJson();
   try {
     const store = new SyncStore(dir);
     await store.put(0, { ...emptyData(), tasks: [{ id: "a", title: "A", updatedAt: 1 }] });
@@ -275,12 +304,12 @@ test("an external rewrite of pora.json (restore script) is picked up", async () 
     assert.equal(doc.revision, 7);
     assert.equal(doc.data.tasks[0]!.title, "restored");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
-test("profiles: a single-user pora.json on disk is migrated to APP_OWNER without losing anything", async () => {
-  const dir = tmp();
+test("JSON backend: profiles: a single-user pora.json on disk is migrated to APP_OWNER without losing anything", async () => {
+  const dir = tmpJson();
   try {
     const now = Date.now();
     const data = emptyData();
@@ -329,7 +358,7 @@ test("profiles: a single-user pora.json on disk is migrated to APP_OWNER without
     assert.deepEqual(single.data.tasks.map((t) => t.id).sort(), ["t1", "t2", "z1"]);
     assert.ok(single.users?.user2);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
   }
 });
 
@@ -349,6 +378,101 @@ test("backups: users-….json follows its pora-….json in the retention", async
     assert.deepEqual(removed.sort(), [old, `users-${old.slice(5)}`].sort());
     assert.deepEqual(readdirSync(backups).sort(), [fresh, `users-${fresh.slice(5)}`].sort());
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    cleanup(dir);
+  }
+});
+
+/* ----------------------------- SQLite backend ----------------------------- */
+
+import { DocTables } from "./db/doc-tables.ts";
+
+function externalWrite(dir: string, edit: (doc: StoredDoc) => StoredDoc): void {
+  const db = openDb(join(dir, "pora.db"));
+  try {
+    const docs = new DocTables();
+    const current = readStoredDoc(db)!;
+    docs.prime(current);
+    db.transaction(() => docs.save(db, edit(structuredClone(current)), current.revision)).immediate();
+  } finally {
+    db.close();
+  }
+}
+
+test("SQLite backend: a fresh folder uses pora.db; JSON snapshots still rotate in backups/", async () => {
+  const dir = tmp();
+  try {
+    let clock = 1_000_000;
+    const hour = 3600_000;
+    const store = new SyncStore(dir, { backupHourly: 3, backupDaily: 0, backupIntervalMs: 0, now: () => (clock += 2 * hour) });
+    for (let i = 0; i < 6; i++) {
+      const r = await store.put(i, { ...emptyData(), tasks: [{ id: `t${i}`, title: `T${i}`, updatedAt: i + 1 }] });
+      assert.equal(r.status, "ok");
+    }
+    assert.equal(store.backend(), "sqlite");
+    assert.equal(existsSync(join(dir, "pora.json")), false, "no JSON document is written");
+    const backups = readdirSync(join(dir, "backups")).sort();
+    assert.equal(backups.length, 3);
+    const newest = JSON.parse(readFileSync(join(dir, "backups", backups[backups.length - 1]!), "utf8")) as StoredDoc;
+    assert.equal(newest.revision, 5, "a backup holds the state before the write");
+    assert.equal(newest.data.tasks.length, 5);
+    // Restart: everything back from the database.
+    closeStorage(dir);
+    const reopened = await new SyncStore(dir).get();
+    assert.equal(reopened.revision, 6);
+    assert.deepEqual(reopened.data.tasks.map((t) => t.id).sort(), ["t0", "t1", "t2", "t3", "t4", "t5"]);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("SQLite backend: a change by another process is picked up; a write racing it gets 409 and nothing is lost", async () => {
+  const dir = tmp();
+  try {
+    let hook: (() => void) | null = null;
+    const store = new SyncStore(dir, {
+      now: () => {
+        const fn = hook;
+        hook = null;
+        fn?.();
+        return Date.now();
+      },
+    });
+    await store.put(0, { ...emptyData(), tasks: [{ id: "a", title: "A", updatedAt: 1 }] });
+    externalWrite(dir, (doc) => ({ ...doc, revision: 7, data: { ...doc.data, tasks: [{ id: "a", title: "restored", updatedAt: 5 }] } }));
+    const seen = await store.get();
+    assert.equal(seen.revision, 7);
+    assert.equal(seen.data.tasks[0]!.title, "restored");
+    // The other process writes between our read and our transaction.
+    hook = () => externalWrite(dir, (doc) => ({ ...doc, revision: 8, data: { ...doc.data, tasks: [...doc.data.tasks, { id: "x", title: "X", updatedAt: 6 }] } }));
+    const raced = await store.put(7, { ...emptyData(), tasks: [{ id: "b", title: "B", updatedAt: 9 }] });
+    assert.equal(raced.status, "conflict");
+    assert.equal(raced.doc.revision, 8);
+    const retry = await store.put(8, { ...emptyData(), tasks: [{ id: "b", title: "B", updatedAt: 9 }] });
+    assert.equal(retry.status, "ok");
+    assert.deepEqual(onDisk(dir).data.tasks.map((t) => t.id).sort(), ["a", "b", "x"]);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("SQLite backend: profiles (world + per-user states) survive a restart exactly", async () => {
+  const dir = tmp();
+  try {
+    const acl = { owner: "user1", users: ["user1", "user2"] };
+    const store = new SyncStore(dir, { backupIntervalMs: 0 });
+    const now = Date.now();
+    await store.putFor("user1", acl, 0, { ...emptyData(), tasks: [{ id: "t1", title: "Моя", updatedAt: now, members: ["user2"] }] });
+    const v2 = await store.getFor("user2", acl);
+    const r2 = await store.putFor("user2", acl, v2.revision, { ...v2.data, tasks: [...v2.data.tasks, { id: "z", title: "Её", updatedAt: now + 1 }] });
+    assert.equal(r2.status, "ok");
+    const before = await store.get();
+    closeStorage(dir);
+    const after = await new SyncStore(dir).get();
+    assert.equal(JSON.stringify(Object.keys(after.users ?? {}).sort()), JSON.stringify(["user1", "user2"]));
+    assert.equal(sameData(after.data, before.data), true);
+    assert.deepEqual(after.users, before.users);
+    assert.equal(after.revision, before.revision);
+  } finally {
+    cleanup(dir);
   }
 });

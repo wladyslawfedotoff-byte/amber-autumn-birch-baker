@@ -2,10 +2,13 @@
  * Crash instead of limping on: Nitro's own handlers only log uncaught errors,
  * which can leave a half-broken process serving requests. We log one clear
  * line and exit(1) so Docker's `restart: unless-stopped` starts a fresh one.
- * Also logs startup info and eagerly validates auth config (fail-closed notice).
+ * Also logs startup info, eagerly validates auth config (fail-closed notice)
+ * and opens the storage (server/lib/db/storage.ts) — refusing to start when
+ * that is unsafe.
  */
 import { getAuthConfig } from "../lib/auth.ts";
 import { log } from "../lib/log.ts";
+import { StorageFatalError, storageFor } from "../lib/db/storage.ts";
 import { dataDir, getStore } from "../lib/sync-store.ts";
 
 const FLAG = "__poraProcessGuard";
@@ -30,6 +33,16 @@ export default function processGuard(): void {
     uid: typeof process.getuid === "function" ? process.getuid() : undefined,
   });
   getAuthConfig();
+  // Storage backend (pora.db, one-time import of the 1.11 JSON files) before the first request.
+  try {
+    storageFor(dataDir());
+  } catch (error) {
+    if (error instanceof StorageFatalError) {
+      log("error", "storage.fatal", { reason: error.message, action: "exit(1) — данные не тронуты" }, error.cause);
+      process.exit(1);
+    }
+    throw error;
+  }
   void getStore()
     .isWritable()
     .then((ok) => {

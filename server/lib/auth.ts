@@ -13,7 +13,8 @@
  *
  * - No usable password → FAIL CLOSED: nothing but /api/health and static files is served.
  * - AUTH_DISABLED=true is honoured only when NODE_ENV !== "production" (local dev).
- * - A password changed in the app lives in ${DATA_DIR}/users.json and wins over
+ * - A password changed in the app lives in pora.db (table users; users.json on
+ *   the JSON fallback) and wins over
  *   .env (server/lib/user-store.ts).
  * - SESSION_SECRET (≥ 32 chars) or an auto-generated secret persisted to
  *   ${DATA_DIR}/.session-secret (mode 0600).

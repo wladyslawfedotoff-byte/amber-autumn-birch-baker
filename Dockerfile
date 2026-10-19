@@ -33,20 +33,24 @@ ENV HOST=0.0.0.0
 ENV PORT=8080
 ENV NITRO_HOST=0.0.0.0
 ENV NITRO_PORT=8080
-# Sync data (pora.json, backups/, .session-secret) — mount a volume here.
+# Data (pora.db, backup/, backups/, attachments/, .session-secret) — mount a volume here.
 ENV DATA_DIR=/data
 # No third-party Grok banner script on the self-hosted app.
 ENV VITE_GROK_EXTENSIONS=0
 
-# Production deps for migrate.mjs (pg). The Nitro server bundle in .output is self-contained.
+# Production deps: better-sqlite3 (pora.db, loaded by the server bundle and the
+# maintenance scripts from /app/node_modules; prebuilt binary for linux x64/arm64
+# glibc, no compiler needed) and pg for migrate.mjs.
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/migrations ./migrations
-# scripts/restore-backup.mjs imports the shared sync model directly.
+# The maintenance scripts (restore-backup, reset-password, export-json,
+# db-snapshot) import the shared sync model and the storage code directly.
 COPY --from=build /app/src/lib/sync ./src/lib/sync
+COPY --from=build /app/server/lib ./server/lib
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && mkdir -p /data && chown node:node /data
