@@ -1,5 +1,6 @@
 /**
- * Push subscriptions and sent reminders: one small JSON file,
+ * Push subscriptions and sent reminders: tables push_subscriptions / push_sent
+ * of pora.db (1.12.0+), or — JSON fallback and 1.11 — one small JSON file
  * `${DATA_DIR}/push.json`, written atomically (temp file + rename).
  *
  *   { v: 1, subs: { <login>: [{ endpoint, keys, tz, createdAt }] }, sent: { "<login>|<key>": at } }
@@ -10,47 +11,42 @@
 import { promises as fs } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
-import type { PushKeys } from "./webpush.ts";
+import { emptyPushFile, parsePushFile, type PushFile, type StoredSub } from "../db/legacy.ts";
+import { readPush, writePush } from "../db/records.ts";
+import { storageFor, type SqliteStorage } from "../db/storage.ts";
 
-export type StoredSub = { endpoint: string; keys: PushKeys; tz: string; createdAt: number };
-export type PushFile = { v: 1; subs: Record<string, StoredSub[]>; sent: Record<string, number> };
+export type { PushFile, StoredSub } from "../db/legacy.ts";
+export { emptyPushFile } from "../db/legacy.ts";
 
 export const MAX_SUBS_PER_USER = 10;
 const SENT_KEEP_MS = 3 * 24 * 60 * 60 * 1000;
 
-export function emptyPushFile(): PushFile {
-  return { v: 1, subs: {}, sent: {} };
-}
-
-function parse(raw: string): PushFile {
-  const value = JSON.parse(raw) as Partial<PushFile>;
-  const out = emptyPushFile();
-  if (value && typeof value.subs === "object" && value.subs) {
-    for (const [login, list] of Object.entries(value.subs)) {
-      if (!Array.isArray(list)) continue;
-      out.subs[login] = list.filter(
-        (s) => s && typeof s.endpoint === "string" && s.keys && typeof s.keys.p256dh === "string" && typeof s.keys.auth === "string",
-      );
-    }
-  }
-  if (value && typeof value.sent === "object" && value.sent) {
-    for (const [key, at] of Object.entries(value.sent)) if (typeof at === "number") out.sent[key] = at;
-  }
-  return out;
-}
+const parse = parsePushFile;
 
 export class PushStore {
   private cache: PushFile | null = null;
   private chain: Promise<unknown> = Promise.resolve();
 
   readonly file: string;
+  private readonly dataDir: string | null;
+  private sql: SqliteStorage | null | undefined = undefined;
 
-  constructor(file: string) {
+  /** `dataDir`: serve from that folder's storage (pora.db when active); without it, the JSON file only. */
+  constructor(file: string, options: { dataDir?: string } = {}) {
     this.file = file;
+    this.dataDir = options.dataDir ?? null;
   }
 
   static inDir(dir: string): PushStore {
-    return new PushStore(join(dir, "push.json"));
+    return new PushStore(join(dir, "push.json"), { dataDir: dir });
+  }
+
+  private sqlite(): SqliteStorage | null {
+    if (this.sql === undefined) {
+      const storage = this.dataDir ? storageFor(this.dataDir) : null;
+      this.sql = storage?.mode === "sqlite" ? storage : null;
+    }
+    return this.sql;
   }
 
   private async load(): Promise<PushFile> {
@@ -80,10 +76,26 @@ export class PushStore {
   }
 
   read(): Promise<PushFile> {
+    const sql = this.sqlite();
+    if (sql) return this.exclusive(async () => readPush(sql.db));
     return this.exclusive(async () => structuredClone(await this.load()));
   }
 
   update<T>(fn: (file: PushFile) => T): Promise<T> {
+    const sql = this.sqlite();
+    if (sql) {
+      // Read-modify-write in one transaction.
+      return this.exclusive(async () =>
+        sql.db
+          .transaction(() => {
+            const next = readPush(sql.db);
+            const result = fn(next);
+            writePush(sql.db, next);
+            return result;
+          })
+          .immediate(),
+      );
+    }
     return this.exclusive(async () => {
       const next = structuredClone(await this.load());
       const result = fn(next);

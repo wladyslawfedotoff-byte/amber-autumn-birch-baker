@@ -5,7 +5,7 @@
  * with separate browsers for two users against a running production server
  * started with two profiles:
  *
- *   APP_USERS=user1,user2 USER_USER1_PASSWORD=… USER_USER2_PASSWORD=… DATA_DIR=$(mktemp -d) PORT=8092 node .output/server/index.mjs
+ *   APP_USERS=user1,user2 USER_USER1_NAME="Пользователь 1" USER_USER2_NAME="Пользователь 2" USER_USER1_PASSWORD=… USER_USER2_PASSWORD=… DATA_DIR=$(mktemp -d) PORT=8092 node .output/server/index.mjs
  *   BASE_URL=http://127.0.0.1:8092 USER1_PASSWORD=… USER2_PASSWORD=… node scripts/e2e-profiles.mjs
  *
  * Optional: CHROME_PATH=/usr/bin/google-chrome, SHOTS_DIR=$(mktemp -d).
@@ -98,6 +98,21 @@ async function openTask(page, title) {
   await page.getByLabel("Название").waitFor();
 }
 
+/** Sharing and «Дублировать» sit under «Подробнее» in the task card (progressive disclosure). */
+async function openMore(page) {
+  const more = page.getByRole("button", { name: /^Подробнее/ });
+  if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
+}
+
+/** «Настройки» is an icon button in the sidebar (a tab on a phone). */
+async function openSettings(page) {
+  const tab = page.locator('nav[aria-label="Основные разделы"] button').filter({ hasText: /^Настройки$/ });
+  if ((await tab.count()) && (await tab.first().isVisible())) return tab.first().click();
+  const menu = page.locator('button[aria-label="Открыть меню"]');
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole("button", { name: "Настройки", exact: true }).first().click();
+}
+
 async function closeDetail(page) {
   await page.getByRole("button", { name: "Закрыть", exact: true }).click();
 }
@@ -168,6 +183,7 @@ async function main() {
     await user1.getByLabel("Новая подзадача").press("Enter");
     await user1.getByLabel("Новая подзадача").fill("Упаковать");
     await user1.getByRole("button", { name: "Добавить подзадачу" }).click();
+    await openMore(user1);
     await user1.getByRole("button", { name: /^Совместная/ }).click(); // the row unfolds «Совместная» / «Назначить»
     await user1.getByRole("button", { name: "Пользователь 2", exact: true }).last().click(); // «Назначить» → Пользователь 2
     await shot(user1, "02-assign");
@@ -183,7 +199,10 @@ async function main() {
     await user2.getByRole("button", { name: "Выполнить" }).first().click();
     await synced(user2);
     await syncNow(user1);
-    await openView(user1, "Готово"); // finished tasks live in «Готово»
+    // finished tasks: «Настройки» → «Архив» → «Выполненные» (the «Готово» view)
+    await openSettings(user1);
+    await user1.getByRole("button", { name: /^Архив/ }).first().click();
+    await user1.getByRole("button", { name: /^Выполненные/ }).first().click();
     await waitText(user1, "выполнил(а) Пользователь 2", "user1 (completion by user2)");
     const vDoc = await serverDoc(user1);
     const task = vDoc.data.tasks.find((t) => t.title === shared);
@@ -239,6 +258,7 @@ async function main() {
     // 4. «Дублировать на дату…»
     await openView(user1, "Все");
     await openTask(user1, dated);
+    await openMore(user1);
     await user1.getByRole("button", { name: "Дублировать", exact: true }).first().click(); // open the «Дублировать ›» row
     await user1.getByRole("button", { name: "Дублировать на дату…" }).click();
     const copyDate = await isoDay(user1, 10);
@@ -258,7 +278,7 @@ async function main() {
     watch(user2b, "user2b", problems);
     await login(user2b, "user2", USER2, "user2b");
     const NEW = `новый пароль пользователя 2 ${tag}`;
-    await openView(user2, "Настройки");
+    await openSettings(user2);
     await user2.click('[data-row="profile"]');
     await user2.getByRole("button", { name: "Сменить пароль" }).click();
     await user2.getByLabel("Текущий пароль").fill(USER2);
@@ -281,10 +301,12 @@ async function main() {
     await user2b.waitForURL(`${BASE}/`);
     ok("password change: other device of user2 signed out, old password rejected, new works, user1 unaffected, login remembered");
 
-    // 6. Sign out from the sidebar.
+    // 6. Sign out: «Настройки» → «Профиль» → «Выйти из профиля».
+    await openSettings(user1);
+    await user1.click('[data-row="profile"]');
     await user1.getByRole("button", { name: /Выйти из профиля/ }).first().click();
     await user1.waitForURL(/\/login/);
-    ok("«Выйти» in the sidebar");
+    ok("«Выйти из профиля» in «Настройки» → «Профиль»");
 
     const expected = /status of (409|401|403) \(\)|fonts\.(googleapis|gstatic)\.com|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED/;
     const real = problems.filter((p) => !expected.test(p));

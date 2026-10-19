@@ -77,8 +77,8 @@ function seed(): SyncData {
 function makeAssistant(env: Record<string, string>, script: Script, data: SyncData = seed(), now = () => 1_000_000) {
   const dir = tmp();
   const { fn, calls } = fakeFetch(script);
-  const store = new AssistantStore(dir);
-  const usage = new UsageBook(join(dir, "usage.json"), now);
+  const store = new AssistantStore(dir, { dataDir: dir });
+  const usage = new UsageBook(join(dir, "usage.json"), now, { dataDir: dir });
   // Local answers are tested separately; here every question goes to a model.
   const assistant = new Assistant({ config: readAiConfig({ AI_LOCAL_ANSWERS: "0", ...env }), fetchFn: fn, store, loadData: async () => data, now, usage, principal: (login) => (login === "user1" ? user1 : null) });
   return { assistant, store, calls, dir };
@@ -908,7 +908,7 @@ test("answers without a model: overdue, a day, free windows — zero requests, s
   data.tasks.push({ id: "t3", title: "Встреча с командой", notes: "", listId: null, done: false, priority: 0, due: "2026-10-13", startAt: "10:00", endAt: "11:30", tags: [], subtasks: [], createdAt: 1, completedAt: null, owner: "user1", updatedAt: 1 } as never);
   const dir = tmp();
   const { fn, calls } = fakeFetch({ chat: [] });
-  const store = new AssistantStore(dir);
+  const store = new AssistantStore(dir, { dataDir: dir });
   const assistant = new Assistant({ config: readAiConfig(PAID_GPT), fetchFn: fn, store, loadData: async () => data, now: () => 1, usage: new UsageBook(null, () => 1), principal: () => user1 });
   try {
     const overdue = await ask(assistant, "Что у меня просрочено?");
@@ -1248,7 +1248,7 @@ test("1.8.1: meta questions are answered by the app, without a model", async () 
 
   const dir = tmp();
   const { fn, calls } = fakeFetch({ chat: [] });
-  const assistant = new Assistant({ config: readAiConfig(KIE_LIKE), fetchFn: fn, store: new AssistantStore(dir), loadData: async () => seed(), now: () => 1, usage: new UsageBook(null, () => 1), principal: () => user1 });
+  const assistant = new Assistant({ config: readAiConfig(KIE_LIKE), fetchFn: fn, store: new AssistantStore(dir, { dataDir: dir }), loadData: async () => seed(), now: () => 1, usage: new UsageBook(null, () => 1), principal: () => user1 });
   const events = await ask(assistant, "Что ты умеешь и какие права тебе нужны?");
   const done = events.find((e) => e.type === "done") as Extract<ChatEvent, { type: "done" }>;
   assert.ok(done, "answered");

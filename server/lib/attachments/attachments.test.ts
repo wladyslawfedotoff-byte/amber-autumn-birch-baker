@@ -33,7 +33,7 @@ test("ids and names refuse path traversal", () => {
 test("store: put, get, ACL parent, remove; traversal ids rejected", async () => {
   const root = await mkdtemp(join(tmpdir(), "pora-attach-"));
   try {
-    const store = new AttachStore(root);
+    const store = new AttachStore(root, { dataDir: root });
     const meta = await store.put({
       owner: "user1",
       parent: { kind: "task", id: "task-1" },
