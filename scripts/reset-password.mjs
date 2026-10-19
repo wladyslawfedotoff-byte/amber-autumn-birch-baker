@@ -5,15 +5,22 @@
  *   docker exec pora-app node scripts/reset-password.mjs --list
  *   docker exec pora-app node scripts/reset-password.mjs <login>
  *
- * Removes the in-app password of <login> from data/users.json, so the password
+ * Removes the in-app password of <login> (table `users` of data/pora.db since
+ * 1.12.0; data/users.json before / with the JSON fallback), so the password
  * from .env (USER_<LOGIN>_PASSWORD(_HASH), or APP_PASSWORD with one profile /
  * for APP_OWNER) works again, and signs that user out on every device.
  * The running server notices the change by itself; no restart needed.
+ *
+ * Needs Node ≥ 22.18 (imports server/lib/db/*.ts directly), like the image has.
  */
 import { statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { runAsDataOwner } from "./data-owner.mjs";
 import { readUsersFile, withoutPassword, writeUsersFileSync } from "./users-file.mjs";
 
 const dir = (process.env.DATA_DIR ?? "").trim() || "/data";
+const here = fileURLToPath(new URL(".", import.meta.url));
 
 function configuredUsers() {
   const list = (process.env.APP_USERS ?? "").trim();
@@ -30,7 +37,30 @@ function owner() {
   }
 }
 
-function main() {
+/** pora.db when the server uses it, else users.json (1.11 / JSON fallback). */
+async function usersStore() {
+  runAsDataOwner(dir);
+  const { openForScript } = await import(join(here, "../server/lib/db/offline.ts"));
+  const storage = openForScript(dir);
+  if (storage.mode === "sqlite") {
+    const { readUsers, writeUsers } = await import(join(here, "../server/lib/db/records.ts"));
+    const db = storage.db;
+    return {
+      read: () => readUsers(db),
+      /** @param {(file: any) => any} change */
+      update: (change) => db.transaction(() => writeUsers(db, change(readUsers(db)))).immediate(),
+      close: () => db.close(),
+    };
+  }
+  return {
+    read: () => readUsersFile(dir),
+    /** @param {(file: any) => any} change */
+    update: (change) => writeUsersFileSync(dir, change(readUsersFile(dir)), owner()),
+    close: () => undefined,
+  };
+}
+
+async function main() {
   const arg = (process.argv[2] ?? "").trim();
   if (!arg || arg === "--help" || arg === "-h") {
     console.error("Сброс пароля, изменённого в приложении / reset an in-app password\n");
@@ -38,7 +68,17 @@ function main() {
     console.error("  node scripts/reset-password.mjs <логин>     вернуть пароль из .env и выйти на всех устройствах");
     process.exit(arg ? 0 : 1);
   }
-  const file = readUsersFile(dir);
+  const store = await usersStore();
+  try {
+    await run(arg, store);
+  } finally {
+    store.close();
+  }
+}
+
+/** @param {string} arg @param {{ read: () => any, update: (change: (file: any) => any) => void }} store */
+async function run(arg, store) {
+  const file = store.read();
   if (arg === "--list") {
     const users = new Set([...configuredUsers(), ...Object.keys(file.users)]);
     for (const login of [...users].sort()) {
@@ -54,7 +94,7 @@ function main() {
     process.exit(1);
   }
   const had = Boolean(file.users[arg]?.passwordHash);
-  writeUsersFileSync(dir, withoutPassword(file, arg, Date.now()), owner());
+  store.update((current) => withoutPassword(current, arg, Date.now()));
   console.log(
     had
       ? `Готово: у «${arg}» снова пароль из .env. Все устройства этого профиля вышли из аккаунта.`
@@ -64,7 +104,7 @@ function main() {
 }
 
 try {
-  main();
+  await main();
 } catch (error) {
   console.error(`Ошибка: ${error?.message || error}`);
   process.exit(1);

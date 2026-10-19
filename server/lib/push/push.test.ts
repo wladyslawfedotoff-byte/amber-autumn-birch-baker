@@ -94,7 +94,7 @@ function harness(dir: string, results: (sub: StoredSub) => SendResult) {
   const sent: { endpoint: string; message: PushMessage }[] = [];
   let now = T10 + 5_000;
   let tasks: object[] = [task];
-  const store = new PushStore(join(dir, "push.json"));
+  const store = new PushStore(join(dir, "push.json"), { dataDir: dir });
   const deps = {
     store,
     vapid: { ...generateVapidKeys(), contact: "mailto:a@b.c" },
@@ -155,7 +155,7 @@ test("scheduler retries temporary failures and drops dead devices", async () => 
 
 test("subscriptions are per user; a device moves to whoever subscribed last", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pora-push-"));
-  const store = new PushStore(join(dir, "push.json"));
+  const store = new PushStore(join(dir, "push.json"), { dataDir: dir });
   await store.subscribe("user1", sub("https://push.example.net/phone"));
   await store.subscribe("user2", sub("https://push.example.net/phone"));
   assert.equal((await store.subsOf("user1")).length, 0);

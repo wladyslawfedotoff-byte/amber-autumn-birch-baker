@@ -27,6 +27,11 @@ function fail(message) {
 }
 const addIn = (page, sheet) => page.getByRole("dialog", { name: sheet }).getByRole("button", { name: "Добавить", exact: true }).first();
 const ok = (message) => console.log(`OK: ${message}`);
+/** Files, links and contacts sit under «Подробнее» in the task card (progressive disclosure). */
+async function openMore(page) {
+  const more = page.getByRole("button", { name: /^Подробнее/ });
+  if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
+}
 async function shot(page, name, full = false) {
   if (!SHOTS) return;
   mkdirSync(SHOTS, { recursive: true });
@@ -60,6 +65,7 @@ try {
   }
   if (await page.getByText("Фото до / после").count()) fail("before/after toggle still shown");
   if (await page.getByText(/Дата на фото/).count()) fail("«Дата на фото» still shown");
+  await openMore(page);
   if (await page.getByTestId("object-strip").count()) fail("empty strip shown");
   await page.getByTestId("object-add").waitFor();
   ok("empty task: only «＋ Файл · Ссылка · Контакт», no before/after, no stamp");
@@ -111,6 +117,7 @@ try {
   // Offline: add a link, it survives a reload and reaches the server when back.
   await context.setOffline(true);
   await page.getByText(title, { exact: true }).first().click();
+  await openMore(page);
   await page.getByRole("button", { name: "Ссылка", exact: true }).click();
   await page.getByLabel("Адрес ссылки").fill("example.org/plan");
   await addIn(page, "Ссылка").click();

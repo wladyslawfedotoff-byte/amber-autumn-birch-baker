@@ -413,8 +413,8 @@ export function getAssistant(): Assistant {
   if (!singleton) {
     singleton = new Assistant({
       config: readAiConfig(),
-      usage: new UsageBook(join(dataDir(), "assistant-usage.json")),
-      store: new AssistantStore(join(dataDir(), "assistant")),
+      usage: new UsageBook(join(dataDir(), "assistant-usage.json"), Date.now, { dataDir: dataDir() }),
+      store: new AssistantStore(join(dataDir(), "assistant"), { dataDir: dataDir() }),
       loadData: (user) => dataFor(getStore(), user),
       principal: principalForLogin,
     });

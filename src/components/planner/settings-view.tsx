@@ -221,7 +221,7 @@ function ProfileSection() {
             </p>
           ) : null}
           <p className="mt-3 text-xs text-muted">
-            Новый пароль хранится на сервере (data/users.json) и заменяет пароль из .env. Остальные ваши устройства выйдут, это — останется. Забыли
+            Новый пароль хранится на сервере (в базе data/pora.db) и заменяет пароль из .env. Остальные ваши устройства выйдут, это — останется. Забыли
             пароль? Его сбрасывают на сервере: <code>docker exec pora-app node scripts/reset-password.mjs {profile.login}</code>.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">

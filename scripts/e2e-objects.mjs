@@ -6,9 +6,12 @@
  *   APP_USERS=user1,user2 USER_USER1_PASSWORD=… USER_USER2_PASSWORD=… DATA_DIR=$(mktemp -d) PORT=8091 node .output/server/index.mjs
  *   BASE_URL=http://127.0.0.1:8091 USER1_PASSWORD=… FILES_DIR=… SHOTS_DIR=… node scripts/e2e-objects.mjs
  *
- * Checklist with before/after photos, attachments (photo + PDF), a blocked
+ * Checklist (order, drag), files (photo + PDF) under «Подробнее», a blocked
  * task hidden from «Сегодня», project contacts, and an upload made offline
- * that reaches the server after the connection returns.
+ * that reaches the server after the connection returns. (The before/after
+ * photos, EXIF dates and the date stamp left the task card in 1.9.1; HEIC
+ * conversion is covered by server/lib/attachments/heic.test.ts.)
+ * FILES_DIR needs site.jpg, smeta.pdf and offline.jpg.
  * Not part of `npm test` (needs a browser + server).
  */
 import { mkdirSync } from "node:fs";
@@ -65,6 +68,12 @@ async function openTask(page, title) {
   await page.getByLabel("Название").waitFor();
 }
 
+/** Files, dependencies and links sit under «Подробнее» in the task card. */
+async function openMore(page) {
+  const more = page.getByRole("button", { name: /^Подробнее/ });
+  if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
+}
+
 async function closeDetail(page) {
   await page.getByRole("button", { name: "Закрыть", exact: true }).first().click();
 }
@@ -77,12 +86,23 @@ async function serverFiles(page, kind, id) {
 }
 
 async function taskId(page, title) {
-  return page.evaluate((t) => {
-    for (let i = 0; i < localStorage.length; i++) {
-      /* planner lives in IndexedDB; ask the store through the DOM instead */
-    }
-    return window.__poraTaskId?.(t) ?? null;
+  return page.evaluate(async (t) => {
+    const doc = await (await fetch("/api/sync")).json();
+    return doc.data.tasks.find((task) => task.title === t)?.id ?? null;
   }, title);
+}
+
+/** Wait until the server lists `count` files for the task (uploads run in the background). */
+async function serverHas(page, title, count, timeout = 30_000) {
+  const until = Date.now() + timeout;
+  let n = 0;
+  while (Date.now() < until) {
+    const id = await taskId(page, title);
+    n = id ? await serverFiles(page, "task", id) : 0;
+    if (n === count) return;
+    await page.waitForTimeout(500);
+  }
+  fail(`server has ${n} files for «${title}», expected ${count}`);
 }
 
 const browser = await webkit.launch();
@@ -93,7 +113,7 @@ try {
   await login(page);
   await synced(page);
 
-  // 1. Task with checklist, before/after photos and attachments.
+  // 1. Task with a checklist and files (photo + PDF) under «Подробнее».
   const main = "Приёмка этапа: стены";
   await addTask(page, main);
   await openTask(page, main);
@@ -104,19 +124,19 @@ try {
   const block = page.getByTestId("checklist-block");
   await block.getByRole("button", { name: "Отметить: Проверить ровность" }).click();
   await block.getByRole("button", { name: "Выше" }).nth(2).click(); // «Подписать акт» up one
-  await page.getByRole("button", { name: "Фото до / после" }).click();
-  const slots = page.locator('[data-testid="checklist-photos"] input[type=file]');
-  await slots.nth(0).setInputFiles(join(FILES, "wall-before.jpg"));
-  await slots.nth(1).setInputFiles(join(FILES, "wall-after.jpg"));
-  await page.getByLabel("Добавить вложение").setInputFiles([join(FILES, "site.jpg"), join(FILES, "smeta.pdf")]);
+  await openMore(page);
+  await page.getByLabel("Добавить файл").setInputFiles([join(FILES, "site.jpg"), join(FILES, "smeta.pdf")]);
   await page.waitForFunction(() => !document.querySelector('[data-testid="attach-pending"]'), null, { timeout: 20_000 });
-  await page.locator('[data-testid="checklist-photos"] img').nth(1).waitFor({ timeout: 10_000 });
+  await page.getByTestId("object-photo").first().waitFor({ timeout: 10_000 });
+  await page.getByTestId("object-file").first().waitFor({ timeout: 10_000 });
   await page.getByText("1 из 3").waitFor();
-  ok("checklist 1/3, before/after photos, 4 files uploaded");
+  await serverHas(page, main, 2);
+  ok("checklist 1/3, 2 files uploaded (server lists both)");
 
   // 1b. Drag the first checklist item to the end by its handle (pointer events, like a finger).
   const rowTitles = () => block.locator("[data-sub-row] button[aria-pressed] span:last-child").allTextContents();
   const before = await rowTitles();
+  await block.scrollIntoViewIfNeeded();
   const handle = block.getByRole("button", { name: `Перетащить «${before[0]}»` });
   const lastRow = block.locator("[data-sub-row]").nth(before.length - 1);
   const h = await handle.boundingBox();
@@ -130,49 +150,7 @@ try {
   if (after[after.length - 1] !== before[0] || after.length !== before.length) fail(`drag order: ${before} → ${after}`);
   ok(`checklist drag: ${before.join(" / ")} → ${after.join(" / ")}`);
 
-  // 1c. Capture date from EXIF under before/after photos.
-  const photosRow = page.locator('[data-testid="checklist-photos"]').filter({ hasText: /08:30/ });
-  await photosRow.getByText(/08:30/).waitFor({ timeout: 5_000 });
-  await photosRow.getByText(/17:45/).waitFor({ timeout: 5_000 });
-  ok("before/after show EXIF capture time (08:30 / 17:45)");
-  await photosRow.scrollIntoViewIfNeeded();
-  await shot(page, "09-before-after-dates");
-  await photosRow.getByRole("button", { name: "до: открыть" }).click();
-  const zoom = page.getByRole("dialog", { name: "Фото «до»" });
-  await zoom.getByText(/08:30/).waitFor();
-  await shot(page, "10-before-lightbox-date");
-  await zoom.click({ position: { x: 5, y: 5 } });
-
-  // 1d. HEIC from a phone: server turns it into JPEG with a preview.
-  await page.getByLabel("Добавить вложение").setInputFiles(join(FILES, "sample.heic"));
-  await page.waitForFunction(() => !document.querySelector('[data-testid="attach-pending"]'), null, { timeout: 30_000 });
-  const heicTile = page.getByRole("button", { name: "sample.jpg", exact: true });
-  await heicTile.waitFor({ timeout: 15_000 });
-  await page.waitForFunction(() => {
-    const btn = [...document.querySelectorAll("button[aria-label]")].find((b) => b.getAttribute("aria-label") === "sample.jpg");
-    const img = btn?.querySelector("img");
-    return !!img && img.complete && img.naturalWidth > 0;
-  }, null, { timeout: 15_000 });
-  ok("HEIC uploaded → JPEG on the server, preview shown");
-
-  // 1e. Optional visible date stamp burnt into a new photo.
-  await page.getByRole("button", { name: "Дата на фото" }).click();
-  await page.getByLabel("Добавить вложение").setInputFiles(join(FILES, "site2.jpg"));
-  await page.waitForFunction(() => !document.querySelector('[data-testid="attach-pending"]'), null, { timeout: 20_000 });
-  await page.getByRole("button", { name: "Дата на фото: вкл" }).click(); // back off
-  await page.locator('section[aria-labelledby^="attach-"]').first().scrollIntoViewIfNeeded();
-  await shot(page, "11-attachments-heic-dates");
-  await page.getByRole("button", { name: "site2.jpg", exact: true }).click();
-  const stamped = page.getByRole("dialog", { name: "site2.jpg" });
-  await stamped.locator("img").waitFor();
-  await page.waitForTimeout(400);
-  await shot(page, "12-stamped-photo-lightbox");
-  await stamped.click({ position: { x: 10, y: 10 } });
-  await stamped.waitFor({ state: "detached" });
-  ok("date stamp option: photo uploaded with the date drawn in");
-  await page.locator('[data-testid="checklist-block"]').scrollIntoViewIfNeeded();
-  await shot(page, "01-task-checklist-before-after");
-  await page.locator('section[aria-labelledby^="attach-"]').first().scrollIntoViewIfNeeded();
+  await page.getByTestId("task-objects").scrollIntoViewIfNeeded();
   await shot(page, "02-task-attachments");
   await page.getByRole("button", { name: "site.jpg", exact: true }).click();
   const box = page.getByRole("dialog", { name: "site.jpg" });
@@ -188,6 +166,7 @@ try {
   const blocked = "Покрасить стены";
   await addTask(page, blocked);
   await openTask(page, blocked);
+  await openMore(page);
   const select = page.getByLabel("Ждёт дело");
   await select.selectOption({ label: main });
   await closeDetail(page);
@@ -200,6 +179,7 @@ try {
   await shot(page, "04-blocked-task");
   // cycle refused: the main task cannot wait for the blocked one
   await openTask(page, main);
+  await openMore(page);
   const opts = await page.getByLabel("Ждёт дело").locator("option").allTextContents();
   if (opts.includes(blocked)) fail("cycle option offered");
   ok("cycle option not offered");
@@ -244,17 +224,18 @@ try {
   await addTask(page, off);
   await synced(page);
   await openTask(page, off);
+  await openMore(page);
   // Block only the upload API so the file is queued like a real offline phone.
   await page.route("**/api/attachments", (route) => route.abort());
   await page.evaluate(() => {
     Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
     window.dispatchEvent(new Event("offline"));
   });
-  await page.getByLabel("Добавить вложение").setInputFiles(join(FILES, "offline.jpg"));
+  await page.getByLabel("Добавить файл").setInputFiles(join(FILES, "offline.jpg"));
   await page.getByTestId("attach-pending").waitFor({ timeout: 15_000 });
-  await page.locator('section[aria-labelledby^="attach-"] img').first().waitFor();
+  await page.getByTestId("object-photo").locator("img").first().waitFor();
   ok("offline: file kept on the device with a local preview");
-  await page.locator('section[aria-labelledby^="attach-"]').first().scrollIntoViewIfNeeded();
+  await page.getByTestId("task-objects").scrollIntoViewIfNeeded();
   await shot(page, "06-offline-upload-pending");
   await closeDetail(page);
   await shot(page, "07-offline-pill");
@@ -265,10 +246,11 @@ try {
   });
   await page.waitForFunction(() => !document.querySelector('[data-testid="upload-pending-pill"]') && !document.querySelector('[data-testid="offline-pill"]'), null, { timeout: 40_000 });
   await openTask(page, off);
+  await openMore(page);
   await page.waitForFunction(() => !document.querySelector('[data-testid="attach-pending"]'), null, { timeout: 30_000 });
-  ok("online again: queued file uploaded");
-  void taskId;
-  void serverFiles;
+  await serverHas(page, off, 1);
+  await serverHas(page, main, 2);
+  ok("online again: queued file uploaded (server lists it; the first task still has 2)");
   await closeDetail(page);
 } finally {
   await browser.close();

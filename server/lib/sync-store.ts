@@ -1,5 +1,9 @@
 /**
- * Server-side document store for sync: one JSON file `${DATA_DIR}/pora.json`.
+ * Server-side document store for sync. Since 1.12.0 the document lives in
+ * SQLite (`${DATA_DIR}/pora.db`, server/lib/db); the 1.11 JSON file
+ * `${DATA_DIR}/pora.json` is still supported as a fallback (server/lib/db/storage.ts
+ * decides at startup) and as the backup format. Sync semantics are identical
+ * for both backends:
  *
  * - Writes are serialized through a promise queue (one Node process) and are
  *   atomic: write temp file + fsync + rename.
@@ -30,13 +34,16 @@ import {
   TOMBSTONE_TTL_MS,
   emptyData,
   mergeData,
-  normalizeData,
   pruneTombstones,
   sameData,
   type SyncData,
 } from "../../src/lib/sync/merge.ts";
-import { applyPut, ensureUsers, normalizeUserStates, viewFor, type AclConfig, type UserState, type ViewDoc } from "../../src/lib/sync/world.ts";
+import { applyPut, ensureUsers, viewFor, type AclConfig, type UserState, type ViewDoc } from "../../src/lib/sync/world.ts";
 import { log } from "./log.ts";
+import { StaleDbError, readStoredDoc } from "./db/doc-tables.ts";
+import { parseStoredDoc, serializeStoredDoc } from "./db/legacy.ts";
+import { readUsers } from "./db/records.ts";
+import { storageFor, type SqliteStorage } from "./db/storage.ts";
 
 export type StoredDoc = { revision: number; updatedAt: number; data: SyncData; users?: Record<string, UserState> };
 export type ViewPutResult = { status: "ok"; doc: ViewDoc; changed: boolean; denied: number } | { status: "conflict"; doc: ViewDoc };
@@ -128,6 +135,11 @@ export class SyncStore {
   private cleaned = false;
   private lastWriteFailed = false;
   private writable: { at: number; ok: boolean } | null = null;
+  /** SQLite backend (undefined until resolved, null = JSON files). */
+  private sql: SqliteStorage | null | undefined = undefined;
+  private dataVersion = -1;
+  /** Revision stored in pora.db as this process last saw it (null = no document yet). */
+  private dbRevision: number | null = null;
   onCorrupt?: (info: { aside: string; backup: string | null; error: unknown }) => void;
   onWarn?: (event: string, fields: Record<string, unknown>, error?: unknown) => void;
 
@@ -176,16 +188,33 @@ export class SyncStore {
   }
 
   private async readDoc(file: string): Promise<StoredDoc> {
-    const text = await fs.readFile(file, "utf8");
-    const parsed = JSON.parse(text) as Partial<StoredDoc>;
-    const normalized = normalizeData(parsed?.data);
-    if (!normalized.ok || typeof parsed.revision !== "number") {
-      throw new SyntaxError(`malformed document: ${normalized.ok ? "missing revision" : normalized.error}`);
+    return parseStoredDoc(await fs.readFile(file, "utf8"));
+  }
+
+  /** Which backend serves this folder (resolved on first use; see db/storage.ts). */
+  backend(): "sqlite" | "json" {
+    return this.sqlite() ? "sqlite" : "json";
+  }
+
+  private sqlite(): SqliteStorage | null {
+    if (this.sql === undefined) {
+      const storage = storageFor(this.dir);
+      this.sql = storage.mode === "sqlite" ? storage : null;
     }
-    const doc: StoredDoc = { revision: parsed.revision, updatedAt: Number(parsed.updatedAt) || 0, data: normalized.data };
-    const users = normalizeUserStates(parsed.users);
-    if (Object.keys(users).length) doc.users = users;
-    return doc;
+    return this.sql;
+  }
+
+  private loadFromDb(sql: SqliteStorage): StoredDoc {
+    const version = Number(sql.db.pragma("data_version", { simple: true }));
+    if (this.doc && version === this.dataVersion) return this.doc;
+    const previous = this.doc?.revision;
+    const fresh = readStoredDoc(sql.db);
+    sql.docs.prime(fresh);
+    this.dataVersion = version;
+    this.dbRevision = fresh ? fresh.revision : null;
+    this.doc = fresh ?? { revision: 0, updatedAt: 0, data: emptyData() };
+    if (previous !== undefined) log("info", "data.reloaded", { revision: this.doc.revision, previous });
+    return this.doc;
   }
 
   private async load(): Promise<StoredDoc> {
@@ -193,6 +222,8 @@ export class SyncStore {
       this.cleaned = true;
       await this.cleanupTempFiles();
     }
+    const sql = this.sqlite();
+    if (sql) return this.loadFromDb(sql);
     if (this.doc) {
       const sig = await this.stat(this.file);
       if (!sig || sameSig(sig, this.fileSig)) return this.doc;
@@ -265,7 +296,13 @@ export class SyncStore {
       };
       // Profile states (if profiles were used before) are kept untouched.
       if (current.users) next.users = current.users;
-      await this.write(next, current.revision > 0);
+      try {
+        await this.write(next, current.revision > 0);
+      } catch (error) {
+        if (!(error instanceof StaleDbError)) throw error;
+        // Another process (restore script) wrote meanwhile: the client merges and retries.
+        return { status: "conflict", doc: await this.load() };
+      }
       this.doc = next;
       return { status: "ok", doc: next, changed: true };
     });
@@ -290,7 +327,13 @@ export class SyncStore {
       const result = applyPut(world, login, incoming, acl, now);
       if (!result.changed) return { status: "ok", doc: view, changed: false, denied: result.denied };
       const next: StoredDoc = { ...result.doc };
-      await this.write(next, current.revision > 0);
+      try {
+        await this.write(next, current.revision > 0);
+      } catch (error) {
+        if (!(error instanceof StaleDbError)) throw error;
+        const fresh = await this.load();
+        return { status: "conflict", doc: viewFor({ ...fresh, users: fresh.users ?? {} }, login, acl, this.now()) };
+      }
       this.doc = next;
       return { status: "ok", doc: viewFor(result.doc, login, acl, now), changed: true, denied: result.denied };
     });
@@ -308,6 +351,8 @@ export class SyncStore {
   }
 
   private async writeFile(doc: StoredDoc, hadPrevious: boolean): Promise<void> {
+    const sql = this.sqlite();
+    if (sql) return this.writeDb(sql, doc, hadPrevious);
     await fs.mkdir(this.dir, { recursive: true });
     if (hadPrevious) {
       await this.backup().catch((error) => {
@@ -318,7 +363,7 @@ export class SyncStore {
     try {
       const handle = await fs.open(tmp, "w", 0o600);
       try {
-        await handle.writeFile(JSON.stringify(doc.users ? { v: 2, ...doc } : doc));
+        await handle.writeFile(serializeStoredDoc(doc));
         await handle.sync();
       } finally {
         await handle.close();
@@ -339,12 +384,47 @@ export class SyncStore {
     }
   }
 
+  /** One transaction; the revision guard rejects a write over another process's change. */
+  private async writeDb(sql: SqliteStorage, doc: StoredDoc, hadPrevious: boolean): Promise<void> {
+    if (hadPrevious) {
+      await this.backup().catch((error) => {
+        this.warn("backup.failed", { dir: this.backupDir }, error);
+      });
+    }
+    try {
+      sql.db.transaction(() => sql.docs.save(sql.db, doc, this.dbRevision)).immediate();
+    } catch (error) {
+      if (error instanceof StaleDbError) {
+        this.doc = null;
+        this.dataVersion = -1;
+      }
+      // The cached picture of the tables may not match after a rollback.
+      sql.docs.prime(readStoredDoc(sql.db));
+      throw error;
+    }
+    this.dbRevision = doc.revision;
+    this.dataVersion = Number(sql.db.pragma("data_version", { simple: true }));
+  }
+
   private async backup(): Promise<void> {
     const now = this.now();
     if (now - this.lastBackupAt < this.backupIntervalMs) return;
     await fs.mkdir(this.backupDir, { recursive: true });
     const rev = this.doc?.revision ?? 0;
     const name = backupFileName(now, rev);
+    const sql = this.sqlite();
+    if (sql) {
+      // Same JSON format as the 1.11 file backups (scripts/restore-backup.mjs reads both).
+      if (!this.doc) return;
+      await writePrivate(join(this.backupDir, name), serializeStoredDoc(this.doc));
+      const users = readUsers(sql.db);
+      if (Object.keys(users.users).length) {
+        await writePrivate(join(this.backupDir, `users-${name.slice("pora-".length)}`), `${JSON.stringify(users, null, 2)}\n`);
+      }
+      this.lastBackupAt = now;
+      await this.pruneBackups();
+      return;
+    }
     await fs.copyFile(this.file, join(this.backupDir, name));
     // In-app passwords travel with the data (same time stamp in the name).
     await fs
@@ -393,6 +473,16 @@ export class SyncStore {
     }
     this.writable = { at: now, ok };
     return ok;
+  }
+}
+
+async function writePrivate(file: string, text: string): Promise<void> {
+  const handle = await fs.open(file, "w", 0o600);
+  try {
+    await handle.writeFile(text);
+    await handle.sync();
+  } finally {
+    await handle.close();
   }
 }
 

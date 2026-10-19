@@ -87,7 +87,8 @@ async function openView(page, label) {
   }
   const menu = page.locator('button[aria-label="Открыть меню"]');
   if (await menu.isVisible()) await menu.click();
-  await page.locator(`text="${label}" >> visible=true`).first().click();
+  // «Настройки» is an icon button (aria-label) in the sidebar.
+  await page.locator(`text="${label}" >> visible=true`).or(page.locator(`button[aria-label="${label}"] >> visible=true`)).first().click();
 }
 
 /** Local ISO date (like todayIso() in the app) `daysAgo` days back. */
@@ -218,8 +219,7 @@ async function main() {
     await habitTwoClients(phone2, phoneCtx, computer, computerCtx);
 
     // Settings → «Подключение».
-    await phone2.click('button[aria-label="Открыть меню"]');
-    await phone2.locator('text="Настройки" >> visible=true').first().click();
+    await openView(phone2, "Настройки");
     await phone2.click('[data-row="connection"]');
     await phone2.getByRole("dialog", { name: "Подключение" }).waitFor();
     await phone2.getByRole("dialog").getByText("Онлайн", { exact: true }).waitFor({ timeout: 20_000 });

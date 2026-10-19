@@ -1,8 +1,9 @@
 /**
  * Per-user state that can change at runtime: the in-app password (wins over
- * .env) and the per-user session epoch («Выйти на всех устройствах»), both in
- * ${DATA_DIR}/users.json (scripts/users-file.mjs). The file is re-read when it
- * changes on disk (scripts/reset-password.mjs runs in another process).
+ * .env) and the per-user session epoch («Выйти на всех устройствах»): table
+ * `users` of pora.db (1.12.0+; always read fresh, so scripts/reset-password.mjs
+ * in another process takes effect at once), or — JSON fallback and 1.11 —
+ * ${DATA_DIR}/users.json (scripts/users-file.mjs), re-read when it changes on disk.
  */
 import { createHash } from "node:crypto";
 import { verifyPasswordHash, hashPassword } from "../../scripts/password-hash.mjs";
@@ -19,6 +20,8 @@ import type { Account, AuthConfig } from "./auth.ts";
 import { log } from "./log.ts";
 import { getSessionEpoch } from "./session-epoch.ts";
 import { dataDir } from "./sync-store.ts";
+import { readUsers, writeUsers } from "./db/records.ts";
+import { storageFor } from "./db/storage.ts";
 
 type Sig = { size: number; mtimeMs: number; ino: number } | null;
 
@@ -30,6 +33,8 @@ function sameSig(a: Sig, b: Sig): boolean {
 }
 
 export function loadUsersFile(dir = dataDir()): UsersFile {
+  const storage = storageFor(dir);
+  if (storage.mode === "sqlite") return readUsers(storage.db) as UsersFile;
   const sig = usersFileSig(dir) as Sig;
   if (cache && cache.dir === dir && sameSig(cache.sig, sig)) return cache.file;
   try {
@@ -85,14 +90,24 @@ export function verifyCredentials(config: AuthConfig, login: string, password: s
 }
 
 /** «Сменить пароль»: store the new hash and log the user out of other devices. */
+/** Read-modify-write (one transaction with pora.db, so a script running at the same time cannot be lost). */
+function updateUsersFile(dir: string, change: (file: UsersFile) => UsersFile): void {
+  const storage = storageFor(dir);
+  if (storage.mode === "sqlite") {
+    storage.db.transaction(() => writeUsers(storage.db, change(readUsers(storage.db) as UsersFile))).immediate();
+    return;
+  }
+  saveUsersFile(change(loadUsersFile(dir)), dir);
+}
+
 export function setUserPassword(login: string, password: string, now = Date.now(), dir = dataDir()): void {
-  const file = withPassword(loadUsersFile(dir), login, hashPassword(password), now) as UsersFile;
-  saveUsersFile(file, dir);
+  const hash = hashPassword(password);
+  updateUsersFile(dir, (file) => withPassword(file, login, hash, now) as UsersFile);
   log("info", "auth.password_changed", { user: login });
 }
 
 export function bumpUserEpoch(login: string, dir = dataDir()): void {
-  saveUsersFile(withEpochBump(loadUsersFile(dir), login) as UsersFile, dir);
+  updateUsersFile(dir, (file) => withEpochBump(file, login) as UsersFile);
   log("info", "auth.sessions_revoked", { user: login });
 }
 

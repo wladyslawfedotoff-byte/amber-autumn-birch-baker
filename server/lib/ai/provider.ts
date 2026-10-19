@@ -9,6 +9,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { AiWhich, ProviderState } from "../../../src/lib/assistant/types.ts";
 import { log } from "../log.ts";
+import { KV_USAGE, readKv, writeKv } from "../db/records.ts";
+import { storageFor, type SqliteStorage } from "../db/storage.ts";
 import { DEFAULT_LOCAL_MODEL, hostOf, type AiConfig, type LocalType, type ProviderConfig, type ToolsMode } from "./config.ts";
 
 export type Endpoint = {
@@ -41,10 +43,22 @@ export class UsageBook {
   private tokens: Record<string, number> = {};
   private readonly file: string | null;
   private readonly now: () => number;
+  private readonly sql: SqliteStorage | null = null;
 
-  constructor(file: string | null, now: () => number = Date.now) {
+  /** `dataDir`: keep the counters in that folder's storage (pora.db when active); otherwise in `file`. */
+  constructor(file: string | null, now: () => number = Date.now, options: { dataDir?: string } = {}) {
     this.file = file;
     this.now = now;
+    if (options.dataDir) {
+      const storage = storageFor(options.dataDir);
+      if (storage.mode === "sqlite") this.sql = storage;
+    }
+    if (this.sql) {
+      const saved = readKv(this.sql.db, KV_USAGE) as { month?: string; tokens?: Record<string, number> } | null;
+      this.month = saved?.month ?? "";
+      this.tokens = saved?.tokens ?? {};
+      return;
+    }
     if (!file) return;
     try {
       const saved = JSON.parse(readFileSync(file, "utf8")) as { month?: string; tokens?: Record<string, number> };
@@ -72,6 +86,14 @@ export class UsageBook {
     if (count <= 0) return;
     this.roll();
     this.tokens[name] = (this.tokens[name] ?? 0) + Math.round(count);
+    if (this.sql) {
+      try {
+        writeKv(this.sql.db, KV_USAGE, { month: this.month, tokens: this.tokens });
+      } catch {
+        // counting is best effort
+      }
+      return;
+    }
     if (!this.file) return;
     try {
       mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });

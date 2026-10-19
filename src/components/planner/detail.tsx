@@ -45,6 +45,8 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
   const [makingProject, setMakingProject] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const toggle = (id: string) => setOpen((cur) => (cur === id ? null : id));
+  // «Подробнее» has its own state: opening a row inside it must not fold it up.
+  const [more, setMore] = useState(false);
 
   if (!task) return null;
   const me = profile.login;
@@ -280,8 +282,8 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
               .filter(Boolean)
               .join(" · ") || ""
           }
-          open={open === "more"}
-          onClick={() => toggle("more")}
+          open={more}
+          onClick={() => setMore((value) => !value)}
         >
           <div className="space-y-4">
             <RowGroup>

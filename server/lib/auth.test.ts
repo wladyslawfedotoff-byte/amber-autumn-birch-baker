@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hashPassword } from "../../scripts/password-hash.mjs";
-import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { openDb } from "./db/database.ts";
+import { readUsers, writeUsers } from "./db/records.ts";
+import { closeStorage, forceJsonStorage } from "./db/storage.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readUsersFile, withoutPassword, writeUsersFileSync } from "../../scripts/users-file.mjs";
@@ -188,8 +191,9 @@ test("one profile (old .env): login admin / APP_DEFAULT_USER, data owner = that 
   assert.ok(isActive(bad) && bad.owner === "admin");
 });
 
-test("users.json: in-app password wins over .env, reset brings .env back, epochs bump", () => {
+test("JSON backend — users.json: in-app password wins over .env, reset brings .env back, epochs bump", () => {
   const dir = mkdtempSync(join(tmpdir(), "pora-users-"));
+  forceJsonStorage(dir);
   try {
     const config = buildAuthConfig({ APP_USERS: "user1,user2", USER_USER1_PASSWORD: "user1-password-123", USER_USER2_PASSWORD: "user2-password-1" });
     assert.ok(isActive(config));
@@ -216,6 +220,34 @@ test("users.json: in-app password wins over .env, reset brings .env back, epochs
     assert.equal(readdirSync(dir).filter((name) => name.includes(".tmp-")).length, 0, "no temp files left");
   } finally {
     resetUserStoreCache();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("pora.db: in-app password wins over .env, a reset by another process applies at once, epochs bump", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pora-users-db-"));
+  try {
+    const config = buildAuthConfig({ APP_USERS: "user1,user2", USER_USER1_PASSWORD: "user1-password-123", USER_USER2_PASSWORD: "user2-password-1" });
+    assert.ok(isActive(config));
+    if (!isActive(config)) return;
+    const user1 = config.accounts.get("user1")!;
+    const fp0 = effectiveFingerprint(user1, dir);
+    setUserPassword("user1", "new-user1-password-1", 1000, dir);
+    assert.equal(verifyCredentials(config, "user1", "user1-password-123", dir), null);
+    assert.equal(verifyCredentials(config, "user1", "new-user1-password-1", dir)?.login, "user1");
+    assert.equal(existsSync(join(dir, "users.json")), false, "kept in pora.db, not in users.json");
+    assert.equal(userOverride("user1", dir).epoch, 1);
+    // scripts/reset-password.mjs: another connection, same table
+    const db = openDb(join(dir, "pora.db"));
+    db.transaction(() => writeUsers(db, withoutPassword(readUsers(db), "user1", 2000) as never)).immediate();
+    db.close();
+    assert.equal(verifyCredentials(config, "user1", "user1-password-123", dir)?.login, "user1");
+    assert.equal(effectiveFingerprint(user1, dir), fp0);
+    assert.equal(userOverride("user1", dir).epoch, 2);
+    bumpUserEpoch("user2", dir);
+    assert.equal(userOverride("user2", dir).epoch, 1);
+  } finally {
+    closeStorage(dir);
     rmSync(dir, { recursive: true, force: true });
   }
 });
