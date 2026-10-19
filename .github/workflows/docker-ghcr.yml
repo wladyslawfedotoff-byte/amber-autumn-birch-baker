@@ -125,12 +125,14 @@ jobs:
           docker logs pora-ci 2>&1 | grep -q 'storage.ready backend=sqlite'
           docker exec pora-ci node scripts/db-snapshot.mjs
           docker exec pora-ci node scripts/export-json.mjs --to /data/ci-export
-          test -f ci-data/pora.db
-          test -f ci-data/ci-export/users.json
-          ls ci-data/backup/pora-*.db
-          test "$(stat -c %u ci-data/pora.db)" != "0"
-          test -z "$(find ci-data -user 0 -print -quit)"
-          ls -la ci-data ci-data/backup
+          # data/ belongs to the app user (uid 1000, owner-only files): inspect it with sudo
+          sudo ls -la ci-data ci-data/backup ci-data/ci-export
+          sudo test -f ci-data/pora.db
+          test "$(sudo stat -c %a ci-data/pora.db)" = "600"
+          sudo test -f ci-data/ci-export/users.json
+          sudo sh -c 'ls ci-data/backup/pora-*.db'
+          test "$(sudo stat -c %u ci-data/pora.db)" != "0"
+          test -z "$(sudo find ci-data -user 0 -print -quit)"
           docker rm -f pora-ci
 
       - name: Upgrade smoke test (PR) — 1.11 JSON data is imported into pora.db
@@ -155,9 +157,10 @@ jobs:
           test "$(docker inspect -f '{{.State.Health.Status}}' pora-ci)" = "healthy"
           docker logs pora-ci 2>&1 | grep -q 'storage.import_ok'
           docker logs pora-ci 2>&1 | grep -q 'storage.ready backend=sqlite'
-          test -f legacy-data/pora.db
-          test ! -e legacy-data/pora.json
-          ls legacy-data/legacy-json-*/pora.json
+          sudo test -f legacy-data/pora.db
+          sudo test ! -e legacy-data/pora.json
+          sudo sh -c 'ls legacy-data/legacy-json-*/pora.json'
+          test -z "$(sudo find legacy-data -user 0 -print -quit)"
           curl -fsS -c jar2 -H 'content-type: application/json' -H 'origin: http://127.0.0.1:8080' \
             -d '{"password":"ci-smoke-password-123"}' http://127.0.0.1:8080/api/login
           curl -fsS -b jar2 http://127.0.0.1:8080/api/sync > sync.json
@@ -166,4 +169,4 @@ jobs:
           docker restart pora-ci
           sleep 5
           test "$(docker logs pora-ci 2>&1 | grep -c 'storage.import_ok')" = "1"
-          ls -la legacy-data
+          sudo ls -laR legacy-data
