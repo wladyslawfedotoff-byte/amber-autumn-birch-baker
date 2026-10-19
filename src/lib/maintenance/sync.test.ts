@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { COLLECTIONS, emptyData, mergeData, normalizeData, stampCollection, type SyncData, type SyncEntity } from "../sync/merge.ts";
 import { applyPut, viewFor, type AclConfig, type WorldDoc } from "../sync/world.ts";
-import { addAssetLinkTo, addAssetContactTo, addPain, buildRule, createAsset, logService, removeEntry, setMileage, updatePain, updateService } from "./ops.ts";
+import { addFill, addPart, removeFill, updateFill, updatePart, addAssetLinkTo, addAssetContactTo, addPain, buildRule, createAsset, logService, removeEntry, setMileage, updatePain, updateService } from "./ops.ts";
 import type { Asset } from "../planner-types.ts";
 
 const TODAY = "2026-10-14";
@@ -130,4 +130,42 @@ test("two devices add links and contacts to the same entry offline: both are kep
     assert.deepEqual((a.links ?? []).map((l) => l.id).sort(), ["l-phone", "l-tab"]);
     assert.deepEqual((a.contacts ?? []).map((c) => c.id), ["c-tab"]);
   }
+});
+
+test("two devices add different fill-ups offline: both stay, mileage is the latest; an edit and a delete merge per entry", () => {
+  const start = seeded();
+  const phone = edit(start, (a) => addFill(a, { date: "2026-10-15", liters: 40, sum: 2300, km: 84000 }, { fill: "f-phone", reading: "rf-p" }, TODAY)!.asset, T0 + 10);
+  const tablet = edit(start, (a) => addFill(a, { date: "2026-10-16", liters: 38, sum: 2200, km: 84600 }, { fill: "f-tab", reading: "rf-t" }, TODAY)!.asset, T0 + 20);
+  const merged = mergeData(phone, tablet);
+  const a = asset(merged);
+  assert.deepEqual(a.fuel!.map((f) => f.id).sort(), ["f-phone", "f-tab"]);
+  assert.equal(a.km, 84600);
+  assert.deepEqual(asset(mergeData(tablet, phone)).fuel!.map((f) => f.id).sort(), ["f-phone", "f-tab"]);
+  // the phone edits one fill, the tablet deletes the other
+  const edited = edit(merged, (x) => updateFill(x, "f-phone", { date: "2026-10-15", liters: 41, sum: 2300, km: 84000 }, "rf-x", TODAY)!.asset, T0 + 30);
+  const deleted = edit(merged, (x) => removeFill(x, "f-tab"), T0 + 40);
+  const both = asset(mergeData(edited, deleted));
+  assert.deepEqual(both.fuel!.map((f) => [f.id, f.liters]), [["f-phone", 41]]);
+});
+
+test("clearing a fill-up's mileage really clears it after merge", () => {
+  const first = edit(seeded(), (a) => addFill(a, { date: "2026-10-15", liters: 40, sum: 2300, km: 84000 }, { fill: "f1", reading: "r1" }, TODAY)!.asset, T0 + 10);
+  const cleared = edit(first, (a) => updateFill(a, "f1", { date: "2026-10-15", liters: 40, sum: 2300, km: "" }, "r2", TODAY)!.asset, T0 + 20);
+  assert.equal(asset(mergeData(first, cleared)).fuel![0]!.km, null);
+  assert.equal(asset(mergeData(cleared, first)).fuel![0]!.km, null);
+});
+
+test("tech: components and warranty edited on two devices merge per component and per field", () => {
+  const pc = createAsset({ name: "Домашний ПК", kind: "device" }, "pc", T0, TODAY)!;
+  const first = stampCollection([], [pc as unknown as SyncEntity], {}, T0, "assets");
+  const start: SyncData = { ...emptyData(), assets: first.items };
+  const phone = edit(start, (a) => addPart(a, { name: "Видеокарта", boughtAt: "2023-11-18", warrantyMonths: 36 }, "p-gpu")!.asset, T0 + 10);
+  const tablet = edit(start, (a) => addPart(a, { name: "Диск", price: 9800 }, "p-ssd")!.asset, T0 + 20);
+  const merged = mergeData(phone, tablet);
+  assert.deepEqual((asset(merged).parts ?? []).map((p) => p.id).sort(), ["p-gpu", "p-ssd"]);
+  const price = edit(merged, (a) => updatePart(a, "p-gpu", { name: "Видеокарта", boughtAt: "2023-11-18", warrantyMonths: 36, price: 58900 })!, T0 + 30);
+  const warranty = edit(merged, (a) => updatePart(a, "p-gpu", { name: "Видеокарта", boughtAt: "2023-11-18", warrantyMonths: 24 })!, T0 + 40);
+  const gpu = (asset(mergeData(price, warranty)).parts ?? []).find((p) => p.id === "p-gpu")!;
+  assert.equal(gpu.price, 58900, "the price edit survives the warranty edit");
+  assert.equal(gpu.warrantyMonths, 24);
 });

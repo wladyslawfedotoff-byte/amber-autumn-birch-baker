@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addPain, buildRule, createAsset, logService, setMileage } from "./ops.ts";
+import { addPart, addPain, patchAsset, buildRule, createAsset, logService, setMileage } from "./ops.ts";
 import { kmTaskId, openTasksFor, painTask, planIsEmpty, planMaintenance, ruleTaskId } from "./plan.ts";
 import type { Asset, Task } from "../planner-types.ts";
 
@@ -163,4 +163,49 @@ test("painTask: title uses «что сделать» (or the note), the note tex
   assert.equal(t.remindAt, "09:00");
   const plain = addPain(oilCar(), "стук спереди", "p2", 1)!;
   assert.equal(painTask(plain, plain.pains[0]!, TODAY, NOW).title, "стук спереди — Легковая");
+});
+
+function pcWithCard(): Asset {
+  const a = createAsset({ name: "Домашний ПК", kind: "device" }, "pc", 1, TODAY)!;
+  return addPart(a, { name: "Видеокарта", boughtAt: "2023-11-18", warrantyMonths: 36 }, "gpu")!.asset;
+}
+
+test("warranty: one task 30 days before the end, once; running again changes nothing", () => {
+  const plan = planMaintenance([pcWithCard()], [], "2026-10-19", NOW);
+  assert.equal(plan.create.length, 1);
+  const t = plan.create[0]!;
+  assert.equal(t.due, "2026-10-19", "the reminder day (2026-10-19) is today");
+  assert.match(t.title, /Гарантия заканчивается: Видеокарта/);
+  assert.equal(t.maint, "pc/warr:gpu");
+  assert.deepEqual(plan.warnMade, [{ assetId: "pc", subjectId: "gpu", until: "2026-11-18" }]);
+  let a = pcWithCard();
+  a = { ...a, parts: a.parts!.map((p) => ({ ...p, warnMade: "2026-11-18" })) };
+  assert.ok(planIsEmpty(planMaintenance([a], [], "2026-10-20", NOW)), "a deleted reminder is not made again");
+  assert.ok(planIsEmpty(planMaintenance([pcWithCard()], plan.create, "2026-10-19", NOW)));
+});
+
+test("warranty: far away = nothing yet; the lead time is configurable; 0 turns it off", () => {
+  const far = planMaintenance([pcWithCard()], [], "2026-07-01", NOW);
+  assert.equal(far.create.length, 0);
+  const a = patchAsset(pcWithCard(), { warnDays: 60 });
+  const wide = planMaintenance([a], [], "2026-09-18", NOW);
+  assert.equal(wide.create[0]!.due, "2026-09-19");
+  const off = planMaintenance([patchAsset(pcWithCard(), { warnDays: 0 })], [], "2026-10-19", NOW);
+  assert.ok(planIsEmpty(off));
+});
+
+test("warranty: a moved warranty drops the old task and makes a new one; expired warranty makes none", () => {
+  const first = planMaintenance([pcWithCard()], [], "2026-10-19", NOW);
+  const moved = { ...pcWithCard(), parts: [{ ...pcWithCard().parts![0]!, warrantyMonths: null, warrantyUntil: "2026-12-01" }] };
+  const plan = planMaintenance([moved], first.create, "2026-10-19", NOW);
+  assert.deepEqual(plan.remove, [first.create[0]!.id]);
+  assert.equal(plan.create.length, 1);
+  assert.equal(plan.create[0]!.due, "2026-11-01");
+  const expired = planMaintenance([pcWithCard()], [], "2026-12-01", NOW);
+  assert.ok(planIsEmpty(expired));
+});
+
+test("warranty: cars never get warranty tasks", () => {
+  const car = { ...oilCar(), warrantyUntil: "2026-11-01" };
+  assert.ok(planIsEmpty(planMaintenance([car], [], TODAY, NOW)));
 });

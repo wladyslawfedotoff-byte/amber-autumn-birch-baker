@@ -10,6 +10,7 @@
  * Pure: returns what to change, the store applies it.
  */
 import type { Asset, Task } from "../planner-types.ts";
+import { DEFAULT_WARN_DAYS, subjectsOf, warrantyUntil } from "./warranty.ts";
 import { DEFAULT_SOON_DAYS, DEFAULT_SOON_KM, addDays, ruleLine, ruleState, type MaintRule } from "./rules.ts";
 
 export const TASK_TIME = "09:00";
@@ -53,10 +54,13 @@ export type Plan = {
   ruleNotified: { assetId: string; ruleId: string; notified: string }[];
   kmNotified: { assetId: string; month: string }[];
   painMade: { assetId: string; painId: string }[];
+  /** Tasks that no longer apply (the warranty moved or was removed). */
+  remove: string[];
+  warnMade: { assetId: string; subjectId: string; until: string }[];
 };
 
-export const emptyPlan = (): Plan => ({ create: [], patch: [], ruleNotified: [], kmNotified: [], painMade: [] });
-export const planIsEmpty = (p: Plan) => !p.create.length && !p.patch.length && !p.ruleNotified.length && !p.kmNotified.length && !p.painMade.length;
+export const emptyPlan = (): Plan => ({ create: [], patch: [], ruleNotified: [], kmNotified: [], painMade: [], remove: [], warnMade: [] });
+export const planIsEmpty = (p: Plan) => !p.create.length && !p.patch.length && !p.ruleNotified.length && !p.kmNotified.length && !p.painMade.length && !p.remove.length && !p.warnMade.length;
 
 function maintTask(id: string, title: string, notes: string, due: string, time: string, ref: string, now: number): Task {
   return { id, title, notes, listId: null, done: false, priority: 0, due, tags: [], subtasks: [], createdAt: now, completedAt: null, remindAt: time, maint: ref };
@@ -85,6 +89,44 @@ export function reminderDay(rule: MaintRule, asset: Asset, today: string): { tar
   return { target, create: target < today ? today : target, byKm };
 }
 
+export const warrTaskId = (subjectId: string, until: string) => `maintwarr-${subjectId}-${hash(until)}`;
+export const warrRef = (assetId: string, subjectId: string) => `${assetId}/warr:${subjectId}`;
+
+/**
+ * «Гарантия заканчивается»: a regular task `warnDays` before the last warranty
+ * day (default 30), for the card and for each part. Made once per warranty date
+ * (a deleted one is not made again); a moved or removed warranty drops its task.
+ */
+function planWarranties(asset: Asset, byId: Map<string, Task>, tasks: Task[], today: string, now: number, plan: Plan): void {
+  if (asset.kind === "car") return;
+  const days = asset.warnDays ?? DEFAULT_WARN_DAYS;
+  const subjects = subjectsOf(asset);
+  const prefix = `${asset.id}/warr:`;
+  for (const t of tasks) {
+    if (t.done || typeof t.maint !== "string" || !t.maint.startsWith(prefix)) continue;
+    const subject = subjects.find((s) => s.id === t.maint!.slice(prefix.length));
+    const until = subject ? warrantyUntil(subject) : null;
+    if (!subject || !until || days <= 0 || t.id !== warrTaskId(subject.id, until)) plan.remove.push(t.id);
+  }
+  if (days <= 0) return;
+  for (const subject of subjects) {
+    const until = warrantyUntil(subject);
+    if (!until || until < today) continue;
+    const id = warrTaskId(subject.id, until);
+    const day = addDays(until, -days);
+    const existing = byId.get(id);
+    if (existing) {
+      if (!existing.done && day >= today && existing.due !== day) plan.patch.push({ id, patch: { due: day } });
+      continue;
+    }
+    if (subject.made === until) continue;
+    if (day > addDays(today, HORIZON_DAYS)) continue;
+    const label = subject.part ? subject.label : asset.name;
+    plan.create.push(maintTask(id, `Гарантия заканчивается: ${label}`, `Гарантия действует до ${until.slice(8, 10)}.${until.slice(5, 7)}.${until.slice(0, 4)}. Проверьте, всё ли в порядке — потом ремонт будет за свой счёт.`, day < today ? today : day, TASK_TIME, warrRef(asset.id, subject.id), now));
+    plan.warnMade.push({ assetId: asset.id, subjectId: subject.id, until });
+  }
+}
+
 export function planMaintenance(assets: Asset[], tasks: Task[], today: string, now: number): Plan {
   const plan = emptyPlan();
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -107,6 +149,7 @@ export function planMaintenance(assets: Asset[], tasks: Task[], today: string, n
       plan.create.push(task);
       plan.ruleNotified.push({ assetId: asset.id, ruleId: rule.id, notified: cycleKey(rule) });
     }
+    planWarranties(asset, byId, tasks, today, now, plan);
     // A pain note planned «at N km»: the task appears when the mileage gets close (like a rule), once.
     for (const pain of asset.pains ?? []) {
       if (pain.solvedAt || !pain.planKm || pain.taskMade || byId.has(painTaskId(pain.id)) || asset.km == null) continue;

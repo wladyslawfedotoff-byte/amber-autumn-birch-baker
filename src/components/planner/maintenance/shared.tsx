@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Car, Droplets, Plug, Wrench } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { Asset, AssetKind } from "@/lib/planner-types";
+import { warrantyBadge, warrantyText, type WarrantyState, type WarrantyStatus } from "@/lib/maintenance/warranty";
 import type { MaintRule, RuleState, Status } from "@/lib/maintenance/rules";
 
 export const field = "h-11 w-full rounded-xl bg-elevated px-3 text-base outline-none placeholder:text-subtle";
@@ -59,4 +60,23 @@ export const MONTHS_FULL = ["Январь", "Февраль", "Март", "Ап�
 export function subtitle(asset: Asset): string {
   const kind = { car: "Автомобиль", device: "Техника", consumable: "Расходник", other: "Другое" }[asset.kind];
   return [kind, asset.plate || asset.model].filter(Boolean).join(" · ");
+}
+
+/** Two or three choices on one row (like the kind chips, but one line). */
+export function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: { id: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex rounded-xl bg-elevated p-0.5">
+      {options.map((o) => (
+        <button key={o.id} type="button" role="radio" aria-checked={value === o.id} onClick={() => onChange(o.id)} className={cn("h-9 min-w-0 flex-1 rounded-[0.6rem] px-2 text-[0.8125rem] font-medium", value === o.id ? "bg-surface text-fg shadow-sm" : "text-muted")}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const WARR: Record<WarrantyStatus, string> = { ok: "bg-ok/15 text-ok", soon: "bg-warn/15 text-warn", expired: "bg-line text-muted", none: "bg-line text-muted" };
+
+export function WarrBadge({ state, short, className }: { state: WarrantyState; short?: boolean; className?: string }) {
+  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap", WARR[state.status], className)}>{short ? warrantyBadge(state) : warrantyText(state)}</span>;
 }
