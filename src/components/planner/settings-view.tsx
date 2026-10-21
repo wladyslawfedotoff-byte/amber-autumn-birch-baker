@@ -20,7 +20,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AssistantSection } from "@/components/planner/assist-settings";
-import { QuickAddSection } from "@/components/planner/quick-add-settings";
+import { QuickAddSection, devicesLabel, useQuickDevices } from "@/components/planner/quick-add-settings";
 import { NAV_ICONS, TAB_ICONS } from "@/components/planner/tab-icons";
 import { Sheet } from "@/components/ui/sheet";
 import { SwitchRow } from "@/components/ui/rows";
@@ -841,6 +841,7 @@ export function SettingsView({ onView }: { onView?: (view: View) => void }) {
   const doneCounts = useDoneCounts();
   const status = useServerSyncStatus();
   const [open, setOpen] = useState<SheetId | null>(null);
+  const quick = useQuickDevices();
   const accentName = ACCENTS.find((item) => item.id === accent)?.name ?? "";
   const close = useCallback(() => setOpen(null), []);
 
@@ -880,7 +881,7 @@ export function SettingsView({ onView }: { onView?: (view: View) => void }) {
           onOpen={setOpen}
         />
         <NavRow id="backup" icon={HardDriveDownload} color="#14b8a6" label="Резервная копия" onOpen={setOpen} />
-        <NavRow id="quickadd" icon={Smartphone} color="#6366f1" label="Быстрое добавление" value="iPhone" onOpen={setOpen} />
+        <NavRow id="quickadd" icon={Smartphone} color="#6366f1" label="Быстрое добавление" value={devicesLabel(quick.devices)} onOpen={setOpen} />
         {profile.assistant ? <NavRow id="assistant" icon={Sparkles} color="#0ea5e9" label="Помощник" onOpen={setOpen} /> : null}
       </Group>
 
@@ -898,7 +899,7 @@ export function SettingsView({ onView }: { onView?: (view: View) => void }) {
           {open === "connection" ? <ConnectionSection /> : null}
           {open === "archive" ? <ArchiveSection onView={onView} /> : null}
           {open === "backup" ? <BackupSection /> : null}
-          {open === "quickadd" ? <QuickAddSection /> : null}
+          {open === "quickadd" ? <QuickAddSection onChange={quick.reload} /> : null}
           {open === "assistant" ? <AssistantSection /> : null}
           {open === "about" ? <AboutSection /> : null}
         </div>

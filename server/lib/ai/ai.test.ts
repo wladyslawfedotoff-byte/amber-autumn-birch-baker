@@ -464,9 +464,9 @@ test("chain: 429 → next model, error → next provider, cooldown skips them fo
   try {
     await store.setSettings("user1", { consent: "cloud" });
     const first = await ask(assistant, "Привет");
-    assert.deepEqual(starts(first), ["free · a:free", "free · b:free", "paid · cheap-1"]);
+    assert.deepEqual(starts(first), ["free · a:free", "free · b:free · запасная модель", "paid · cheap-1 · запасная модель"]);
     const done = first.at(-1);
-    assert.equal(done?.type === "done" && done.message.source, "paid · cheap-1");
+    assert.equal(done?.type === "done" && done.message.source, "paid · cheap-1 · запасная модель");
     assert.equal(calls.find((c) => c.url.startsWith("https://free.example"))?.auth, "Bearer free-key-0001", "each provider gets its own key");
     assert.equal(calls.find((c) => c.url.startsWith("https://paid.example"))?.auth, `Bearer ${KEY}`);
 
@@ -492,7 +492,7 @@ test("chain: «Разрешить платные» off and the monthly token cap
   try {
     await noPaid.store.setSettings("user1", { consent: "cloud", allowPaid: false });
     const events = await ask(noPaid.assistant, "Привет");
-    assert.deepEqual(starts(events), ["free · a:free", "free · b:free"]);
+    assert.deepEqual(starts(events), ["free · a:free", "free · b:free · запасная модель"]);
     const last = events.at(-1);
     assert.match(last?.type === "error" ? last.message : "", /^Помощник сейчас недоступен/);
     assert.equal(noPaid.calls.some((c) => c.url.startsWith("https://paid.example")), false, "the paid provider is never asked");
@@ -779,7 +779,7 @@ test("per-model URL template and {code,msg} errors with HTTP 200 → next model"
   try {
     await store.setSettings("user1", { consent: "cloud", allowPaid: true });
     const events = await ask(assistant, "Привет");
-    assert.deepEqual(starts(events), ["free · a:free", "kie · flash-openai", "kie · pro-openai"]);
+    assert.deepEqual(starts(events), ["free · a:free", "kie · flash-openai · запасная модель", "kie · pro-openai · запасная модель"]);
     assert.equal(events.at(-1)?.type, "done");
     const chatUrls = calls.filter((c) => c.url.endsWith("/chat/completions")).map((c) => c.url);
     assert.deepEqual(chatUrls, ["https://free.example/api/v1/chat/completions", "https://paid.example/flash-openai/v1/chat/completions", "https://paid.example/pro-openai/v1/chat/completions"]);
