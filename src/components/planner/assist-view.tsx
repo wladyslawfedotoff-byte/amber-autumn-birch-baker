@@ -688,6 +688,7 @@ export function AssistView({
             <p className="mt-2 max-w-xs text-[0.875rem] text-muted" title="Без вашего «Применить» ничего не изменится">
               Спросите про дела или вставьте текст — предложу задачи.
             </p>
+            <p className="mt-1 max-w-xs text-[0.75rem] text-subtle">Например: «купить шины до 1 ноября и записаться на шиномонтаж». Без «Применить» ничего не меняю.</p>
           </div>
         ) : (
           <ul className="space-y-3 pt-2" aria-live="polite">            {messages.map((m) =>

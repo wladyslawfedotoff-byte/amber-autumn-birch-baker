@@ -18,6 +18,7 @@ import { STATE_LABEL, habitHex } from "@/components/planner/habits/habit-meta";
 /** Habits: compact rows by section, a ring check on the right, the habit page on tap. */
 export function HabitsView({ onOpenFocus }: { onOpenFocus?: () => void }) {
   const habits = usePlanner((s) => s.habits);
+  const addHabit = usePlanner((s) => s.addHabit);
   const today = todayIso();
   const [openId, setOpenId] = useState<string | null>(null);
   const [checkinId, setCheckinId] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export function HabitsView({ onOpenFocus }: { onOpenFocus?: () => void }) {
         ) : (
           <p className="min-w-0 flex-1 text-sm text-muted">
             Сегодня{" "}
-            <span className="font-medium tabular-nums text-fg">
+            <span className={cn("font-medium tabular-nums", planned.length ? "text-fg" : "text-subtle opacity-60")}>
               {doneToday} из {planned.length}
             </span>
           </p>
@@ -96,7 +97,14 @@ export function HabitsView({ onOpenFocus }: { onOpenFocus?: () => void }) {
       ) : null}
 
       {!showArchive && active.length === 0 ? (
-        <Empty title="Привычек пока нет" hint="Начните с одной маленькой: стакан воды утром, 2 страницы книги, 5 минут зарядки. Нажмите «+» — там есть готовые." />
+        <Empty
+          title="Привычек пока нет"
+          hint="Начните с одной маленькой. Нажмите пример или «+»."
+          examples={[
+            { icon: "💧", label: "Стакан воды утром", onAdd: () => addHabit("Стакан воды утром") },
+            { icon: "📖", label: "2 страницы книги", onAdd: () => addHabit("2 страницы книги") },
+          ]}
+        />
       ) : null}
 
       {groups.map(({ section, items }) => (

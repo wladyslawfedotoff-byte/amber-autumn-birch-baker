@@ -103,6 +103,7 @@ type NewTask = {
   /** Quick add: the user dropped the recognised date / time («без даты», «без времени»). */
   noDate?: boolean;
   noTime?: boolean;
+  via?: "phone";
 };
 
 export function breakFor(workLen: number): number {
@@ -768,6 +769,7 @@ export const usePlanner = create<PlannerState>()(
           remindAt: timed ? parsed.startAt : (input.remindAt ?? null),
           startAt: timed ? parsed.startAt : (input.startAt ?? null),
           endAt: timed ? parsed.endAt : (input.endAt ?? null),
+          ...(input.via ? { via: input.via } : {}),
         };
         const lead = get().remindLeadDefault;
         if (task.remindAt && lead) task.remindLead = lead;
