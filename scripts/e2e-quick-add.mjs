@@ -93,6 +93,23 @@ try {
   res = await add(key, form, null);
   assert.equal(res.status, 201, await res.clone().text());
   ok("photo (multipart) → 201");
+  // The shortcut's «Форма» without a file: application/x-www-form-urlencoded.
+  res = await add(key, "text=" + encodeURIComponent("Вх https://example.com/page"), "application/x-www-form-urlencoded");
+  assert.equal(res.status, 201, await res.clone().text());
+  assert.equal((await res.json()).title, "Вх");
+  res = await add(key, "text=%D0%92%D1%85IMG_6150", "application/x-www-form-urlencoded");
+  assert.equal((await res.json()).title, "ВхIMG_6150");
+  res = await add(key, "url=" + encodeURIComponent("https://example.org/"), "application/x-www-form-urlencoded");
+  assert.equal(res.status, 201);
+  ok("url-encoded form: text with a link, a file name only, a url field");
+  // As iOS sends a shared photo: other field names, image/heic type, no extension, the name as text.
+  const ios = new FormData();
+  ios.set("Text", "IMG_6150");
+  ios.set("Photo", new Blob([JPEG], { type: "image/heic" }), "IMG_6150");
+  res = await add(key, ios, null);
+  assert.equal(res.status, 201, await res.clone().text());
+  assert.match((await res.json()).title, /^Фото /);
+  ok("iOS-style multipart photo → «Фото …» with the file attached");
   const bad = new FormData();
   bad.set("file", new Blob([Buffer.from("#!/bin/sh\necho hi\n")], { type: "image/jpeg" }), "x.jpg");
   assert.equal((await add(key, bad, null)).status, 415);
@@ -106,7 +123,13 @@ try {
   await b.page.getByText("Купить фильтр для котла").waitFor();
   assert.ok((await b.page.getByText("📱 с iPhone").count()) >= 3);
   const synced = await b.page.evaluate(async () => (await (await fetch("/api/sync")).json()).data.tasks.filter((t) => t.via === "phone").length);
-  assert.ok(synced >= 4, `via on the server: ${synced}`);
+  assert.ok(synced >= 8, `via on the server: ${synced}`);
+  const tasks = await b.page.evaluate(async () => (await (await fetch("/api/sync")).json()).data.tasks);
+  const vx = tasks.find((t) => t.title === "Вх");
+  assert.equal(vx?.links?.[0]?.url, "https://example.com/page", "link stored from url-encoded text");
+  assert.ok(!tasks.some((t) => /^text=/.test(t.title)), "no raw form body as a title");
+  const photo = tasks.find((t) => /^Фото /.test(t.title) && t.attachments?.length);
+  assert.ok(photo, "photo task has the attachment");
   ok(`second device: ${synced} tasks with via=phone`);
   await a.page.keyboard.press("Escape");
   await a.page.waitForTimeout(400);

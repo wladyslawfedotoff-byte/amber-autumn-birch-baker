@@ -6,13 +6,16 @@
  * without a session, and only with that header) or the normal session
  * (the «Проверить» button).
  *
- * Body: JSON {text?, url?} or multipart (text?, url?, file?). Text up to 4 KB;
+ * Body: JSON {text?, url?}, a url-encoded or multipart form (text?, url?, file?;
+ * see quick-add/parse.ts) or plain text. Text up to 4 KB; a link inside the
+ * text becomes the task link;
  * a file goes through the attachment rules (type by content, size limit,
  * HEIC → JPEG). A link gets the page title (link-title.ts: public pages only).
  * 30 adds per key per minute. Logs carry the key id, never the key.
  */
 import { randomUUID } from "node:crypto";
-import { BodyTooLargeError, clientIp, json, readBodyLimited, type ServerEvent } from "../../lib/http.ts";
+import { clientIp, json, type ServerEvent } from "../../lib/http.ts";
+import { MAX_TEXT_BYTES, parseQuickBody, splitInput } from "../../lib/quick-add/parse.ts";
 import { log } from "../../lib/log.ts";
 import { principalForLogin, principalOf, type Principal } from "../../lib/principal.ts";
 import { LoginLimiter } from "../../lib/rate-limit.ts";
@@ -27,47 +30,11 @@ import { QuickAddUnavailable, tokenIdOf, verifyToken } from "../../lib/quick-add
 import { allowQuickAdd, PER_MINUTE } from "../../lib/quick-add/limit.ts";
 import { addToInbox, type InboxInput } from "../../lib/quick-add/add.ts";
 
-export const MAX_TEXT_BYTES = 4096;
 const TITLE_MAX = 200;
+/** Camera file names: IMG_6150, IMG_6150.HEIC, PXL_2026…, DSC01234. */
+export const FILE_NAME = /^(img|dsc|dscn|pxl|photo|image|screenshot)[_ -]?[\w .-]*\d[\w-]*(\.(heic|heif|jpe?g|png|webp|gif|mov|mp4))?$/i;
 const badKeys = new LoginLimiter();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-type Parsed = { text: string; url: string; file: File | null };
-
-async function parseBody(req: Request, maxFile: number): Promise<Parsed | { status: number; error: string; message?: string }> {
-  const type = (req.headers.get("content-type") ?? "").toLowerCase();
-  if (type.includes("multipart/form-data")) {
-    const declared = Number(req.headers.get("content-length") ?? "");
-    if (Number.isFinite(declared) && declared > maxFile + 256 * 1024) return { status: 413, error: "too_large", message: "Файл слишком большой." };
-    let form: FormData;
-    try {
-      form = await req.formData();
-    } catch {
-      return { status: 400, error: "bad_multipart" };
-    }
-    if ([...form.keys()].length > 8) return { status: 400, error: "too_many_fields" };
-    const file = form.get("file");
-    const text = form.get("text");
-    const url = form.get("url");
-    return { text: typeof text === "string" ? text : "", url: typeof url === "string" ? url : "", file: file instanceof File && file.size > 0 ? file : null };
-  }
-  let raw: string;
-  try {
-    raw = await readBodyLimited(req, MAX_TEXT_BYTES * 2 + 1024);
-  } catch (error) {
-    if (error instanceof BodyTooLargeError) return { status: 413, error: "too_large", message: "Текст длиннее 4 КБ." };
-    throw error;
-  }
-  if (!type.includes("json")) return { text: raw, url: "", file: null };
-  try {
-    const body = JSON.parse(raw) as { text?: unknown; url?: unknown };
-    return { text: typeof body.text === "string" ? body.text : "", url: typeof body.url === "string" ? body.url : "", file: null };
-  } catch {
-    return { status: 400, error: "bad_json" };
-  }
-}
-
-const ONLY_URL = /^\s*(https?:\/\/\S+)\s*$/i;
 
 async function principal(event: ServerEvent): Promise<{ user: Principal; keyId: string | null } | Response> {
   const header = event.req.headers.get("authorization") ?? "";
@@ -107,16 +74,12 @@ export default async function quickAdd(event: ServerEvent): Promise<Response> {
   }
 
   const config = attachConfig();
-  const parsed = await parseBody(event.req, config.maxBytes);
+  const parsed = await parseQuickBody(event.req, config.maxBytes);
   if ("status" in parsed) return json(parsed.status, { error: parsed.error, message: parsed.message });
   if (new TextEncoder().encode(parsed.text).byteLength > MAX_TEXT_BYTES) return json(413, { error: "too_large", message: "Текст длиннее 4 КБ." });
 
-  let text = parsed.text.replace(/\r\n?/g, "\n").trim();
-  let url = parsed.url.trim();
-  if (!url && ONLY_URL.test(text)) {
-    url = ONLY_URL.exec(text)![1]!;
-    text = "";
-  }
+  const split = splitInput(parsed.text, parsed.url);
+  const url = split.url;
   let link: InboxInput["link"] = null;
   if (url) {
     const checked = url.length <= 2000 ? checkUrl(url) : null;
@@ -147,11 +110,14 @@ export default async function quickAdd(event: ServerEvent): Promise<Response> {
     attachment = { id: meta.id, name: meta.name, mime: meta.mime, size: meta.size, createdAt: meta.createdAt, ...(meta.takenAt !== undefined ? { takenAt: meta.takenAt } : {}) };
   }
 
-  if (!text && !link && !attachment) return json(400, { error: "empty", message: "Пусто: нужен текст, ссылка или файл." });
-  const firstLine = text.split("\n")[0]!.trim();
-  const title = (firstLine || link?.title || (link ? new URL(link.url).hostname : "") || (attachment ? `Фото ${new Date().toLocaleString("ru-RU", { timeZone: process.env.TZ || "Europe/Moscow", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "")).slice(0, TITLE_MAX);
-  const notes = text.includes("\n") ? text.slice(text.indexOf("\n") + 1).trim() : "";
-
+  // iOS may send the photo's file name as the text («IMG_6150»): not a title.
+  const ownName = attachment ? attachment.name.replace(/\.\w+$/, "").toLowerCase() : "";
+  const nameLike = split.title && !split.notes && (FILE_NAME.test(split.title) || (ownName && split.title.replace(/\.\w+$/, "").toLowerCase() === ownName));
+  const typed = attachment && nameLike ? "" : split.title;
+  if (!typed && !split.notes && !link && !attachment && !split.title) return json(400, { error: "empty", message: "Пусто: нужен текст, ссылка или файл." });
+  const photoTitle = `Фото ${new Date().toLocaleString("ru-RU", { timeZone: process.env.TZ || "Europe/Moscow", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
+  const title = (typed || link?.title || (link ? new URL(link.url).hostname : "") || (attachment ? photoTitle : split.title) || split.notes.split("\n")[0]!).slice(0, TITLE_MAX);
+  const notes = typed || link || attachment ? split.notes : split.notes.split("\n").slice(1).join("\n").trim();
   try {
     await addToInbox(user, { id: taskId, title, notes, link, attachment });
   } catch (error) {
