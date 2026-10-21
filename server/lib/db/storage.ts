@@ -103,7 +103,8 @@ function errorText(error: unknown): string {
 function openExisting(file: string): Db {
   const db = openDb(file);
   try {
-    migrate(db);
+    const applied = migrate(db);
+    if (applied.length) log("info", "storage.migrated", { file, schema: applied.join(",") });
     const check = quickCheck(db);
     if (check !== "ok") throw new Error(`integrity check failed: ${check}`);
     return db;

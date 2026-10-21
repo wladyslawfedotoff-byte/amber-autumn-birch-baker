@@ -179,7 +179,8 @@ export class Assistant {
       // The chain reached a kind of provider the user has not agreed to yet: ask first.
       if (!settings.consent[endpoint.which]) return { type: "consent", provider: endpoint.which };
       ctx ??= { data: await this.deps.loadData(user), today: args.today, now: args.now, newId: () => randomUUID() };
-      const source = `${endpoint.provider} · ${endpoint.model}`;
+      // Not the first model of the chain: say so («запасная модель»).
+      const source = `${endpoint.provider} · ${endpoint.model}${endpoint === endpoints[0] ? "" : " · запасная модель"}`;
       emit({ type: "start", conversationId: options.conversationId, provider: endpoint.which, source, userMessageId: options.userMessageId });
       let committed = false;
       let tokens = 0;

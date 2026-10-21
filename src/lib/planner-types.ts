@@ -178,6 +178,8 @@ export type Asset = {
 
 export type Task = {
   id: string;
+  /** Added from outside the app («В Пору» on the phone). */
+  via?: "phone";
   title: string;
   notes: string;
   listId: string | null;
