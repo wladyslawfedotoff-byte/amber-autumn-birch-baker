@@ -133,6 +133,7 @@ export function TaskRow({
               ) : task.remindAt ? (
                 <span className="tabular-nums">{task.remindAt}</span>
               ) : null}
+              {task.via === "phone" ? <span>📱 с iPhone</span> : null}
               {task.repeat ? <span>{repeatLabel(task.repeat, task.repeatDates)}</span> : null}
               {showList ? <span>{listName(lists, task.listId)}</span> : null}
               {(task.tags ?? []).slice(0, 2).map((tag) => (

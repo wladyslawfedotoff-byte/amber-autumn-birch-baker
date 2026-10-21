@@ -137,7 +137,27 @@ export function DatesView() {
       {shown.length === 0 ? (
         <div className="px-2 py-10 text-center">
           <p className="text-base font-semibold">{filter === "all" ? "Памятных дат пока нет" : "Здесь пока пусто"}</p>
-          <p className="mt-1 text-sm text-muted">Нажмите «+» — день рождения, годовщина, праздник или отсчёт до события. «Пора» посчитает дни и возраст.</p>
+          <p className="mt-1 text-sm text-muted">Напомню заранее и посчитаю дни и возраст.</p>
+          {filter === "all" ? (
+            <ul className="mx-auto mt-3 max-w-xs space-y-1.5">
+              {[
+                { kind: "birthday" as const, icon: "🎂", label: "День рождения · каждый год" },
+                { kind: "countdown" as const, icon: "⏳", label: "Отпуск · отсчёт дней" },
+              ].map((ex) => (
+                <li key={ex.kind}>
+                  <button
+                    type="button"
+                    onClick={() => setEditing({ mode: "new", kind: ex.kind })}
+                    className="flex h-10 w-full items-center gap-2 rounded-xl border border-dashed border-line px-3 text-left text-sm text-muted"
+                  >
+                    <span aria-hidden="true">{ex.icon}</span>
+                    <span className="min-w-0 flex-1 truncate">{ex.label}</span>
+                    <Plus className="size-4 shrink-0 text-accent" aria-label="Добавить" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 

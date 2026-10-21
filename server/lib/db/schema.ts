@@ -183,6 +183,18 @@ function v1(): string[] {
   return out;
 }
 
-export const MIGRATIONS: readonly Migration[] = [{ version: 1, name: "initial schema (1.12.0)", up: v1() }];
+/** 1.13.0: device keys for «Быстрое добавление» (only the sha256 of the secret is stored). */
+function v2(): string[] {
+  return [
+    "CREATE TABLE quick_tokens (id TEXT PRIMARY KEY NOT NULL, login TEXT NOT NULL, name TEXT NOT NULL, hash TEXT NOT NULL, stamp TEXT NOT NULL,\n" +
+      "  created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)",
+    "CREATE INDEX quick_tokens_login ON quick_tokens(login)",
+  ];
+}
+
+export const MIGRATIONS: readonly Migration[] = [
+  { version: 1, name: "initial schema (1.12.0)", up: v1() },
+  { version: 2, name: "quick add device keys (1.13.0)", up: v2() },
+];
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

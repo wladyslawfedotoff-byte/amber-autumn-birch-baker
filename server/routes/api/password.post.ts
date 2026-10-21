@@ -5,6 +5,7 @@ import { principalOf } from "../../lib/principal.ts";
 import { LoginLimiter } from "../../lib/rate-limit.ts";
 import { sessionCookie, withCookies } from "../../lib/session-cookie.ts";
 import { setUserPassword, verifyCredentials } from "../../lib/user-store.ts";
+import { revokeAllTokens } from "../../lib/quick-add/tokens.ts";
 
 /** Wrong «текущий пароль» counts per user, so a stolen session cannot guess it from many IPs. */
 const limiter = new LoginLimiter();
@@ -53,6 +54,7 @@ export default async function changePassword(event: ServerEvent): Promise<Respon
   limiter.success(key);
   try {
     setUserPassword(user.login, next);
+    revokeAllTokens(user.login);
   } catch (error) {
     log("error", "auth.password_save_failed", { user: user.login }, error);
     return json(

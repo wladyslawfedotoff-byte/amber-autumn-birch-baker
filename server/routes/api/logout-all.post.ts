@@ -2,6 +2,7 @@ import { NO_LOG_HEADER, clientIp, json, type ServerEvent } from "../../lib/http.
 import { log } from "../../lib/log.ts";
 import { principalOf } from "../../lib/principal.ts";
 import { bumpUserEpoch } from "../../lib/user-store.ts";
+import { revokeAllTokens } from "../../lib/quick-add/tokens.ts";
 import { clearedSessionCookies, withCookies } from "../../lib/session-cookie.ts";
 
 /**
@@ -16,6 +17,7 @@ export default function logoutAll(event: ServerEvent): Response {
   if (!user) return json(401, { error: "unauthorized" });
   try {
     bumpUserEpoch(user.login);
+    revokeAllTokens(user.login);
   } catch (error) {
     log("error", "auth.revoke_failed", { ip: clientIp(event) }, error);
     return json(

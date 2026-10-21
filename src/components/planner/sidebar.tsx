@@ -247,7 +247,7 @@ export function Sidebar({
                     )}
                   >
                     <Icon className={cn("size-4", active ? "" : "text-accent")} strokeWidth={1.75} aria-hidden="true" />
-                    <span className="mt-0.5 text-[1.0625rem] leading-tight font-semibold tabular-nums">{tileCount(id)}</span>
+                    <span className={cn("mt-0.5 text-[1.0625rem] leading-tight font-semibold tabular-nums", !active && !Number(tileCount(id)) && "opacity-35")}>{tileCount(id)}</span>
                     <span className={cn("max-w-full truncate leading-tight", tiles.length > 4 ? "text-[0.625rem]" : "text-[0.6875rem]", active ? "opacity-90" : "text-muted")}>
                       {label(id)}
                     </span>
@@ -279,7 +279,7 @@ export function Sidebar({
                     <Icon className="size-4 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
                     <span>{label(id)}</span>
                     {id === "today" && overdue ? <span className="size-1.5 shrink-0 rounded-full bg-danger" aria-label="есть просроченные" /> : null}
-                    {badge ? <span className="shrink-0 text-xs text-subtle tabular-nums">{badge}</span> : null}
+                    {badge ? <span className="shrink-0 text-xs text-subtle/70 tabular-nums">{badge}</span> : null}
                   </button>
                 </li>
               );
@@ -449,7 +449,7 @@ function GroupRow({
         {pinned ? <Pin className="size-3.5 shrink-0 text-accent" aria-label="закреплён" /> : null}
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
         {item.shared ? <Users className="size-3.5 shrink-0 text-subtle" aria-label="общий список" /> : null}
-        {item.count ? <span className="shrink-0 text-xs text-subtle tabular-nums">{item.count}</span> : null}
+        {item.count ? <span className="shrink-0 text-xs text-subtle/70 tabular-nums">{item.count}</span> : null}
       </button>
       {menuOpen ? (
         <div role="menu" className="mx-1 mb-1 flex items-center gap-1 rounded-lg bg-elevated p-1 text-sm">
@@ -510,7 +510,7 @@ function PinChip({
       >
         <Pin className="size-3 shrink-0 text-subtle" aria-hidden="true" />
         <span className="min-w-0 truncate">{item.name}</span>
-        {item.count ? <span className="shrink-0 text-xs text-subtle tabular-nums">{item.count}</span> : null}
+        {item.count ? <span className="shrink-0 text-xs text-subtle/70 tabular-nums">{item.count}</span> : null}
       </button>
     </li>
   );
