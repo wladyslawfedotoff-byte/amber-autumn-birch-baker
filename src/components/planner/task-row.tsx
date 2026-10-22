@@ -1,3 +1,5 @@
+import { maintAsset, shortMaintTitle } from "@/lib/maintenance/short-title";
+import type { Asset } from "@/lib/planner-types";
 import { objectCount } from "@/lib/objects/count";
 import { Check, ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Lock, Paperclip, Plus } from "lucide-react";
 import { useState, type PointerEvent, type Ref } from "react";
@@ -21,6 +23,8 @@ function ring(priority: Priority): string {
   return "border-line";
 }
 
+const NO_ASSETS: Asset[] = [];
+
 export function TaskRow({
   task,
   today,
@@ -30,7 +34,10 @@ export function TaskRow({
   onOpen,
   onDragStart,
   ticked = false,
+  foldSubtasks = false,
 }: {
+  /** Checklist starts folded (counter only) unless the user opened it. */
+  foldSubtasks?: boolean;
   /** A repeating task shown in «Готово» because it was ticked today: the check undoes the tick. */
   ticked?: boolean;
   task: Task;
@@ -41,6 +48,7 @@ export function TaskRow({
   onOpen: (id: string) => void;
   onDragStart?: (event: PointerEvent<HTMLButtonElement>) => void;
 }) {
+  const assets = usePlanner((s) => s.assets) ?? NO_ASSETS;
   const lists = usePlanner((s) => s.lists);
   const toggleTask = usePlanner((s) => s.toggleTask);
   const undoRepeat = usePlanner((s) => s.undoRepeat);
@@ -56,7 +64,7 @@ export function TaskRow({
     return prereq && !prereq.done ? prereq : null;
   });
   const files = objectCount(task);
-  const [open, setOpen] = useSubtasksOpen(task.id, !task.done);
+  const [open, setOpen] = useSubtasksOpen(task.id, !task.done && !foldSubtasks);
   const [step, setStep] = useState("");
   const preview = notesPreview(task.notes);
   const overdue = !task.done && task.due != null && task.due < today;
@@ -112,7 +120,7 @@ export function TaskRow({
                 checked ? "text-subtle line-through decoration-subtle" : "text-fg",
               )}
             >
-              {task.title}
+              {task.maint ? shortMaintTitle(task, assets) : task.title}
             </span>
             {preview ? (
               <span className="mt-0.5 flex items-center gap-1 text-[0.75rem] text-muted">
@@ -135,7 +143,7 @@ export function TaskRow({
               ) : null}
               {task.via === "phone" ? <span>📱 с iPhone</span> : null}
               {task.repeat ? <span>{repeatLabel(task.repeat, task.repeatDates)}</span> : null}
-              {showList ? <span>{listName(lists, task.listId)}</span> : null}
+              {showList ? <span>{task.maint && !task.listId ? `🔧 ${maintAsset(task, assets)?.name ?? "Обслуживание"}` : listName(lists, task.listId)}</span> : null}
               {(task.tags ?? []).slice(0, 2).map((tag) => (
                 <span key={tag}>#{tag}</span>
               ))}

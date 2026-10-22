@@ -1,3 +1,4 @@
+import { maintAsset, shortMaintTitle } from "@/lib/maintenance/short-title";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   addMonths,
@@ -16,7 +17,7 @@ import { cn } from "@/lib/cn";
 import { cleanDates, daysBetween, formatLong, formatMonth, occursOn, shiftIso, todayIso } from "@/lib/dates";
 import { dotsFor, isoWeek, layoutDay, rangeStart, timeKey, timeRange } from "@/lib/calendar-layout";
 import { CALENDAR_MODES, modeDays } from "@/lib/ui-prefs";
-import type { Milestone, Project, Task } from "@/lib/planner-types";
+import type { Asset, Milestone, Project, Task } from "@/lib/planner-types";
 import { usePlanner } from "@/lib/planner-store";
 import { stageRange } from "@/lib/stage-range";
 import { colorHex } from "@/lib/task-colors";
@@ -85,6 +86,7 @@ function byTime(a: Task, b: Task): number {
 /** Stable fallbacks: a fresh `[]` on every render would re-run the memos below. */
 const NO_MILESTONES: Milestone[] = [];
 const NO_PROJECTS: Project[] = [];
+const NO_ASSETS: Asset[] = [];
 
 export function CalendarView({
   selectedId,
@@ -571,6 +573,7 @@ function DayRows({
   onDrag: (event: ReactPointerEvent<HTMLElement>, task: Task) => void;
   empty?: string;
 }) {
+  const assets = usePlanner((s) => s.assets) ?? NO_ASSETS;
   if (tasks.length === 0 && special.length === 0) {
     return empty ? <p className="px-1 py-4 text-sm text-muted">{empty}</p> : null;
   }
@@ -611,7 +614,10 @@ function DayRows({
               </span>
             </button>
             <button type="button" onClick={() => onOpen(task.id)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 pr-1 text-left">
-              <span className={cn("min-w-0 flex-1 truncate text-[0.9375rem]", task.done ? "text-subtle line-through" : "text-fg")}>{task.title}</span>
+              <span className={cn("min-w-0 flex-1 truncate text-[0.9375rem]", task.done ? "text-subtle line-through" : "text-fg")}>
+                {task.maint ? shortMaintTitle(task, assets) : task.title}
+                {task.maint ? <span className="block truncate text-xs text-muted">🔧 {maintAsset(task, assets)?.name ?? "Обслуживание"}</span> : null}
+              </span>
               {time ? <span className={cn("shrink-0 text-xs tabular-nums", task.done ? "text-subtle" : "text-accent")}>{time}</span> : null}
             </button>
             <button
