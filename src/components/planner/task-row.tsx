@@ -1,8 +1,9 @@
+import { kmAssetOf, openMileage } from "@/lib/mileage-prompt";
 import { maintAsset, shortMaintTitle } from "@/lib/maintenance/short-title";
 import type { Asset } from "@/lib/planner-types";
 import { objectCount } from "@/lib/objects/count";
 import { Check, ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Lock, Paperclip, Plus } from "lucide-react";
-import { useState, type PointerEvent, type Ref } from "react";
+import { memo, useRef, useState, type PointerEvent, type Ref } from "react";
 import { cn } from "@/lib/cn";
 import { dueLabel, repeatLabel, shiftIso, todayIso } from "@/lib/dates";
 import { parseQuick } from "@/lib/quick-add";
@@ -24,8 +25,12 @@ function ring(priority: Priority): string {
 }
 
 const NO_ASSETS: Asset[] = [];
+/** Swipe distance (px) that triggers the action, and the furthest the row moves. */
+const SWIPE_AT = 72;
+const SWIPE_MAX = 120;
 
-export function TaskRow({
+/** Memoized (1.15): ticking one task redraws only that row. */
+export const TaskRow = memo(function TaskRow({
   task,
   today,
   selected,
@@ -84,12 +89,81 @@ export function TaskRow({
     showToast({ id: task.id, title: task.title, repeat: Boolean(after && !after.done), next: after && !after.done ? after.due : null, at: Date.now() });
   }
 
+  // Swipe (1.15): right = done (or undo), left = tomorrow. Touch only; a vertical move scrolls as usual.
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const swiped = useRef(false);
+  const canTomorrow = !checked && !task.done;
+  function onSwipeStart(event: PointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse" || event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("input, textarea, .drag-handle")) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let mode: "undecided" | "swipe" | "scroll" = "undecided";
+    let last = 0;
+    let buzzed = false;
+    const move = (ev: globalThis.PointerEvent) => {
+      const mx = ev.clientX - startX;
+      const my = ev.clientY - startY;
+      if (mode === "undecided") {
+        if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) mode = "scroll";
+        else if (Math.abs(mx) > 12 && Math.abs(mx) > Math.abs(my) * 1.5) {
+          mode = "swipe";
+          setDragging(true);
+        }
+      }
+      if (mode !== "swipe") return;
+      last = Math.max(canTomorrow ? -SWIPE_MAX : 0, Math.min(SWIPE_MAX, mx));
+      if (!buzzed && Math.abs(last) >= SWIPE_AT) {
+        buzzed = true;
+        navigator.vibrate?.(8);
+      }
+      setDx(last);
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      if (mode !== "swipe") return;
+      swiped.current = true;
+      setDragging(false);
+      setDx(0);
+      if (last >= SWIPE_AT) tick();
+      else if (last <= -SWIPE_AT && canTomorrow) updateTask(task.id, { due: tomorrow });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  }
+  const kmAsset = kmAssetOf(task);
+  const tint = colorStyle(task.color, checked ? 5 : 10);
+
   return (
     <div
       data-selected={selected ? "true" : undefined}
       className={cn("task-row flex items-start overflow-hidden bg-elevated", checked && "opacity-75")}
-      style={colorStyle(task.color, checked ? 5 : 10)}
+      style={dx > 0 ? { background: "var(--accent)", touchAction: "pan-y" } : dx < 0 ? { background: "var(--warn)", touchAction: "pan-y" } : { ...tint, touchAction: "pan-y" }}
+      onPointerDown={onSwipeStart}
+      onClickCapture={(event) => {
+        if (!swiped.current) return;
+        swiped.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
     >
+      {dx !== 0 ? (
+        <span
+          aria-hidden="true"
+          className={cn("pointer-events-none absolute inset-y-0 flex items-center px-4 text-sm font-semibold text-accent-fg", dx > 0 ? "left-0" : "right-0", Math.abs(dx) < SWIPE_AT && "opacity-60")}
+        >
+          {dx > 0 ? (checked ? "Вернуть" : "Готово") : "Завтра"}
+        </span>
+      ) : null}
+      <div
+        className={cn("flex min-w-0 flex-1 items-start", !dragging && "transition-transform duration-150")}
+        style={dx !== 0 ? { transform: `translateX(${dx}px)`, background: tint.background ?? "var(--elevated)" } : undefined}
+      >
       <button
         type="button"
         aria-label={ticked ? "Отменить отметку" : task.done ? "Вернуть в работу" : "Выполнить"}
@@ -162,6 +236,15 @@ export function TaskRow({
               ) : null}
             </span>
           </button>
+          {kmAsset && !checked ? (
+            <button
+              type="button"
+              onClick={() => openMileage(kmAsset)}
+              className="mt-0.5 h-7 shrink-0 rounded-full bg-accent/10 px-2.5 text-xs font-medium text-accent"
+            >
+              Обновить пробег
+            </button>
+          ) : null}
           {progress.total > 0 ? (
             <button
               type="button"
@@ -255,9 +338,10 @@ export function TaskRow({
           <GripVertical className="size-4" />
         </button>
       ) : null}
+      </div>
     </div>
   );
-}
+});
 
 export type QuickOptions = { noDate?: boolean; noTime?: boolean };
 

@@ -1,12 +1,9 @@
-import { readGrokExtensionsEnabled } from "../../scripts/grok-pwa-shared.mjs";
-
 /**
  * Security headers for every dynamic response. The CSP keeps 'unsafe-inline'
  * for scripts because TanStack Start streams inline hydration scripts; the
  * important parts are frame-ancestors/object-src/base-uri/form-action and
- * connect-src 'self' (no exfiltration to other origins). When the Grok
- * extensions script is enabled (not in Docker: VITE_GROK_EXTENSIONS=0),
- * https://grok.com is allowed so the platform banner keeps working.
+ * connect-src 'self' (no exfiltration to other origins). Only the app's own
+ * origin (plus the web fonts) is allowed — no external script hosts (1.15).
  */
 /**
  * HSTS for one year, only on responses to HTTPS requests. Deliberately without
@@ -16,15 +13,14 @@ import { readGrokExtensionsEnabled } from "../../scripts/grok-pwa-shared.mjs";
 export const HSTS_VALUE = "max-age=31536000";
 
 export function securityHeaders(secure = false): Record<string, string> {
-  const grok = readGrokExtensionsEnabled() ? " https://grok.com" : "";
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${grok}`,
-    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${grok}`,
+    `script-src 'self' 'unsafe-inline'`,
+    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
     "font-src 'self' https://fonts.gstatic.com data:",
-    `img-src 'self' data: blob:${grok}`,
-    `connect-src 'self'${grok}`,
-    `frame-src 'self'${grok}`,
+    `img-src 'self' data: blob:`,
+    `connect-src 'self'`,
+    `frame-src 'self'`,
     "manifest-src 'self'",
     "worker-src 'self' blob:",
     "object-src 'none'",

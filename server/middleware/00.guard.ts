@@ -8,6 +8,7 @@ import { errorPage } from "../lib/pages.ts";
 import { NO_LOG_HEADER, html, isSecureRequest, json, wantsHtml, type ServerEvent } from "../lib/http.ts";
 import { log } from "../lib/log.ts";
 import { applySecurityHeaders, withSecurityHeaders } from "../lib/security.ts";
+import { compressResponse } from "../lib/compress.ts";
 
 function statusOf(error: unknown): number {
   const status = (error as { status?: unknown; statusCode?: unknown })?.status ?? (error as { statusCode?: unknown })?.statusCode;
@@ -42,7 +43,7 @@ export default async function guard(event: ServerEvent, next: () => unknown | Pr
     } else if (result.status >= 500) {
       log("error", "http.5xx", { status: result.status, method, path, note: "handler returned an error response" });
     }
-    return withSecurityHeaders(result, secure);
+    return withSecurityHeaders(await compressResponse(event.req, result), secure);
   }
   applySecurityHeaders(event.res.headers, secure);
   return result;

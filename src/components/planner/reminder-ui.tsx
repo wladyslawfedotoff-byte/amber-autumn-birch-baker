@@ -177,8 +177,13 @@ export function ReminderBanner({
   onAck,
   onMore,
   onHide,
+  kmFor,
+  onMileage,
 }: {
   due: ReminderHit[];
+  /** Card id when the hit is a «Обновите пробег» task: the strip offers «Пробег» right away. */
+  kmFor?: (hit: ReminderHit) => string | undefined;
+  onMileage?: (assetId: string) => void;
   onOpen: (hit: ReminderHit) => void;
   onAck: (hit: ReminderHit) => void;
   onMore: () => void;
@@ -188,6 +193,7 @@ export function ReminderBanner({
   const hit = due[0];
   if (!hit) return null;
   const extra = due.length - 1;
+  const kmAsset = kmFor?.(hit);
 
   return (
     <div className="relative z-10 shrink-0 border-b border-line/60 bg-surface px-3 pb-1.5 md:px-8" role="status">
@@ -202,9 +208,15 @@ export function ReminderBanner({
             +{extra}
           </button>
         ) : null}
-        <button type="button" onClick={() => onAck(hit)} className="h-9 shrink-0 px-1.5 text-xs font-medium text-accent">
-          Понятно
-        </button>
+        {kmAsset && onMileage ? (
+          <button type="button" onClick={() => onMileage(kmAsset)} className="h-9 shrink-0 px-1.5 text-xs font-medium text-accent">
+            Обновить пробег
+          </button>
+        ) : (
+          <button type="button" onClick={() => onAck(hit)} className="h-9 shrink-0 px-1.5 text-xs font-medium text-accent">
+            Понятно
+          </button>
+        )}
         <button
           type="button"
           onClick={onHide}
