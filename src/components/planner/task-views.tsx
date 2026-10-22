@@ -306,6 +306,7 @@ function TodayGroups({
               selected={selectedId === task.id}
               showDue
               showList
+              foldSubtasks
               onOpen={onOpen}
             />
           ))}
@@ -324,6 +325,7 @@ function TodayGroups({
               selected={selectedId === task.id}
               showDue={false}
               showList
+              foldSubtasks
               onOpen={onOpen}
             />
           ))}

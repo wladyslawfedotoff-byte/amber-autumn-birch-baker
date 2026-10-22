@@ -40,7 +40,7 @@ export function countOpen(tasks: Task[]): number {
 }
 
 export function countInbox(tasks: Task[], showBlocked = false): number {
-  return tasks.filter((t) => !t.done && t.listId == null && (showBlocked || !isBlocked(t, tasks))).length;
+  return tasks.filter((t) => !t.done && t.listId == null && !t.maint && (showBlocked || !isBlocked(t, tasks))).length;
 }
 
 export function countList(tasks: Task[], id: string): number {
@@ -67,7 +67,8 @@ export function scopeTasks(tasks: Task[], view: View, today: string, share?: Sha
       return !t.done && inRange(t, today, end);
     }
     if (view === "shared") return !t.done && Boolean(share && isSharedTask(t, share.lists, share.me, share.dataOwner));
-    if (view === "inbox") return !t.done && t.listId == null;
+    // Auto tasks of «Обслуживание» live in «Сегодня» / «Календарь» on their day, not here.
+    if (view === "inbox") return !t.done && t.listId == null && !t.maint;
     if (view === "done") return t.done;
     if (view === "archive") return t.done;
     if (view.startsWith("list:")) return !t.done && t.listId === view.slice(5);
@@ -101,7 +102,7 @@ export function doneInScope(tasks: Task[], view: View, today: string, share?: Sh
       if (view === "week") return ticked || doneToday || inRange(t, today, end);
       if (view === "tomorrow") return !ticked && t.due === shiftIso(today, 1);
       if (view.startsWith("day:")) return !ticked && t.due === view.slice(4);
-      if (view === "inbox") return t.listId == null;
+      if (view === "inbox") return t.listId == null && !t.maint;
       if (view === "shared") return Boolean(share && isSharedTask(t, share.lists, share.me, share.dataOwner));
       if (view.startsWith("list:")) return t.listId === view.slice(5);
       if (view.startsWith("tag:")) return t.tags.includes(view.slice(4));

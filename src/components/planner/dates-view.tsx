@@ -64,9 +64,18 @@ function IconCircle({ item, size = "md" }: { item: Pick<Milestone, "icon" | "kin
   );
 }
 
+/** «Дней до» by urgency, not by type: soon — red, within two weeks — amber, later — calm. */
+function urgencyTone(days: number, past = false): string {
+  if (past) return "var(--subtle)";
+  if (days <= 3) return "var(--danger)";
+  if (days <= 14) return "var(--warn)";
+  return "var(--muted)";
+}
+
 function BigCount({ days, color, size = "md" }: { days: number; color: string; size?: "md" | "lg" }) {
   const label = countLabel(days);
-  const tone = label.past ? "var(--ok)" : color;
+  void color;
+  const tone = urgencyTone(days, label.past);
   return (
     <span className="flex shrink-0 flex-col items-end leading-none" style={{ color: tone }}>
       <span className={cn("font-semibold tabular-nums", size === "lg" ? "text-4xl" : days === 0 ? "text-base" : "text-2xl")}>{label.value}</span>
