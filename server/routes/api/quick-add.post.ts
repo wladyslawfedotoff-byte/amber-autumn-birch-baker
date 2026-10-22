@@ -18,7 +18,6 @@ import { clientIp, json, type ServerEvent } from "../../lib/http.ts";
 import { MAX_TEXT_BYTES, parseQuickBody, splitInput } from "../../lib/quick-add/parse.ts";
 import { log } from "../../lib/log.ts";
 import { principalForLogin, principalOf, type Principal } from "../../lib/principal.ts";
-import { LoginLimiter } from "../../lib/rate-limit.ts";
 import { checkUrl, fetchTitle } from "../../lib/link-title.ts";
 import { attachConfig } from "../../lib/attachments/config.ts";
 import { MIME, detectType } from "../../lib/attachments/detect.ts";
@@ -27,14 +26,15 @@ import { attachStore } from "../../lib/attachments/store.ts";
 import { safeDisplayName } from "../../lib/attachments/names.ts";
 import { readTakenAt } from "../../../src/lib/attachments/exif.ts";
 import { QuickAddUnavailable, tokenIdOf, verifyToken } from "../../lib/quick-add/tokens.ts";
-import { allowQuickAdd, PER_MINUTE } from "../../lib/quick-add/limit.ts";
+import { allowQuickAdd, ipMayTryKey, noteBadKey, PER_MINUTE } from "../../lib/quick-add/limit.ts";
 import { addToInbox, type InboxInput } from "../../lib/quick-add/add.ts";
 
 const TITLE_MAX = 200;
 /** Camera file names: IMG_6150, IMG_6150.HEIC, PXL_2026…, DSC01234. */
 export const FILE_NAME = /^(img|dsc|dscn|pxl|photo|image|screenshot)[_ -]?[\w .-]*\d[\w-]*(\.(heic|heif|jpe?g|png|webp|gif|mov|mp4))?$/i;
-const badKeys = new LoginLimiter();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/** A wrong key answers a little later (slows guessing; one IP only). */
+const BAD_KEY_DELAY_MS = 300;
 
 async function principal(event: ServerEvent): Promise<{ user: Principal; keyId: string | null } | Response> {
   const header = event.req.headers.get("authorization") ?? "";
@@ -42,19 +42,20 @@ async function principal(event: ServerEvent): Promise<{ user: Principal; keyId: 
     const user = principalOf(event);
     return user ? { user, keyId: null } : json(401, { error: "unauthorized", message: "Нужен ключ устройства." });
   }
-  const ip = clientIp(event);
-  const verdict = badKeys.check(ip);
-  if (!verdict.allowed) return json(429, { error: "rate_limited", message: "Слишком много неверных ключей." }, { "retry-after": String(verdict.retryAfterSec) });
   const raw = header.replace(/^bearer\s+/i, "").trim();
+  const badKey = () => json(401, { error: "bad_key", message: "Ключ не подходит или отозван. Создайте новый в «Настройки → Быстрое добавление»." });
+  // Not even shaped like a key: refused at once, not counted, no database lookup.
+  if (!tokenIdOf(raw)) return badKey();
+  const ip = clientIp(event);
+  if (!ipMayTryKey(ip)) return json(429, { error: "rate_limited", message: "Слишком много неверных ключей." }, { "retry-after": "900" });
   const found = verifyToken(raw);
   const user = found ? principalForLogin(found.login) : null;
   if (!found || !user) {
-    const delay = badKeys.fail(ip);
+    noteBadKey(ip);
     log("warn", "quick_add.bad_key", { ip, key: tokenIdOf(raw) ?? "-" });
-    await sleep(delay);
-    return json(401, { error: "bad_key", message: "Ключ не подходит или отозван. Создайте новый в «Настройки → Быстрое добавление»." });
+    await sleep(BAD_KEY_DELAY_MS);
+    return badKey();
   }
-  badKeys.success(ip);
   return { user, keyId: found.id };
 }
 
@@ -121,7 +122,7 @@ export default async function quickAdd(event: ServerEvent): Promise<Response> {
   try {
     await addToInbox(user, { id: taskId, title, notes, link, attachment });
   } catch (error) {
-    log("error", "quick_add.write_failed", { key: keyId ?? "session" }, error);
+    log("error", "quick_add.write_failed", { key: keyId ?? "session", ...(attachment ? { attach_id: attachment.id } : {}) }, error);
     return json(503, { error: "storage_error", message: "Не удалось сохранить на сервере." });
   }
   log("info", "quick_add.ok", { key: keyId ?? "session", kind: attachment ? "file" : link ? "link" : "text" });

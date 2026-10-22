@@ -16,7 +16,7 @@ import { cn } from "@/lib/cn";
 import { cleanDates, daysBetween, formatLong, formatMonth, occursOn, shiftIso, todayIso } from "@/lib/dates";
 import { dotsFor, isoWeek, layoutDay, rangeStart, timeKey, timeRange } from "@/lib/calendar-layout";
 import { CALENDAR_MODES, modeDays } from "@/lib/ui-prefs";
-import type { Milestone, Task } from "@/lib/planner-types";
+import type { Milestone, Project, Task } from "@/lib/planner-types";
 import { usePlanner } from "@/lib/planner-store";
 import { stageRange } from "@/lib/stage-range";
 import { colorHex } from "@/lib/task-colors";
@@ -82,6 +82,10 @@ function byTime(a: Task, b: Task): number {
   return Number(a.done) - Number(b.done) || timeKey(a).localeCompare(timeKey(b)) || a.title.localeCompare(b.title, "ru");
 }
 
+/** Stable fallbacks: a fresh `[]` on every render would re-run the memos below. */
+const NO_MILESTONES: Milestone[] = [];
+const NO_PROJECTS: Project[] = [];
+
 export function CalendarView({
   selectedId,
   onOpen,
@@ -93,8 +97,8 @@ export function CalendarView({
   onDayChange?: (day: string) => void;
 }) {
   const tasks = usePlanner((s) => s.tasks);
-  const milestones = usePlanner((s) => s.milestones) ?? [];
-  const projects = usePlanner((s) => s.projects) ?? [];
+  const milestones = usePlanner((s) => s.milestones) ?? NO_MILESTONES;
+  const projects = usePlanner((s) => s.projects) ?? NO_PROJECTS;
   const addTask = usePlanner((s) => s.addTask);
   const updateTask = usePlanner((s) => s.updateTask);
   const toggleTask = usePlanner((s) => s.toggleTask);

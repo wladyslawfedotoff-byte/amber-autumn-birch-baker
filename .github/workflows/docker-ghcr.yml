@@ -16,7 +16,25 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint
+      - name: Brand check
+        run: node scripts/brand-check.mjs
+
   build-and-push:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
