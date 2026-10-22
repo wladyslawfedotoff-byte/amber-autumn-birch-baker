@@ -44,7 +44,7 @@ services:
       NITRO_HOST: "0.0.0.0"
       NITRO_PORT: "8080"
       # Публичный адрес за Reverse Proxy DSM, С портом (проверка Origin/CSRF).
-      APP_URL: "https://pora.fedotovvladislav.synology.me:8443"
+      APP_URL: "https://pora.example.synology.me:8443"
       DATA_DIR: /data
     volumes:
       - ./data:/data
