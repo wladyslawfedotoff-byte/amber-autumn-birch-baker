@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /** A small «?» that unfolds a short explanation: hints stay available but take no room. */
-export function HintButton({ open, onToggle, label = "Подсказка" }: { open: boolean; onToggle: () => void; label?: string }) {
+export function HintButton({ open, onToggle, label = "Подсказка", className }: { open: boolean; onToggle: () => void; label?: string; className?: string }) {
   return (
     <button
       type="button"
@@ -12,6 +12,7 @@ export function HintButton({ open, onToggle, label = "Подсказка" }: { o
       className={cn(
         "-my-2 inline-flex size-8 shrink-0 items-center justify-center rounded-full align-middle",
         open ? "text-accent" : "text-subtle",
+        className,
       )}
     >
       <span className="flex size-4 items-center justify-center rounded-full border border-current text-[10px] font-semibold leading-none">?</span>

@@ -196,7 +196,7 @@ export function ReminderBanner({
   const kmAsset = kmFor?.(hit);
 
   return (
-    <div className="relative z-10 shrink-0 border-b border-line/60 bg-surface px-3 pb-1.5 md:px-8" role="status">
+    <div className="relative z-10 shrink-0 bg-surface px-3 pb-1.5 md:px-8" role="status">
       <div className="card-lift flex h-9 items-center gap-1 rounded-full bg-elevated pr-0.5 pl-3 text-sm">
         <Bell className="size-3.5 shrink-0 text-danger" aria-hidden="true" />
         <button type="button" onClick={() => onOpen(hit)} className="flex h-9 min-w-0 flex-1 items-center gap-1.5 text-left">

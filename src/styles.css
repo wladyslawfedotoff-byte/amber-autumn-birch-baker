@@ -11,7 +11,7 @@
   --elevated: #fffcf7;
   --fg: #1c1d1a;
   --muted: #5c5f59;
-  --subtle: #8a8d86;
+  --subtle: #6c6f68;
   --line: #ddd8ce;
   --accent: #243e4a;
   --accent-fg: #f4f2eb;
@@ -377,5 +377,18 @@ input {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* 1.16: soft scroll edge — content fades under the header and the tab bar
+   instead of a hard cut. Off for «Увеличить контраст» / «Уменьшить прозрачность». */
+[data-main-scroll] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+}
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  [data-main-scroll] {
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 }

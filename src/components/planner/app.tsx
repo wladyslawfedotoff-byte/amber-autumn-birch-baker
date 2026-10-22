@@ -531,7 +531,7 @@ export function PlannerApp() {
         ) : null}
 
         <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-2 md:px-8 md:py-6", view === "assist" && !query.trim() ? "pb-0 md:pb-0" : "pb-24")}>
+        <div data-main-scroll className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-2 md:px-8 md:py-6", view === "assist" && !query.trim() ? "pb-0 md:pb-0" : "pb-24")}>
           {!ready ? <PlannerSkeleton /> : null}
           <Suspense fallback={<PlannerSkeleton />}>
           {ready && showLists ? (

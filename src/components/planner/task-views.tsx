@@ -298,7 +298,7 @@ function TodayGroups({
     <div>
       {overdue.length > 0 ? (
         <section className="mt-3">
-          <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-danger">Просрочено</h2>
+          <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted">Просрочено</h2>
           <RowWindow items={overdue}>{(task) => (
             <TaskRow
               key={task.id}

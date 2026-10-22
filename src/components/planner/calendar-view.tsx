@@ -261,15 +261,15 @@ export function CalendarView({
               setCursor(new Date());
               setDay(today);
             }}
-            className="h-9 shrink-0 rounded-full px-2.5 text-sm text-accent"
+            className="h-11 shrink-0 rounded-full px-2.5 text-sm text-accent"
           >
             Сегодня
           </button>
         ) : null}
-        <button type="button" aria-label={`Назад: ${unit}`} onClick={() => step(-1)} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted">
+        <button type="button" aria-label={`Назад: ${unit}`} onClick={() => step(-1)} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted">
           <ChevronLeft className="size-5" />
         </button>
-        <button type="button" aria-label={`Вперёд: ${unit}`} onClick={() => step(1)} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted">
+        <button type="button" aria-label={`Вперёд: ${unit}`} onClick={() => step(1)} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted">
           <ChevronRight className="size-5" />
         </button>
         <button
@@ -278,12 +278,12 @@ export function CalendarView({
           aria-label="Вид календаря"
           aria-expanded={menu}
           onClick={() => setMenu(!menu)}
-          className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", menu ? "bg-elevated text-fg" : "text-muted")}
+          className={cn("flex size-11 shrink-0 items-center justify-center rounded-full", menu ? "bg-elevated text-fg" : "text-muted")}
         >
           <LayoutGrid className="size-[1.125rem]" />
         </button>
-        <span className="flex size-9 shrink-0 items-center justify-center">
-          <HintButton open={hint} onToggle={() => setHint(!hint)} label="Как пользоваться календарём" />
+        <span className="flex size-11 shrink-0 items-center justify-center">
+          <HintButton open={hint} onToggle={() => setHint(!hint)} label="Как пользоваться календарём" className="my-0 size-11" />
         </span>
         {menu ? (
           <>

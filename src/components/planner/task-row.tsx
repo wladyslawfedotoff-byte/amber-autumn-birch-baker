@@ -21,7 +21,7 @@ function ring(priority: Priority): string {
   if (priority === 3) return "border-danger";
   if (priority === 2) return "border-warn";
   if (priority === 1) return "border-accent";
-  return "border-line";
+  return "border-subtle";
 }
 
 const NO_ASSETS: Asset[] = [];
@@ -273,9 +273,9 @@ export const TaskRow = memo(function TaskRow({
               type="button"
               aria-label={`Перенести «${task.title}» на завтра`}
               onClick={() => updateTask(task.id, { due: tomorrow })}
-              className="-my-2 flex h-10 shrink-0 items-center px-0.5"
+              className="-my-2 flex h-10 shrink-0 items-center px-0.5 [@media(pointer:coarse)]:hidden"
             >
-              <span className="rounded-full bg-bg px-1.5 text-[0.6875rem] leading-[1.125rem] text-danger">завтра</span>
+              <span className="rounded-full bg-bg px-1.5 text-[0.6875rem] leading-[1.125rem] text-muted">завтра</span>
             </button>
           ) : null}
         </div>
