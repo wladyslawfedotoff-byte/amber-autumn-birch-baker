@@ -1,5 +1,5 @@
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Check, ChevronDown, ChevronUp, Copy, GripVertical, ListChecks, Plus, X } from "lucide-react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Check, Copy, GripVertical, ListChecks, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/hint";
 import { cn } from "@/lib/cn";
@@ -41,6 +41,8 @@ export function NotesField({ task }: { task: Task }) {
 }
 
 /** «Подзадачи — шаги внутри дела»: progress, tick, delete, add (Enter, button or leaving the field). */
+const LONG_PRESS_MS = 500;
+
 export function SubtasksBlock({ task }: { task: Task }) {
   const addSubtask = usePlanner((s) => s.addSubtask);
   const toggleSubtask = usePlanner((s) => s.toggleSubtask);
@@ -49,6 +51,10 @@ export function SubtasksBlock({ task }: { task: Task }) {
   const placeSubtask = usePlanner((s) => s.placeSubtask);
   const [draft, setDraft] = useState("");
   const [drag, setDrag] = useState<{ id: string; order: string[] } | null>(null);
+  // Long press (or right click) on a step: «Выше / Ниже» instead of tiny arrows.
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const pressTimer = useRef<number | undefined>(undefined);
+  const pressed = useRef(false);
   const real = task.subtasks ?? [];
   const order = drag?.order ?? real.map((s) => s.id);
   const byId = Object.fromEntries(real.map((s) => [s.id, s]));
@@ -106,7 +112,7 @@ export function SubtasksBlock({ task }: { task: Task }) {
     <section className="mt-3" aria-labelledby={`subtasks-${task.id}`} data-testid="checklist-block">
       <div className="flex items-center gap-2">
         <div id={`subtasks-${task.id}`}>
-          <FieldLabel hint="Шаги дела со счётчиком «0/2» в списке. Потяните ⋮⋮ пальцем, чтобы поменять порядок (стрелки — для клавиатуры).">
+          <FieldLabel hint="Шаги дела со счётчиком «0/2» в списке. Потяните ⋮⋮ пальцем или удерживайте шаг — «Выше / Ниже».">
             Чек-лист
           </FieldLabel>
         </div>
@@ -135,6 +141,11 @@ export function SubtasksBlock({ task }: { task: Task }) {
                 aria-label={`Перетащить «${item.title}»`}
                 title="Потяните, чтобы поменять порядок"
                 onPointerDown={(event) => beginDrag(event, item.id)}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                  event.preventDefault();
+                  moveSubtask(task.id, item.id, event.key === "ArrowUp" ? -1 : 1);
+                }}
                 className="drag-handle flex size-11 shrink-0 cursor-grab touch-none items-center justify-center text-subtle"
               >
                 <GripVertical className="size-5" />
@@ -143,7 +154,28 @@ export function SubtasksBlock({ task }: { task: Task }) {
                 type="button"
                 aria-pressed={item.done}
                 aria-label={`${item.done ? "Снять отметку" : "Отметить"}: ${item.title}`}
-                onClick={() => toggleSubtask(task.id, item.id)}
+                onClick={() => {
+                  if (pressed.current) {
+                    pressed.current = false;
+                    return;
+                  }
+                  toggleSubtask(task.id, item.id);
+                }}
+                onPointerDown={() => {
+                  window.clearTimeout(pressTimer.current);
+                  pressTimer.current = window.setTimeout(() => {
+                    pressed.current = true;
+                    setMenuId(item.id);
+                  }, LONG_PRESS_MS);
+                }}
+                onPointerUp={() => window.clearTimeout(pressTimer.current)}
+                onPointerLeave={() => window.clearTimeout(pressTimer.current)}
+                onPointerCancel={() => window.clearTimeout(pressTimer.current)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setMenuId(item.id);
+                }}
+                style={{ WebkitTouchCallout: "none" }}
                 className="flex h-11 min-w-0 flex-1 items-center gap-3 text-left text-sm"
               >
                 <span
@@ -156,18 +188,41 @@ export function SubtasksBlock({ task }: { task: Task }) {
                 </span>
                 <span className={item.done ? "text-subtle line-through" : "text-fg"}>{item.title}</span>
               </button>
-              <div className="flex shrink-0 flex-col">
-                <button type="button" aria-label="Выше" disabled={index === 0} className="p-0.5 text-subtle disabled:opacity-30" onClick={() => moveSubtask(task.id, item.id, -1)}>
-                  <ChevronUp className="size-3.5" />
-                </button>
-                <button type="button" aria-label="Ниже" disabled={index === subs.length - 1} className="p-0.5 text-subtle disabled:opacity-30" onClick={() => moveSubtask(task.id, item.id, 1)}>
-                  <ChevronDown className="size-3.5" />
-                </button>
-              </div>
               <Button size="icon" variant="ghost" aria-label={`Удалить подзадачу ${item.title}`} onClick={() => deleteSubtask(task.id, item.id)}>
                 <X className="size-4" />
               </Button>
             </div>
+            {menuId === item.id ? (
+              <div role="menu" aria-label={`Порядок «${item.title}»`} className="mb-1 ml-12 flex gap-1">
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={index === 0}
+                  onClick={() => {
+                    moveSubtask(task.id, item.id, -1);
+                    setMenuId(null);
+                  }}
+                  className="h-9 rounded-lg bg-elevated px-3 text-sm disabled:opacity-40"
+                >
+                  Выше
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={index === subs.length - 1}
+                  onClick={() => {
+                    moveSubtask(task.id, item.id, 1);
+                    setMenuId(null);
+                  }}
+                  className="h-9 rounded-lg bg-elevated px-3 text-sm disabled:opacity-40"
+                >
+                  Ниже
+                </button>
+                <button type="button" onClick={() => setMenuId(null)} className="h-9 px-2 text-sm text-muted">
+                  Готово
+                </button>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>

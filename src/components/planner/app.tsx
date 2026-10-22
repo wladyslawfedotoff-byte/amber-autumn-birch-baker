@@ -387,7 +387,7 @@ export function PlannerApp() {
                   className="w-full bg-transparent text-xl font-semibold tracking-tight outline-none md:font-display md:text-4xl md:font-normal"
                 />
               ) : (
-                <h1 className="truncate text-xl font-semibold tracking-tight md:font-display md:text-4xl md:font-normal">{viewTitle(view, lists)}</h1>
+                <h1 className="truncate text-xl font-semibold tracking-tight md:font-display md:text-4xl md:font-normal">{query.trim() ? "Поиск" : viewTitle(view, lists)}</h1>
               )}
               {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
             </div>
