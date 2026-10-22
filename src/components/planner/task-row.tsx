@@ -95,6 +95,8 @@ export const TaskRow = memo(function TaskRow({
   const swiped = useRef(false);
   const canTomorrow = !checked && !task.done;
   function onSwipeStart(event: PointerEvent<HTMLDivElement>) {
+    // A swipe that ended without a click must not eat the next real tap (1.15.1).
+    swiped.current = false;
     if (event.pointerType === "mouse" || event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest("input, textarea, .drag-handle")) return;
@@ -127,6 +129,10 @@ export const TaskRow = memo(function TaskRow({
       window.removeEventListener("pointercancel", end);
       if (mode !== "swipe") return;
       swiped.current = true;
+      // Only the click that belongs to this very gesture is swallowed.
+      window.setTimeout(() => {
+        swiped.current = false;
+      }, 400);
       setDragging(false);
       setDx(0);
       if (last >= SWIPE_AT) tick();
