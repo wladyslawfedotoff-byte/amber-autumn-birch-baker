@@ -6,6 +6,7 @@ import { WEEKDAY_SHORT, freqLabel, goalOf, goalProgress, isDue, stepOf } from "@
 import { amountOn, calendarCell, monthBars, monthStats, tapCompletes } from "@/lib/habit-view";
 import { monthGrid, shiftMonth } from "@/lib/habit-stats";
 import { usePlanner } from "@/lib/planner-store";
+import { useDismiss, usePopover } from "@/lib/popover";
 import type { Habit } from "@/lib/planner-types";
 import { DAYS, plural, pluralN } from "@/lib/plural";
 import { CheckinSheet } from "@/components/planner/habits/habit-checkin";
@@ -24,7 +25,9 @@ export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBa
   const today = todayIso();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [day, setDay] = useState<string | null>(null);
-  const [menu, setMenu] = useState(false);
+  const [menu, setMenu] = usePopover("habit-menu");
+  const menuBoxRef = useRef<HTMLDivElement>(null);
+  useDismiss(menu, () => setMenu(false), [menuBoxRef]);
   const [confirm, setConfirm] = useState(false);
   const [editing, setEditing] = useState(false);
   const hex = habitHex(habit);
@@ -43,7 +46,7 @@ export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBa
           <ChevronLeft className="size-5" />
         </button>
         <p className="min-w-0 flex-1 truncate text-center text-[0.9375rem] font-semibold">{habit.name}</p>
-        <div className="relative">
+        <div ref={menuBoxRef} className="relative">
           <button
             type="button"
             aria-label="Ещё"

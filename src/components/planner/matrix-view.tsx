@@ -1,9 +1,10 @@
 import { shortMaintTitle } from "@/lib/maintenance/short-title";
-import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type RefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { Check, Maximize2, Minimize2, MoveRight, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { dueLabel, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
+import { setPopover, useDismiss, usePopoverStore } from "@/lib/popover";
 import { isImportant, isUrgent, type Asset, type Task } from "@/lib/planner-types";
 import { colorHex } from "@/lib/task-colors";
 import { useDoneToast } from "@/lib/done-toast";
@@ -35,7 +36,18 @@ export function MatrixView({ selectedId, onOpen }: { selectedId: string | null; 
   const today = todayIso();
   const open = tasks.filter((task) => !task.done);
   const [expanded, setExpanded] = useState<number | null>(null);
-  const [menu, setMenu] = useState<Menu | null>(null);
+  const [menu, setMenuState] = useState<Menu | null>(null);
+  const menuActive = usePopoverStore((s) => s.id === "matrix-menu");
+  const setMenu = (next: Menu | null) => {
+    setPopover("matrix-menu", next !== null);
+    setMenuState(next);
+  };
+  // Another popover opened or the screen changed: this menu closes too.
+  useEffect(() => {
+    if (menu && !menuActive) setMenuState(null);
+  }, [menu, menuActive]);
+  const menuBoxRef = useRef<HTMLDivElement>(null);
+  useDismiss(menu !== null, () => setMenu(null), [menuBoxRef]);
   const [drag, setDrag] = useState<{ id: string; title: string; x: number; y: number; over: number | null } | null>(null);
 
   function move(taskId: string, quad: number) {
@@ -69,7 +81,7 @@ export function MatrixView({ selectedId, onOpen }: { selectedId: string | null; 
           />
         ))}
       </div>
-      {menu ? <MoveMenu menu={menu} tasks={open} onMove={move} onOpen={onOpen} onClose={() => setMenu(null)} /> : null}
+      {menu ? <MoveMenu boxRef={menuBoxRef} menu={menu} tasks={open} onMove={move} onOpen={onOpen} onClose={() => setMenu(null)} /> : null}
       {drag && drag.over != null ? (
         <div
           className="pointer-events-none fixed z-50 max-w-48 truncate rounded-md border border-line bg-elevated px-3 py-1.5 text-sm text-fg shadow"
@@ -311,12 +323,14 @@ function MatrixRow({
 }
 
 function MoveMenu({
+  boxRef,
   menu,
   tasks,
   onMove,
   onOpen,
   onClose,
 }: {
+  boxRef: RefObject<HTMLDivElement | null>;
   menu: Menu;
   tasks: Task[];
   onMove: (taskId: string, quad: number) => void;
@@ -329,6 +343,7 @@ function MoveMenu({
     <>
       <button type="button" aria-label="Закрыть меню" className="fixed inset-0 z-40 cursor-default bg-black/20" onClick={onClose} />
       <div
+        ref={boxRef}
         role="menu"
         aria-label={`Переместить «${menu.title}»`}
         className="fixed inset-x-3 bottom-20 z-50 rounded-2xl bg-elevated p-2 shadow-lg sm:inset-x-auto sm:bottom-auto sm:w-64"

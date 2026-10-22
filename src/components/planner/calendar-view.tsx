@@ -19,6 +19,7 @@ import { dotsFor, isoWeek, layoutDay, rangeStart, timeKey, timeRange } from "@/l
 import { CALENDAR_MODES, modeDays } from "@/lib/ui-prefs";
 import type { Asset, Milestone, Project, Task } from "@/lib/planner-types";
 import { usePlanner } from "@/lib/planner-store";
+import { useDismiss, usePopover } from "@/lib/popover";
 import { stageRange } from "@/lib/stage-range";
 import { colorHex } from "@/lib/task-colors";
 import { ageLabel, iconOf, occursOnDay } from "@/lib/special-dates";
@@ -113,7 +114,10 @@ export function CalendarView({
   const today = todayIso();
   const [cursor, setCursor] = useState(() => new Date());
   const [day, setDayState] = useState(today);
-  const [menu, setMenu] = useState(false);
+  const [menu, setMenu] = usePopover("calendar-mode");
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useDismiss(menu, () => setMenu(false), [menuButtonRef, menuRef]);
   const [hint, setHint] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -270,6 +274,7 @@ export function CalendarView({
         </button>
         <button
           type="button"
+          ref={menuButtonRef}
           aria-label="Вид календаря"
           aria-expanded={menu}
           onClick={() => setMenu(!menu)}
@@ -283,7 +288,7 @@ export function CalendarView({
         {menu ? (
           <>
             <button type="button" aria-label="Закрыть меню вида" tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setMenu(false)} />
-            <div className="card-lift absolute top-full right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl bg-elevated shadow-lg" role="menu" aria-label="Вид календаря">
+            <div ref={menuRef} className="card-lift absolute top-full right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl bg-elevated shadow-lg" role="menu" aria-label="Вид календаря">
               {CALENDAR_MODES.map((item) => (
                 <button
                   key={item.id}

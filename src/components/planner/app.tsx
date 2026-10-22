@@ -33,6 +33,7 @@ import { useViewportFrame } from "@/lib/use-viewport-frame";
 import { useShareScope } from "@/lib/use-share-scope";
 import { markReady, useBoot } from "@/lib/boot";
 import { PlannerSkeleton } from "@/components/planner/skeleton";
+import { closeAllPopovers, useDismiss, usePopover } from "@/lib/popover";
 import { closeMileage, kmAssetOf, openMileage, useMileagePrompt } from "@/lib/mileage-prompt";
 
 const MileageSheet = lazy(() => import("@/components/planner/maintenance/sheets").then((m) => ({ default: m.MileageSheet })));
@@ -131,7 +132,12 @@ export function PlannerApp() {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [drawer, setDrawer] = useState(false);
-  const [bell, setBell] = useState(false);
+  const [bell, setBell] = usePopover("bell");
+  const bellRef = useRef<HTMLSpanElement>(null);
+  const bellPanelRef = useRef<HTMLDivElement>(null);
+  useDismiss(bell, () => setBell(false), [bellRef, bellPanelRef]);
+  // Another screen, another task or the drawer: nothing stays hanging open.
+  useEffect(() => closeAllPopovers(), [view, selectedId, drawer]);
   const [confirmList, setConfirmList] = useState(false);
   const tabBar = usePlanner((s) => s.tabBar);
   const share = useShareScope();
@@ -405,7 +411,7 @@ export function PlannerApp() {
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-20 shrink-0 px-2 py-1.5 md:px-8 md:py-3">
+        <header className="relative z-35 shrink-0 px-2 py-1.5 md:px-8 md:py-3">
           <div className="flex items-center gap-2">
             <Button size="icon" variant="ghost" className="md:hidden" aria-label="Открыть меню" onClick={() => setDrawer(true)}>
               <Menu className="size-5" />
@@ -447,7 +453,9 @@ export function PlannerApp() {
               </Button>
             )}
             <SyncIndicator onOpen={() => openView("settings")} />
-            <ReminderBell dueCount={dueHits.length + assistantNotices.notices.length} open={bell} onToggle={() => setBell((open) => !open)} />
+            <span ref={bellRef} className="contents">
+              <ReminderBell dueCount={dueHits.length + assistantNotices.notices.length} open={bell} onToggle={() => setBell(!bell)} />
+            </span>
           </div>
           <SyncPill />
           {showSearch ? (
@@ -483,6 +491,7 @@ export function PlannerApp() {
                 className="fixed inset-0 z-20 cursor-default"
                 onClick={() => setBell(false)}
               />
+              <div ref={bellPanelRef}>
               <ReminderPanel
                 hits={hits}
                 onOpen={openHit}
@@ -498,6 +507,7 @@ export function PlannerApp() {
                   />
                 }
               />
+              </div>
             </>
           ) : null}
         </header>
@@ -613,7 +623,7 @@ export function PlannerApp() {
         ) : null}
 
         <nav
-          className="grid shrink-0 border-t border-line bg-surface pb-safe md:hidden"
+          className="relative z-36 grid shrink-0 border-t border-line bg-surface pb-safe md:hidden"
           style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
           aria-label="Основные разделы"
         >
