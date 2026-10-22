@@ -466,7 +466,7 @@ export function PlannerApp() {
           ) : null}
         </header>
 
-        {dueHits.length > 0 && bannerHidden !== bannerKey ? (
+        {view === "today" && !query.trim() && dueHits.length > 0 && bannerHidden !== bannerKey ? (
           <ReminderBanner
             due={dueHits}
             onOpen={openHit}

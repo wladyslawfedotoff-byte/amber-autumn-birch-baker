@@ -1,9 +1,10 @@
+import { shortMaintTitle } from "@/lib/maintenance/short-title";
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Check, Maximize2, Minimize2, MoveRight, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { dueLabel, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
-import { isImportant, isUrgent, type Task } from "@/lib/planner-types";
+import { isImportant, isUrgent, type Asset, type Task } from "@/lib/planner-types";
 import { colorHex } from "@/lib/task-colors";
 import { useDoneToast } from "@/lib/done-toast";
 
@@ -176,6 +177,8 @@ function Quadrant({
   );
 }
 
+const NO_ASSETS: Asset[] = [];
+
 function MatrixRow({
   task,
   quad,
@@ -197,6 +200,7 @@ function MatrixRow({
   onDrag: (drag: { id: string; title: string; x: number; y: number; over: number | null } | null) => void;
   onDrop: (taskId: string, quad: number) => void;
 }) {
+  const assets = usePlanner((s) => s.assets) ?? NO_ASSETS;
   const toggleTask = usePlanner((s) => s.toggleTask);
   const showToast = useDoneToast((s) => s.show);
   const overdue = task.due != null && task.due < today;
@@ -296,7 +300,7 @@ function MatrixRow({
         className="drag-handle flex h-8 min-w-0 flex-1 select-none items-center gap-1 pr-1 text-left"
         style={{ WebkitTouchCallout: "none" }}
       >
-        <span className={cn("min-w-0 flex-1 truncate text-fg", roomy ? "text-sm" : "text-[13px] leading-tight")}>{task.title}</span>
+        <span className={cn("min-w-0 flex-1 line-clamp-2 break-words text-fg", roomy ? "text-sm" : "text-[13px] leading-tight")}>{task.maint ? shortMaintTitle(task, assets) : task.title}</span>
         {dot ? <span className="size-1.5 shrink-0 rounded-full" style={{ background: dot }} aria-hidden="true" /> : null}
         {task.due && (roomy || task.due !== today) ? (
           <span className={cn("shrink-0 text-[10px] tabular-nums", overdue ? "text-danger" : "text-subtle")}>{dueLabel(task.due, today)}</span>

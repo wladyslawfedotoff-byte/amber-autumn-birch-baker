@@ -14,6 +14,50 @@ import { NewAssetSheet } from "./sheets";
 import { leadWarranty, warrantyText } from "@/lib/maintenance/warranty";
 import { Badge, KindIcon, WarrBadge, subtitle } from "./shared";
 import { StatsView } from "./stats";
+import { nearestByCard } from "@/lib/maintenance/nearest";
+import { shortMaintTitle } from "@/lib/maintenance/short-title";
+import { dueLabel } from "@/lib/dates";
+import { cn } from "@/lib/cn";
+import type { Task } from "@/lib/planner-types";
+
+/** «Ближайшее»: open auto tasks by card, nearest first — one line each. */
+function Nearest({ tasks, assets, onOpenTask, onOpenCard }: { tasks: Task[]; assets: Asset[]; onOpenTask?: (taskId: string) => void; onOpenCard: (assetId: string) => void }) {
+  const today = todayIso();
+  const groups = nearestByCard(tasks, assets);
+  if (!groups.length) return null;
+  return (
+    <section aria-label="Ближайшее" className="mb-4" data-testid="maint-nearest">
+      <p className="mb-1 px-1 text-xs font-medium text-subtle">Ближайшее</p>
+      <div className="overflow-hidden rounded-xl bg-elevated">
+        {groups.map(({ asset, tasks: items }) => (
+          <div key={asset.id} className="border-b border-line/60 px-3 py-1.5 last:border-0">
+            <p className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase text-subtle">
+              <button type="button" onClick={() => onOpenCard(asset.id)} className="flex min-h-7 min-w-0 items-center gap-1.5 uppercase">
+              <KindIcon kind={asset.kind} className="size-4 rounded-none border-0 bg-transparent [&_svg]:size-3.5" />
+              <span className="truncate">{asset.name}</span>
+              </button>
+            </p>
+            <ul>
+              {items.map((task) => {
+                const overdue = task.due != null && task.due < today;
+                return (
+                  <li key={task.id}>
+                    <button type="button" onClick={() => onOpenTask?.(task.id)} className="flex h-9 w-full items-center gap-2 text-left text-sm">
+                      <span className="min-w-0 flex-1 truncate text-fg">{shortMaintTitle(task, assets)}</span>
+                      <span className={cn("shrink-0 text-xs tabular-nums", overdue ? "text-danger" : task.due === today ? "text-accent" : "text-muted")}>
+                        {task.due ? dueLabel(task.due, today) : "без даты"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function lineOf(asset: Asset, summary: AssetSummary): string {
   const lead = summary.lead;
@@ -48,6 +92,7 @@ function Row({ asset, summary, onOpen }: { asset: Asset; summary: AssetSummary; 
 
 export function MaintenanceView({ onOpenTask }: { onOpenTask?: (taskId: string) => void }) {
   const assets = usePlanner((s) => s.assets) ?? [];
+  const tasks = usePlanner((s) => s.tasks);
   const [openId, setOpenId] = useState<string | null>(null);
   const [stats, setStats] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -97,6 +142,7 @@ export function MaintenanceView({ onOpenTask }: { onOpenTask?: (taskId: string) 
         </>
       ) : (
         <>
+          <Nearest tasks={tasks} assets={assets} onOpenTask={onOpenTask} onOpenCard={setOpenId} />
           {groups.map((g, i) => (
             <section key={g.id} aria-label={g.title} className={i ? "mt-4" : ""}>
               <p className="mb-1 flex items-baseline gap-1.5 px-1 text-xs font-medium text-subtle">
