@@ -30,7 +30,6 @@ function isLoginSurface(path: string): boolean {
 function isPublicAsset(path: string): boolean {
   return (
     path.startsWith("/assets/") ||
-    path.startsWith("/__grok/") ||
     path.startsWith("/icons/") ||
     path === "/apple-touch-icon.png" ||
     path === "/favicon.svg" ||
@@ -52,7 +51,7 @@ export default function auth(event: ServerEvent): Response | undefined {
 
   const config = getAuthConfig();
   if (config.mode === "unconfigured" || config.mode === "invalid") {
-    if (isPublicAsset(path) && path !== "/__grok/manifest.webmanifest") return undefined;
+    if (isPublicAsset(path)) return undefined;
     const now = Date.now();
     if (now - lastClosedLog > 60_000) {
       lastClosedLog = now;

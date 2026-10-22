@@ -1,8 +1,7 @@
 #!/bin/sh
 # Container entrypoint for «Пора».
 # 1. (root) prepare the data folder (${DATA_DIR:-/data}) and hand it to the app user;
-# 2. (app user) optional DB migrations when DATABASE_URL is set;
-# 3. exec the server as the unprivileged user (default: node 1000:1000,
+# 2. exec the server as the unprivileged user (default: node 1000:1000,
 #    override with PUID / PGID to match a Synology folder owner).
 set -eu
 
@@ -11,10 +10,6 @@ export DATA_DIR
 
 log() {
   echo "$(date -u +%Y-%m-%dT%H:%M:%S.000Z) $*"
-}
-
-run_as_app() {
-  "$@"
 }
 
 if [ "$(id -u)" = "0" ]; then
@@ -49,14 +44,6 @@ if [ "$(id -u)" = "0" ]; then
     log "ERROR entrypoint: data folder $DATA_DIR is not writable for uid $APP_UID — fix permissions or set PUID/PGID. Starting anyway (health will report 503)."
   fi
 
-  run_as_app() {
-    setpriv --reuid="$APP_UID" --regid="$APP_GID" --clear-groups "$@"
-  }
-fi
-
-if [ -n "${DATABASE_URL:-}" ]; then
-  log "INFO  entrypoint: running database migrations"
-  run_as_app node scripts/migrate.mjs
 fi
 
 if [ "$(id -u)" = "0" ]; then

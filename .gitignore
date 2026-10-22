@@ -9,6 +9,5 @@ node_modules/
 /data/
 /ci-data/
 .output/
-.vercel/
 .nitro/
 dist/

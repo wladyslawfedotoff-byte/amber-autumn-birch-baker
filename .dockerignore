@@ -1,8 +1,5 @@
 .git
 .github
-.grok/preview.log
-.grok/status
-.vercel
 .output
 node_modules
 dist

@@ -130,7 +130,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request, SHELL_CACHE));
     return;
   }
-  if (url.pathname.startsWith("/icons/") || url.pathname.startsWith("/__grok/") || /^\/(favicon\.(svg|ico)|apple-touch-icon\.png)$/.test(url.pathname)) {
+  if (url.pathname.startsWith("/icons/") || /^\/(favicon\.(svg|ico)|apple-touch-icon\.png|manifest\.webmanifest)$/.test(url.pathname)) {
     event.respondWith(staleWhileRevalidate(request));
   }
 });

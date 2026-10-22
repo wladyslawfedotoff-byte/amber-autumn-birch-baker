@@ -1,20 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { Columns3, List, Menu, Search, Trash2, X } from "lucide-react";
-import { AssistView } from "@/components/planner/assist-view";
 import { AssistantNoticeList } from "@/components/planner/assist-notices";
 import { useAssistantNotices } from "@/lib/assistant/use-notices";
-import { CalendarView } from "@/components/planner/calendar-view";
 import { ChecklistView } from "@/components/planner/checklist-view";
-import { DatesView } from "@/components/planner/dates-view";
 import { TaskDetail } from "@/components/planner/detail";
 import { FocusView, formatFocusClock } from "@/components/planner/focus-view";
-import { HabitsView } from "@/components/planner/habits-view";
-import { MatrixView } from "@/components/planner/matrix-view";
-import { ProjectsView } from "@/components/planner/projects-view";
-import { MaintenanceView } from "@/components/planner/maintenance/view";
 import { ReminderBanner, ReminderBell, ReminderPanel, useReminderChime, useReminderHits } from "@/components/planner/reminder-ui";
-import { ScheduleScreen } from "@/components/planner/schedule-screen";
-import { SettingsView } from "@/components/planner/settings-view";
 import { Sidebar } from "@/components/planner/sidebar";
 import { TaskViews } from "@/components/planner/task-views";
 import { Button } from "@/components/ui/button";
@@ -40,6 +31,43 @@ import { TAB_ICONS } from "@/components/planner/tab-icons";
 import { TAB_OPTIONS, canBoard } from "@/lib/ui-prefs";
 import { useViewportFrame } from "@/lib/use-viewport-frame";
 import { useShareScope } from "@/lib/use-share-scope";
+import { markReady, useBoot } from "@/lib/boot";
+import { PlannerSkeleton } from "@/components/planner/skeleton";
+import { closeMileage, kmAssetOf, openMileage, useMileagePrompt } from "@/lib/mileage-prompt";
+
+const MileageSheet = lazy(() => import("@/components/planner/maintenance/sheets").then((m) => ({ default: m.MileageSheet })));
+
+// 1.15: sections load on first open (and quietly in the background after start).
+const loaders = {
+  assist: () => import("@/components/planner/assist-view").then((m) => ({ default: m.AssistView })),
+  calendar: () => import("@/components/planner/calendar-view").then((m) => ({ default: m.CalendarView })),
+  dates: () => import("@/components/planner/dates-view").then((m) => ({ default: m.DatesView })),
+  habits: () => import("@/components/planner/habits-view").then((m) => ({ default: m.HabitsView })),
+  matrix: () => import("@/components/planner/matrix-view").then((m) => ({ default: m.MatrixView })),
+  projects: () => import("@/components/planner/projects-view").then((m) => ({ default: m.ProjectsView })),
+  maintenance: () => import("@/components/planner/maintenance/view").then((m) => ({ default: m.MaintenanceView })),
+  schedule: () => import("@/components/planner/schedule-screen").then((m) => ({ default: m.ScheduleScreen })),
+  settings: () => import("@/components/planner/settings-view").then((m) => ({ default: m.SettingsView })),
+};
+const AssistView = lazy(loaders.assist);
+const CalendarView = lazy(loaders.calendar);
+const DatesView = lazy(loaders.dates);
+const HabitsView = lazy(loaders.habits);
+const MatrixView = lazy(loaders.matrix);
+const ProjectsView = lazy(loaders.projects);
+const MaintenanceView = lazy(loaders.maintenance);
+const ScheduleScreen = lazy(loaders.schedule);
+const SettingsView = lazy(loaders.settings);
+
+/** After the first screen is up: fetch the other sections while the phone is idle, so a tab opens at once. */
+function preloadSections(): void {
+  const run = () => {
+    for (const load of Object.values(loaders)) void load().catch(() => undefined);
+  };
+  const idle = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (idle) idle(run, { timeout: 4000 });
+  else window.setTimeout(run, 2500);
+}
 
 function viewTitle(view: View, lists: { id: string; name: string }[]): string {
   if (view === "today") return "Сегодня";
@@ -93,6 +121,11 @@ export function PlannerApp() {
     shownProject.current = id;
   }, []);
   const [view, setView] = useState<View>("today");
+  const ready = useBoot((s) => s.ready);
+  const mileageAsset = useMileagePrompt((s) => s.assetId);
+  useEffect(() => {
+    if (ready) preloadSections();
+  }, [ready]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -130,6 +163,9 @@ export function PlannerApp() {
       const pristine = !(await hasSavedPlanner("srok-planner"));
       await usePlanner.persist.rehydrate();
       markLoaded();
+      // A saved copy is shown at once; a fresh device waits for the server copy (skeleton until then).
+      if (!pristine) markReady();
+      else window.setTimeout(markReady, 15_000);
       if (!cancelled) {
         stop = bindServerSync({ pristine, switched });
         stopAttach = bindAttachments();
@@ -466,19 +502,29 @@ export function PlannerApp() {
           ) : null}
         </header>
 
-        {view === "today" && !query.trim() && dueHits.length > 0 && bannerHidden !== bannerKey ? (
+        {ready && view === "today" && !query.trim() && dueHits.length > 0 && bannerHidden !== bannerKey ? (
           <ReminderBanner
             due={dueHits}
             onOpen={openHit}
             onAck={(hit) => ackReminder(hit.key, hit.stamp)}
+            kmFor={(hit) => (hit.kind === "task" ? kmAssetOf(usePlanner.getState().tasks.find((t) => t.id === hit.refId)) : undefined)}
+            onMileage={(assetId) => openMileage(assetId)}
             onMore={() => setBell(true)}
             onHide={() => setBannerHidden(bannerKey)}
           />
         ) : null}
 
+        {mileageAsset ? (
+          <Suspense fallback={null}>
+            <MileageSheet assetId={mileageAsset} onClose={closeMileage} />
+          </Suspense>
+        ) : null}
+
         <div className="relative flex min-h-0 flex-1 flex-col">
         <div className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-2 md:px-8 md:py-6", view === "assist" && !query.trim() ? "pb-0 md:pb-0" : "pb-24")}>
-          {showLists ? (
+          {!ready ? <PlannerSkeleton /> : null}
+          <Suspense fallback={<PlannerSkeleton />}>
+          {ready && showLists ? (
             <TaskViews
               key={view}
               view={view}
@@ -515,14 +561,14 @@ export function PlannerApp() {
               )}
             </div>
           ) : null}
-          {!query.trim() && view === "calendar" ? <CalendarView selectedId={selectedId} onOpen={setSelectedId} onDayChange={setCalendarDay} /> : null}
-          {!query.trim() && view === "checklist" ? <ChecklistView selectedId={selectedId} onOpen={setSelectedId} /> : null}
-          {!query.trim() && view === "matrix" ? <MatrixView selectedId={selectedId} onOpen={setSelectedId} /> : null}
-          {!query.trim() && view === "focus" ? <FocusView /> : null}
-          {!query.trim() && view === "habits" ? <HabitsView onOpenFocus={() => openView("focus")} /> : null}
-          {!query.trim() && view === "dates" ? <DatesView /> : null}
-          {!query.trim() && view === "assist" ? <AssistView onOpen={setSelectedId} openConversationId={assistOpen} headerSlot={assistSlot} projectId={assistProject} /> : null}
-          {!query.trim() && view === "schedule" ? (
+          {ready && !query.trim() && view === "calendar" ? <CalendarView selectedId={selectedId} onOpen={setSelectedId} onDayChange={setCalendarDay} /> : null}
+          {ready && !query.trim() && view === "checklist" ? <ChecklistView selectedId={selectedId} onOpen={setSelectedId} /> : null}
+          {ready && !query.trim() && view === "matrix" ? <MatrixView selectedId={selectedId} onOpen={setSelectedId} /> : null}
+          {ready && !query.trim() && view === "focus" ? <FocusView /> : null}
+          {ready && !query.trim() && view === "habits" ? <HabitsView onOpenFocus={() => openView("focus")} /> : null}
+          {ready && !query.trim() && view === "dates" ? <DatesView /> : null}
+          {ready && !query.trim() && view === "assist" ? <AssistView onOpen={setSelectedId} openConversationId={assistOpen} headerSlot={assistSlot} projectId={assistProject} /> : null}
+          {ready && !query.trim() && view === "schedule" ? (
             <ScheduleScreen
               onOpen={setSelectedId}
               onOpenProjects={openProject}
@@ -533,9 +579,10 @@ export function PlannerApp() {
               }}
             />
           ) : null}
-          {!query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} onOpenChange={onProjectShown} /> : null}
-          {!query.trim() && view === "maintenance" ? <MaintenanceView onOpenTask={setSelectedId} /> : null}
-          {!query.trim() && view === "settings" ? <SettingsView onView={openView} /> : null}
+          {ready && !query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} onOpenChange={onProjectShown} /> : null}
+          {ready && !query.trim() && view === "maintenance" ? <MaintenanceView onOpenTask={setSelectedId} /> : null}
+          {ready && !query.trim() && view === "settings" ? <SettingsView onView={openView} /> : null}
+          </Suspense>
         </div>
         {quick ? (
           <Fab

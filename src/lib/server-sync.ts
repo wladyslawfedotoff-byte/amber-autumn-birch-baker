@@ -26,6 +26,8 @@
  *   412 user_mismatch. «Выйти» clears the local copy after uploading it.
  */
 import { usePlanner } from "@/lib/planner-store";
+import { markReady } from "@/lib/boot";
+import { partialDocument, runSyncOnce, UserMismatch, type PatchAnswer, type RemoteDoc } from "@/lib/sync/engine";
 import { DEFAULT_ARCHIVE_DAYS, normalizeArchiveDays } from "@/lib/task-done";
 import type { Asset, Habit, Milestone, Project, Task, TaskList } from "@/lib/planner-types";
 import { setClockOffset, syncNow } from "@/lib/sync/clock";
@@ -70,6 +72,8 @@ type Meta = {
   syncedThrough: number | null;
   /** Whose data this device holds (several profiles only). */
   login: string | null;
+  /** 1.15: the next upload must be the whole document (see src/lib/sync/engine.ts). */
+  full: boolean;
 };
 
 export type SyncPhase = "idle" | "syncing" | "offline" | "error" | "unauthorized" | "unavailable";
@@ -91,17 +95,6 @@ export type ServerSyncStatus = {
   offline: boolean;
 };
 
-type RemoteDoc = {
-  revision: number;
-  updatedAt: number;
-  serverNow: number;
-  cutoff: number;
-  data: unknown;
-  user?: string;
-  profiles?: boolean;
-  /** Profile that owns data created before profiles were enabled. */
-  owner?: string;
-};
 
 const DEFAULT_META: Meta = {
   base: null,
@@ -112,6 +105,7 @@ const DEFAULT_META: Meta = {
   clockOffset: 0,
   syncedThrough: null,
   login: null,
+  full: false,
 };
 
 function storage(): Storage | null {
@@ -271,16 +265,35 @@ function fillHabit(habit: SyncEntity): SyncEntity {
   return Array.isArray(habit.checks) ? habit : { ...habit, checks: [] };
 }
 
+/**
+ * Keep the previous object for every entity whose content did not change, so
+ * memoized rows skip redrawing after a sync (1.15). Same list back when nothing changed.
+ */
+export function keepSame<T extends { id?: unknown }>(prev: readonly T[] | undefined, next: T[]): T[] {
+  if (!prev?.length) return next;
+  const byId = new Map<unknown, T>();
+  for (const item of prev) byId.set(item.id, item);
+  let same = prev.length === next.length;
+  const out = next.map((item, index) => {
+    const old = byId.get(item.id);
+    const kept = old !== undefined && JSON.stringify(old) === JSON.stringify(item) ? old : item;
+    if (kept !== prev[index]) same = false;
+    return kept;
+  });
+  return same ? (prev as T[]) : out;
+}
+
 function applyData(data: SyncData): void {
   applying++;
   try {
+    const cur = usePlanner.getState();
     usePlanner.setState({
-      lists: data.lists as unknown as TaskList[],
-      tasks: data.tasks.map(fillTask) as unknown as Task[],
-      habits: data.habits.map(fillHabit) as unknown as Habit[],
-      milestones: data.milestones.map(fillMilestone) as unknown as Milestone[],
-      projects: data.projects.map(fillProject) as unknown as Project[],
-      assets: data.assets.map(fillAsset) as unknown as Asset[],
+      lists: keepSame(cur.lists, data.lists as unknown as TaskList[]),
+      tasks: keepSame(cur.tasks, data.tasks.map(fillTask) as unknown as Task[]),
+      habits: keepSame(cur.habits, data.habits.map(fillHabit) as unknown as Habit[]),
+      milestones: keepSame(cur.milestones, data.milestones.map(fillMilestone) as unknown as Milestone[]),
+      projects: keepSame(cur.projects, data.projects.map(fillProject) as unknown as Project[]),
+      assets: keepSame(cur.assets ?? [], data.assets.map(fillAsset) as unknown as Asset[]),
       workStart: data.settings.workStart,
       workEnd: data.settings.workEnd,
       settingsUpdatedAt: data.settings.updatedAt,
@@ -360,6 +373,7 @@ function integrate(remote: RemoteDoc, timing?: { t0: number; t1: number }): bool
   }
   pristine = false;
   if (!sameData(merged, localData())) applyData(merged);
+  markReady();
   const needsPush = !sameData(pruneTombstones(merged, cutoff), pruneTombstones(remoteData, cutoff));
   const synced = !needsPush && Number.isFinite(remote.serverNow) ? { syncedThrough: remote.serverNow } : {};
   writeMeta({
@@ -412,7 +426,7 @@ function failure(response: Response, body: Record<string, unknown> | null): Sync
   return new SyncError("error", message, response.status);
 }
 
-async function call(method: "GET" | "PUT", base?: number, body?: string, keepalive = false): Promise<{ status: number; doc: RemoteDoc }> {
+async function call(method: "GET" | "PUT", base?: number, body?: string, keepalive = false, known: number | null = null): Promise<{ status: number; doc: RemoteDoc }> {
   let response: Response;
   try {
     response = await fetch("/api/sync", {
@@ -423,6 +437,7 @@ async function call(method: "GET" | "PUT", base?: number, body?: string, keepali
       ...(keepalive || typeof AbortSignal === "undefined" || !("timeout" in AbortSignal) ? {} : { signal: AbortSignal.timeout(method === "PUT" ? PUT_TIMEOUT_MS : GET_TIMEOUT_MS) }),
       headers: {
         Accept: "application/json",
+        ...(method === "GET" && known !== null ? { "If-None-Match": `"${known}"` } : {}),
         ...(method === "PUT" ? { "Content-Type": "application/json", "If-Match": `"${base ?? 0}"` } : {}),
         ...(method === "PUT" && readMeta().login ? { "X-Pora-User": readMeta().login! } : {}),
       },
@@ -431,6 +446,7 @@ async function call(method: "GET" | "PUT", base?: number, body?: string, keepali
   } catch {
     throw new SyncError("offline", "Нет связи с сервером.");
   }
+  if (response.status === 304) return { status: 304, doc: null as unknown as RemoteDoc };
   const json = await readJson(response);
   if ((response.ok || response.status === 409) && json && typeof json.revision === "number") {
     return { status: response.status, doc: json as unknown as RemoteDoc };
@@ -438,54 +454,89 @@ async function call(method: "GET" | "PUT", base?: number, body?: string, keepali
   throw failure(response, json);
 }
 
+/** 1.15: upload only the changed entities. `null` = this server has no PATCH yet. */
+async function callPatch(base: number, body: string, keepalive = false): Promise<PatchAnswer | null> {
+  let response: Response;
+  try {
+    response = await fetch("/api/sync", {
+      method: "PATCH",
+      cache: "no-store",
+      credentials: "same-origin",
+      keepalive,
+      ...(keepalive || typeof AbortSignal === "undefined" || !("timeout" in AbortSignal) ? {} : { signal: AbortSignal.timeout(PUT_TIMEOUT_MS) }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "If-Match": `"${base}"`,
+        ...(readMeta().login ? { "X-Pora-User": readMeta().login! } : {}),
+      },
+      body,
+    });
+  } catch {
+    throw new SyncError("offline", "Нет связи с сервером.");
+  }
+  if (response.status === 404 || response.status === 405) return null;
+  const json = await readJson(response);
+  if (response.ok && json && typeof json.revision === "number" && typeof json.prevRevision === "number") {
+    if (typeof json.serverNow === "number") setClockOffset(json.serverNow - Date.now());
+    return json as unknown as PatchAnswer;
+  }
+  if (response.status === 412 && json?.error === "user_mismatch") {
+    // Another profile: fall back to the full path, which handles the switch.
+    writeMeta({ full: true });
+  }
+  throw failure(response, json);
+}
+
+/** Changed entities from the journal, or null when nothing is journalled. */
+function partialBody(): string | null {
+  const doc = partialDocument(localData(), outbox.entries);
+  return doc ? JSON.stringify(doc) : null;
+}
+
+const patchSupported = { value: true };
+
 // ---- run loop ----------------------------------------------------------------
 
 let redirecting = false;
 
 async function runOnce(): Promise<void> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    markReady();
     setPhase("offline");
     return;
   }
   setPhase("syncing");
   const carried = outbox.seq;
   try {
-    let settled = false;
-    for (let attempt = 0; attempt < 5 && !settled; attempt++) {
-      let meta = readMeta();
-      if (meta.base === null || !meta.dirty) {
-        const t0 = Date.now();
-        const { doc } = await call("GET");
-        integrate(doc, { t0, t1: Date.now() });
-        meta = readMeta();
-        if (!meta.dirty) {
-          settled = true;
-          break;
-        }
-      }
-      const seq = editSeq;
-      const t0 = Date.now();
-      let put: Awaited<ReturnType<typeof call>>;
-      try {
-        put = await call("PUT", meta.base ?? 0, JSON.stringify(localData()));
-      } catch (error) {
-        if (error instanceof SyncError && error.status === 412) {
+    const { settled } = await runSyncOnce(
+      {
+        readMeta,
+        writeMeta: (patch) => void writeMeta(patch),
+        editSeq: () => editSeq,
+        get: async (known) => (await call("GET", undefined, undefined, false, known)).doc ?? null,
+        put: async (base, body) => {
+          try {
+            return await call("PUT", base, body);
+          } catch (error) {
+            if (error instanceof SyncError && error.status === 412) throw new UserMismatch();
+            throw error;
+          }
+        },
+        patch: callPatch,
+        integrate,
+        fullBody: () => JSON.stringify(localData()),
+        partialBody,
+        onUserMismatch: () => {
           // Another profile signed in on this device: never upload the old local copy into it.
           writeMeta({ ...DEFAULT_META, clockOffset: readMeta().clockOffset });
           forceReplace = true;
-          continue;
-        }
-        throw error;
-      }
-      const { status: code, doc } = put;
-      const needsPush = integrate(doc, { t0, t1: Date.now() });
-      if (code === 409) {
-        settled = !needsPush;
-        continue;
-      }
-      settled = !needsPush && editSeq === seq;
-      if (!settled) writeMeta({ dirty: true });
-    }
+        },
+        forceFresh: () => forceReplace,
+        now: () => Date.now(),
+      },
+      patchSupported,
+    );
     writeMeta({ lastSyncAt: Date.now(), lastError: null });
     // The server now holds everything that was journalled before this run.
     if (!readMeta().dirty) delivered(outbox.seq);
@@ -496,6 +547,8 @@ async function runOnce(): Promise<void> {
   } catch (error) {
     const err = error instanceof SyncError ? error : new SyncError("error", error instanceof Error ? error.message : "Не удалось синхронизировать.");
     writeMeta({ lastError: err.message });
+    // No server copy now: show what this device has (maybe nothing) instead of the skeleton.
+    if (err.kind !== "unauthorized") markReady();
     if (err.kind !== "unauthorized") {
       // Try again later with a growing delay (and at once when the network is back).
       setOutbox(failed(outbox, Date.now()));
@@ -553,15 +606,28 @@ function flushOnHide(): void {
   const meta = readMeta();
   if (!meta.dirty || meta.base === null || redirecting) return;
   window.clearTimeout(pushTimer);
-  const body = JSON.stringify(localData());
   const t0 = Date.now();
   const carried = outbox.seq;
-  void call("PUT", meta.base, body, body.length < KEEPALIVE_LIMIT)
+  const base = meta.base;
+  // 1.15: a few changed entities fit into a keepalive request even with a big planner.
+  const partial = !meta.full && patchSupported.value ? partialBody() : null;
+  if (partial !== null && partial.length < KEEPALIVE_LIMIT) {
+    void callPatch(base, partial, true)
+      .then((answer) => {
+        if (running || !answer || answer.prevRevision !== base) return;
+        writeMeta({ base: answer.revision, revision: answer.revision, dirty: outbox.seq !== carried, lastSyncAt: Date.now(), lastError: null });
+        if (!readMeta().dirty) delivered(carried);
+      })
+      .catch(() => undefined);
+    return;
+  }
+  const body = JSON.stringify(localData());
+  void call("PUT", base, body, body.length < KEEPALIVE_LIMIT)
     .then(({ doc }) => {
       if (running) return;
       integrate(doc, { t0, t1: Date.now() });
       if (!readMeta().dirty) {
-        writeMeta({ lastSyncAt: Date.now(), lastError: null });
+        writeMeta({ lastSyncAt: Date.now(), lastError: null, full: false });
         delivered(carried);
       }
     })
@@ -629,7 +695,8 @@ export function importBackupData(raw: unknown): number | null {
   if (added > 0) {
     applyData(next);
     editSeq++;
-    writeMeta({ dirty: true });
+    // Not journalled entity by entity: upload the whole document.
+    writeMeta({ dirty: true, full: true });
     schedulePush(0);
   }
   return added;

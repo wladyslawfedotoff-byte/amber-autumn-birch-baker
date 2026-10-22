@@ -1,6 +1,4 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
-import { AuthProvider } from "@/lib/auth/provider";
-import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { APPLE_TOUCH_ICONS, FAVICON_ICO, FAVICON_SVG, MANIFEST_URL } from "@/lib/app-icons";
 import { APP_DESCRIPTION, APP_NAME, APP_TITLE } from "@/lib/site";
 import appCss from "../styles.css?url";
@@ -18,6 +16,11 @@ export const Route = createRootRoute({
         content: APP_DESCRIPTION,
       },
       { name: "theme-color", content: "#f6f4ef" },
+      { property: "og:type", content: "website" },
+      { property: "og:title", content: APP_TITLE },
+      { property: "og:description", content: APP_DESCRIPTION },
+      { property: "og:image", content: "/og.jpg" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: FAVICON_SVG },
@@ -39,10 +42,7 @@ export const Route = createRootRoute({
         <HeadContent />
       </head>
       <body>
-        <PreviewHostBridge />
-        <AuthProvider>
-          <Outlet />
-        </AuthProvider>
+        <Outlet />
         <Scripts />
       </body>
     </html>

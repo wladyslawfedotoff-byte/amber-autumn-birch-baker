@@ -11,7 +11,9 @@ export default async function syncGet(event: ServerEvent): Promise<Response> {
   const doc = acl ? await getStore().getFor(user.login, acl) : await getStore().get();
   const etag = `"${doc.revision}"`;
   const now = Date.now();
-  if (event.req.headers.get("if-none-match") === etag) {
+  // A proxy that compresses may turn the tag into W/"…": compare the revision only.
+  const known = (event.req.headers.get("if-none-match") ?? "").split(",").map((tag) => tag.trim().replace(/^W\//, ""));
+  if (known.includes(etag)) {
     return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store", "x-server-now": String(now), vary: "cookie" } });
   }
   return json(

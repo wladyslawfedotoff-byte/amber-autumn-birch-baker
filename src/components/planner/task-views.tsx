@@ -2,6 +2,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { Archive, ChevronDown, ChevronRight, GripVertical, Lock, RotateCcw, Trash2 } from "lucide-react";
 import { TodayStrip, TodaySummary, WeekDays } from "@/components/planner/today-strip";
 import { AddTaskForm, TaskRow } from "@/components/planner/task-row";
+import { RowWindow } from "@/components/planner/row-window";
 import { Button } from "@/components/ui/button";
 import { InlineHint } from "@/components/ui/hint";
 import { Empty } from "@/components/planner/empty-state";
@@ -78,7 +79,7 @@ export function TaskViews({
         </button>
         {doneFolded ? null : (
           <>
-            {done.map((task) => (
+            <RowWindow items={done}>{(task) => (
               <TaskRow
                 key={task.id}
                 task={task}
@@ -89,7 +90,7 @@ export function TaskViews({
                 onOpen={onOpen}
                 ticked={!task.done && repeatTickedOn(task, today)}
               />
-            ))}
+            )}</RowWindow>
             <InlineHint label="Куда уходят выполненные" className="mt-1">
               {archiveDays > 0
                 ? `Выполненные задачи уходят в «Архив» ${archiveOptionLabel(archiveDays)} — срок меняется в «Настройках».`
@@ -145,7 +146,7 @@ export function TaskViews({
           {found.length === 0 ? (
             <Empty title="Ничего не нашлось" hint="Попробуйте другое слово, тег или название списка." />
           ) : (
-            found.map((task) => (
+            <RowWindow items={found}>{(task) => (
               <TaskRow
                 key={task.id}
                 task={task}
@@ -155,7 +156,7 @@ export function TaskViews({
                 showList
                 onOpen={onOpen}
               />
-            ))
+            )}</RowWindow>
           )}
         </div>
       ) : view === "week" && !board ? (
@@ -186,7 +187,7 @@ export function TaskViews({
             <Empty title="На этот день пусто" hint="Добавьте задачу или перенесите сюда с другого дня." />
           ) : (
             <div className="mt-2">
-              {open.map((task) => (
+              <RowWindow items={open}>{(task) => (
                 <TaskRow
                   key={task.id}
                   task={task}
@@ -196,7 +197,7 @@ export function TaskViews({
                   showList
                   onOpen={onOpen}
                 />
-              ))}
+              )}</RowWindow>
             </div>
           )}
         </>
@@ -220,7 +221,7 @@ export function TaskViews({
         doneAll(recentDone(tasks, now, archiveDays), selectedId, today, onOpen, archiveDays)
       ) : (
         <div className="mt-2">
-          {open.map((task) => (
+          <RowWindow items={open}>{(task) => (
             <TaskRow
               key={task.id}
               task={task}
@@ -230,7 +231,7 @@ export function TaskViews({
               showList={view.startsWith("tag:") || view === "shared"}
               onOpen={onOpen}
             />
-          ))}
+          )}</RowWindow>
         </div>
       )}
 
@@ -262,7 +263,7 @@ function doneAll(
           : "Все выполненные задачи. Автоархив выключен в «Настройках»."}{" "}
         Кружок слева — вернуть задачу в работу.
       </InlineHint>
-      {items.map((task) => (
+      <RowWindow items={items}>{(task) => (
         <TaskRow
           key={task.id}
           task={task}
@@ -272,7 +273,7 @@ function doneAll(
           showList
           onOpen={onOpen}
         />
-      ))}
+      )}</RowWindow>
     </div>
   );
 }
@@ -298,7 +299,7 @@ function TodayGroups({
       {overdue.length > 0 ? (
         <section className="mt-3">
           <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-danger">Просрочено</h2>
-          {overdue.map((task) => (
+          <RowWindow items={overdue}>{(task) => (
             <TaskRow
               key={task.id}
               task={task}
@@ -309,15 +310,14 @@ function TodayGroups({
               foldSubtasks
               onOpen={onOpen}
             />
-          ))}
+          )}</RowWindow>
         </section>
       ) : null}
       {current.length > 0 ? (
         <section className="mt-3">
           <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-subtle">На сегодня</h2>
-          {[...current]
-            .sort((a, b) => (a.startAt ?? a.remindAt ?? "99:99").localeCompare(b.startAt ?? b.remindAt ?? "99:99"))
-            .map((task) => (
+          <RowWindow items={[...current].sort((a, b) => (a.startAt ?? a.remindAt ?? "99:99").localeCompare(b.startAt ?? b.remindAt ?? "99:99"))}>
+            {(task) => (
             <TaskRow
               key={task.id}
               task={task}
@@ -328,7 +328,8 @@ function TodayGroups({
               foldSubtasks
               onOpen={onOpen}
             />
-          ))}
+          )}
+          </RowWindow>
         </section>
       ) : null}
     </div>

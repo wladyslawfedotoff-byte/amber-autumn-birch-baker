@@ -48,7 +48,6 @@ services:
       # Публичный адрес за Reverse Proxy DSM, С портом (проверка Origin/CSRF).
       APP_URL: "https://pora.example.synology.me:8443"
       DATA_DIR: /data
-      VITE_GROK_EXTENSIONS: "0"
     volumes:
       - ./data:/data
     ports:
