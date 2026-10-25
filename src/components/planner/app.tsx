@@ -138,6 +138,7 @@ export function PlannerApp() {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const drawerSwipe = useRef<{ x: number; y: number } | null>(null);
   const [bell, setBell] = usePopover("bell");
   const bellRef = useRef<HTMLSpanElement>(null);
   const bellPanelRef = useRef<HTMLDivElement>(null);
@@ -423,7 +424,20 @@ export function PlannerApp() {
         // Full height (under the status bar too); the panel pads itself by the safe areas.
         <div className="absolute inset-0 z-40 md:hidden">
           <button type="button" className="scrim absolute inset-0" aria-label="Закрыть меню" onClick={() => setDrawer(false)} />
-          <div className="drawer-panel sheet-safe absolute inset-y-0 left-0 flex w-[19rem] max-w-[86vw] flex-col bg-bg pt-[env(safe-area-inset-top)] shadow-xl">
+          <div
+            className="drawer-panel sheet-safe absolute inset-y-0 left-0 flex w-[19rem] max-w-[86vw] flex-col bg-bg pt-[env(safe-area-inset-top)] shadow-xl"
+            // Swipe left closes the menu (a mostly horizontal move of 60 px or more).
+            onTouchStart={(event) => {
+              const t = event.touches[0];
+              drawerSwipe.current = t ? { x: t.clientX, y: t.clientY } : null;
+            }}
+            onTouchEnd={(event) => {
+              const from = drawerSwipe.current;
+              const t = event.changedTouches[0];
+              drawerSwipe.current = null;
+              if (from && t && from.x - t.clientX > 60 && Math.abs(t.clientY - from.y) < from.x - t.clientX) setDrawer(false);
+            }}
+          >
             <Sidebar view={view} onView={openView} onClose={() => setDrawer(false)} onProject={openProject} />
           </div>
         </div>

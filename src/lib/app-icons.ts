@@ -4,7 +4,7 @@
  * Sources: public/icons/icon.svg (full bleed — iOS rounds the corners itself),
  * icon-maskable.svg (artwork inside the safe circle), public/favicon.svg.
  */
-export const ICON_VERSION = "1.18.0";
+export const ICON_VERSION = "1.19.0";
 
 const v = (path: string) => `${path}?v=${ICON_VERSION}`;
 
