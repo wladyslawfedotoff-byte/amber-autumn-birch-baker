@@ -713,10 +713,11 @@ export function PlannerApp() {
                 type="button"
                 aria-current={active ? "page" : undefined}
                 onClick={() => openView(id)}
-                className={cn("flex h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 text-[0.6875rem]", active ? "text-accent-ink" : "text-subtle")}
+                className={cn("@container flex h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1", active ? "text-accent-ink" : "text-subtle")}
               >
-                <Icon className="size-[1.375rem]" strokeWidth={active ? 2 : 1.75} />
-                <span className="max-w-full truncate px-1">{label}</span>
+                <Icon className="size-[1.375rem] shrink-0" strokeWidth={active ? 2 : 1.75} />
+                {/* Крупный текст (1.22): подпись уменьшается по ширине вкладки, а в совсем узкой — прячется (остаётся для VoiceOver). */}
+                <span className="tab-label max-w-full truncate px-0.5">{label}</span>
               </button>
             );
           })}

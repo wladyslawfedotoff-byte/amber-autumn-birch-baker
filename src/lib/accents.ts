@@ -1,5 +1,5 @@
 export const ACCENTS = [
-  { id: "orange", name: "Оранжевый (по умолчанию)", swatch: "swatch-orange" },
+  { id: "orange", name: "Оранжевый", swatch: "swatch-orange" },
   { id: "ink", name: "Чернила", swatch: "swatch-ink" },
   { id: "blue", name: "Синий", swatch: "swatch-blue" },
   { id: "teal", name: "Бирюза", swatch: "swatch-teal" },

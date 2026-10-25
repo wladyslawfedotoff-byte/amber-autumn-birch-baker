@@ -1,4 +1,4 @@
-import { ageLabel, daysLeftLabel, iconOf, showInTodayNow } from "@/lib/special-dates";
+import { daysLeftLabel, iconOf, showInTodayNow } from "@/lib/special-dates";
 import { daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter, occursOn } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { cn } from "@/lib/cn";
@@ -38,7 +38,16 @@ export function TodaySummary() {
 
   return (
     <div className="mb-3">
-      <p className="text-base font-semibold tracking-tight text-fg">{line}</p>
+      {/* 1.22: сводка и ближайшая дата — одной строкой. */}
+      <p className="truncate text-base font-semibold tracking-tight text-fg">
+        {line}
+        {!flagged.length && nextDate ? (
+          <span className="text-caption font-normal tracking-normal text-muted">
+            {" · "}
+            {nextDate.item.title} — {daysLeftLabel(nextDate.days)}
+          </span>
+        ) : null}
+      </p>
       {flagged.length ? (
         <ul className="mt-1 space-y-1">
           {flagged.map((row) => (
@@ -49,11 +58,6 @@ export function TodaySummary() {
             </li>
           ))}
         </ul>
-      ) : nextDate ? (
-        <p className="text-xs text-muted">
-          {nextDate.item.title} — {daysLeftLabel(nextDate.days)}
-          {ageLabel(nextDate.item, shiftIso(today, nextDate.days), today) ? `, ${ageLabel(nextDate.item, shiftIso(today, nextDate.days), today)}` : ""}
-        </p>
       ) : null}
     </div>
   );

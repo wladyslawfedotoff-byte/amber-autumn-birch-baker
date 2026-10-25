@@ -3,6 +3,8 @@ export type QuickTask = {
   due: string | null;
   startAt: string | null;
   endAt: string | null;
+  /** «#дом #звонки» (1.22): теги без «#», в нижнем регистре, без повторов. */
+  tags: string[];
 };
 
 const WEEKDAY: Record<string, number> = {
@@ -76,6 +78,12 @@ function cut(text: string, re: RegExp): { text: string; match: RegExpMatchArray 
 /** Pull a date and a time out of a Russian task line. The rest stays the title. */
 export function parseQuick(raw: string, today = iso(new Date())): QuickTask {
   let text = raw.replace(/\s+/g, " ").trim();
+  const tags: string[] = [];
+  text = text.replace(/(^|\s)#([\p{L}][\p{L}\p{N}_-]*)(?=\s|$)/gu, (_all, lead: string, tag: string) => {
+    const clean = tag.toLowerCase();
+    if (!tags.includes(clean)) tags.push(clean);
+    return lead;
+  });
   let due: string | null = null;
   let startAt: string | null = null;
   let endAt: string | null = null;
@@ -168,5 +176,5 @@ export function parseQuick(raw: string, today = iso(new Date())): QuickTask {
   }
 
   const title = text.replace(/^[,.:\-–—]+|[,.:\-–—]+$/g, "").replace(/\s+/g, " ").trim();
-  return { title, due, startAt, endAt };
+  return { title, due, startAt, endAt, tags };
 }

@@ -386,12 +386,15 @@ export function AddTaskForm({
   inputRef,
   className,
   onEscape,
+  onDraft,
 }: {
   placeholder: string;
   /** Lets the bottom composer focus the field inside the tap (iOS opens the keyboard only then). */
   inputRef?: Ref<HTMLInputElement>;
   className?: string;
   onEscape?: () => void;
+  /** Текст поля при каждом изменении — шапка быстрого добавления следует распознанной дате (1.22). */
+  onDraft?: (text: string) => void;
   /** `options`: the user dropped the recognised date / time — pass them on to addTask. */
   onAdd: (title: string, options: QuickOptions) => void;
 }) {
@@ -411,6 +414,7 @@ export function AddTaskForm({
           if (!title || !parseQuick(title).title) return;
           onAdd(title, { noDate, noTime: noTime || noDate });
           setValue("");
+          onDraft?.("");
           setNoDate(false);
           setNoTime(false);
         }}
@@ -437,6 +441,7 @@ export function AddTaskForm({
           value={value}
           onChange={(event) => {
             setValue(event.target.value);
+            onDraft?.(event.target.value);
             setPasted(0);
             if (!event.target.value) {
               setNoDate(false);
@@ -465,13 +470,18 @@ export function AddTaskForm({
           Добавлено задач: {pasted}
         </p>
       ) : null}
-      {parsed.due || parsed.startAt ? (
+      {parsed.due || parsed.startAt || parsed.tags.length ? (
         <p className="mt-1 flex flex-wrap items-center gap-1 px-2 text-xs text-muted">
           <span className="text-subtle">Распознано:</span>
           {parsed.due ? (
             <QuickChip label={dueLabel(parsed.due, todayIso())} off={noDate} onToggle={() => setNoDate(!noDate)} what="дату" />
           ) : null}
           {timeText ? <QuickChip label={timeText} off={noTime || noDate} onToggle={() => setNoTime(!noTime)} what="время" /> : null}
+          {parsed.tags.map((tag) => (
+            <span key={tag} className="inline-flex h-8 items-center rounded-full border border-separator bg-surface-2 px-2.5 text-caption text-label">
+              #{tag}
+            </span>
+          ))}
           {noDate ? <span>· без даты</span> : noTime && timeText ? <span>· на весь день</span> : null}
         </p>
       ) : null}

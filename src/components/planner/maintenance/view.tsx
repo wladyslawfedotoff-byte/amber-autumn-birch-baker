@@ -32,7 +32,7 @@ function Nearest({ tasks, assets, onOpenTask, onOpenCard }: { tasks: Task[]; ass
         {groups.map(({ asset, tasks: items }) => (
           <div key={asset.id} className="border-b border-line/60 px-3 py-2 last:border-0">
             <p className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase text-subtle">
-              <button type="button" onClick={() => onOpenCard(asset.id)} className="flex min-h-7 min-w-0 items-center gap-2 uppercase">
+              <button type="button" onClick={() => onOpenCard(asset.id)} className="hit flex min-h-7 min-w-0 items-center gap-2 uppercase">
               <KindIcon kind={asset.kind} className="size-4 rounded-none border-0 bg-transparent [&_svg]:size-3.5" />
               <span className="truncate">{asset.name}</span>
               </button>

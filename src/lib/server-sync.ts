@@ -60,7 +60,7 @@ const OUTBOX_KEY = "outbox";
 const GET_TIMEOUT_MS = 20_000;
 /** Uploads get longer: a big document over a slow line is still progress. */
 const PUT_TIMEOUT_MS = 90_000;
-const SYNCED_FLASH_MS = 2_500;
+const SYNCED_FLASH_MS = 1_500; // 1.22: короче, чтобы плашка не висела над «Сегодня»
 
 type Meta = {
   base: number | null;

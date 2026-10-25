@@ -10,6 +10,7 @@ test("date and time leave the title", () => {
     due: "2026-10-06",
     startAt: "10:00",
     endAt: null,
+    tags: [],
   });
 });
 
@@ -33,5 +34,15 @@ test("plain title stays plain", () => {
     due: null,
     startAt: null,
     endAt: null,
+    tags: [],
   });
+});
+
+test("#теги: уходят из названия в теги, без повторов и в нижнем регистре", () => {
+  const parsed = parseQuick("Купить молоко завтра в 18:30 #Дом #дом #срочно-сегодня", today);
+  assert.equal(parsed.title, "Купить молоко");
+  assert.deepEqual(parsed.tags, ["дом", "срочно-сегодня"]);
+  assert.equal(parsed.due, "2026-10-06");
+  assert.equal(parsed.startAt, "18:30");
+  assert.deepEqual(parseQuick("Позвонить #1 в банк", today).tags, [], "#1 — не тег");
 });
