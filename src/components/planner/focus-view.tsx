@@ -41,7 +41,7 @@ export function FocusView() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col items-center py-2">
-      <div className="grid w-full max-w-xs grid-cols-3 gap-0.5 rounded-lg bg-elevated p-0.5" role="radiogroup" aria-label="Длина сессии">
+      <div className="grid w-full max-w-xs grid-cols-3 gap-1 rounded-lg bg-elevated p-1" role="radiogroup" aria-label="Длина сессии">
         {PRESETS.map((preset) => (
           <button
             key={preset.label}

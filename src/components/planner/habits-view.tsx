@@ -137,7 +137,7 @@ export function HabitsView({ onOpenFocus }: { onOpenFocus?: () => void }) {
           <span />
         )}
         {archived.length > 0 && !showArchive ? (
-          <button type="button" onClick={() => setShowArchive(true)} className="flex h-9 items-center gap-1.5 px-1 text-xs text-muted">
+          <button type="button" onClick={() => setShowArchive(true)} className="flex h-9 items-center gap-2 px-1 text-xs text-muted">
             <Archive className="size-3.5" /> Архив ({archived.length})
           </button>
         ) : null}

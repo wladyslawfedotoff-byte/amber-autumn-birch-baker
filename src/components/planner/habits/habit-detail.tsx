@@ -62,7 +62,7 @@ export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBa
           {menu ? (
             <>
               <button type="button" aria-hidden="true" tabIndex={-1} className="fixed inset-0 z-30 cursor-default" onClick={() => setMenu(false)} />
-              <div role="menu" className="absolute top-full right-0 z-40 mt-1 w-56 overflow-hidden rounded-2xl bg-surface/95 py-1.5 shadow-2xl ring-1 ring-line backdrop-blur">
+              <div role="menu" className="absolute top-full right-0 z-40 mt-1 w-56 overflow-hidden rounded-2xl bg-surface/95 py-2 shadow-2xl ring-1 ring-line backdrop-blur">
                 <MenuItem
                   icon={<Pencil className="size-4" />}
                   onClick={() => {
@@ -118,14 +118,14 @@ export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBa
 
       {challenge ? (
         <div className="mt-3 rounded-2xl bg-elevated p-3">
-          <p className="flex items-center gap-1.5 text-[0.8125rem]">
+          <p className="flex items-center gap-2 text-[0.8125rem]">
             <Trophy className="size-4" style={{ color: hex }} aria-hidden="true" />
             <span className="flex-1">Цель: {pluralN(challenge.target, DAYS)}</span>
             <span className="tabular-nums text-muted">
               {challenge.done}/{challenge.target}
             </span>
           </p>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface">
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface">
             <div className="h-full rounded-full" style={{ width: `${Math.round((challenge.done / challenge.target) * 100)}%`, background: hex }} />
           </div>
           {challenge.reached ? <p className="mt-1 text-xs text-muted">Цель достигнута! Продлить — в «Изменить → Начало и цель».</p> : null}
@@ -150,7 +150,7 @@ export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBa
             <ChevronRight className="size-4" />
           </button>
         </div>
-        <div className="mt-1 grid grid-cols-7 justify-items-center gap-y-1.5 text-center">
+        <div className="mt-1 grid grid-cols-7 justify-items-center gap-y-2 text-center">
           {WEEKDAY_SHORT.map((d) => (
             <span key={d} className="text-[0.6875rem] text-subtle">
               {d}
@@ -254,14 +254,14 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
 
 function Tile({ icon, color, label, value, unit }: { icon: ReactNode; color: string; label: string; value: number; unit: string }) {
   return (
-    <div className="min-w-0 rounded-xl bg-surface p-2.5">
+    <div className="min-w-0 rounded-xl bg-surface p-3">
       <p className="flex items-center gap-1 truncate text-[0.6875rem] text-muted">
         <span style={{ color }} aria-hidden="true">
           {icon}
         </span>
         {label}
       </p>
-      <p className="mt-0.5 truncate">
+      <p className="mt-1 truncate">
         <span className="text-xl font-semibold tabular-nums">{value}</span>
         {unit ? <span className="ml-1 text-xs text-muted">{unit}</span> : null}
       </p>
@@ -320,7 +320,7 @@ function Hero({ habit, today, hex, onCompleted }: { habit: Habit; today: string;
     <section className="mt-1 flex flex-col items-center rounded-3xl px-4 pt-6 pb-5 text-center" style={{ background: `color-mix(in srgb, ${hex} 14%, var(--surface))` }}>
       <HabitIcon habit={habit} size="xl" className="shadow-sm" />
       <h2 className="mt-3 text-xl font-semibold">{habit.name}</h2>
-      {habit.why ? <p className="mt-0.5 text-[0.8125rem] text-muted">{habit.why}</p> : null}
+      {habit.why ? <p className="mt-1 text-[0.8125rem] text-muted">{habit.why}</p> : null}
       <p className="mt-2 text-xs text-muted tabular-nums">
         {goal > 1 ? `${Math.min(amount, goal)} / ${goal}${habit.unit ? ` ${habit.unit}` : ""}` : done ? "Сегодня выполнено" : due ? "Сегодня по плану" : `Сегодня не по плану · ${freqLabel(habit.freq)}`}
       </p>
@@ -344,7 +344,7 @@ function Hero({ habit, today, hex, onCompleted }: { habit: Habit; today: string;
           if (habit.journal) onCompleted();
         }}
       />
-      <p className="mt-1.5 text-[0.6875rem] text-subtle">{done ? "Нажмите, чтобы снять" : goal > 1 ? `Нажатие: +${stepOf(habit)} · смахните вправо — вся цель` : "Нажмите или смахните вправо"}</p>
+      <p className="mt-2 text-[0.6875rem] text-subtle">{done ? "Нажмите, чтобы снять" : goal > 1 ? `Нажатие: +${stepOf(habit)} · смахните вправо — вся цель` : "Нажмите или смахните вправо"}</p>
     </section>
   );
 }

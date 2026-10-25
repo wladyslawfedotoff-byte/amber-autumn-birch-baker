@@ -42,16 +42,16 @@ function ProviderRow({ provider, index, check }: { provider: ProviderStatus; ind
   const state = stateOf(provider, check);
   const Icon = provider.kind === "local" ? Cpu : Cloud;
   return (
-    <li className="flex gap-3 px-3 py-2.5">
-      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-surface text-muted">
+    <li className="flex gap-3 px-3 py-2">
+      <span className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-surface text-muted">
         <Icon className="size-4" aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5 text-[0.9375rem]">
+        <p className="flex items-center gap-2 text-[0.9375rem]">
           <span className="truncate">
             {index + 1}. {provider.kind === "local" ? "Компьютер дома" : provider.name}
           </span>
-          {provider.paid ? <span className="rounded-full bg-surface px-1.5 text-[0.6875rem] text-muted ring-1 ring-line">платный</span> : null}
+          {provider.paid ? <span className="rounded-full bg-surface px-2 text-[0.6875rem] text-muted ring-1 ring-line">платный</span> : null}
           <span className={cn("ml-auto shrink-0 text-[0.8125rem]", TONE[state.tone])}>{state.text}</span>
         </p>
         <p className="truncate text-xs text-muted">
@@ -103,7 +103,7 @@ export function AssistantSection() {
         <span className="text-muted">{MODE[status.mode]}</span>
       </div>
 
-      <p className="mt-4 mb-1.5 px-1 text-xs text-muted">{status.providers.length > 1 ? "Модели спрашиваются по порядку: если одна занята или выдала ошибку, отвечает следующая." : "Модель"}</p>
+      <p className="mt-4 mb-2 px-1 text-xs text-muted">{status.providers.length > 1 ? "Модели спрашиваются по порядку: если одна занята или выдала ошибку, отвечает следующая." : "Модель"}</p>
       <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-elevated" aria-label="Модели помощника">
         {status.providers.map((p, i) => (
           <ProviderRow key={p.name} provider={p} index={i} check={results[p.name]} />

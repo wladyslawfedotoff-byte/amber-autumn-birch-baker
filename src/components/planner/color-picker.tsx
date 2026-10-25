@@ -13,7 +13,7 @@ export function ColorPicker({ value, onChange, bare }: { value: TaskColor | null
           Цвет <span className="font-normal">· {colorLabel(value)}</span>
         </legend>
       )}
-      <div className={cn("flex flex-wrap gap-1.5", !bare && "mt-2")}>
+      <div className={cn("flex flex-wrap gap-2", !bare && "mt-2")}>
         <button
           type="button"
           aria-pressed={!value}

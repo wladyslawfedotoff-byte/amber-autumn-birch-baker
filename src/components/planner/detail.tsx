@@ -88,7 +88,7 @@ export function TaskDetail({
         <span aria-hidden="true" className="sheet-grabber lg:hidden" />
         <div className="flex items-center gap-2 px-2 py-1">
           <p className="px-2 text-sm text-muted">Задача</p>
-          <button type="button" onClick={onClose} className="ml-auto h-11 rounded-full px-3 text-[15px] font-semibold text-accent lg:hidden">
+          <button type="button" onClick={onClose} className="ml-auto h-11 rounded-full px-3 text-[0.9375rem] font-semibold text-accent lg:hidden">
             Готово
           </button>
           <Button className="ml-auto hidden lg:inline-flex" size="icon" variant="ghost" aria-label="Закрыть" onClick={onClose}>
@@ -117,7 +117,7 @@ export function TaskDetail({
               <p className="text-xs text-muted">Даты выбираются в «Повтор».</p>
             ) : (
               <>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {quick("Сегодня", today)}
                   {quick("Завтра", shiftIso(today, 1))}
                   {quick("Через неделю", shiftIso(today, 7))}
@@ -192,7 +192,7 @@ export function TaskDetail({
               }}
               className={field}
             />
-            <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Когда напомнить" data-testid="remind-lead">
+            <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Когда напомнить" data-testid="remind-lead">
               {REMIND_LEADS.map((lead) => {
                 const on = normalizeLead(task.remindLead) === lead;
                 return (
@@ -327,7 +327,7 @@ export function TaskDetail({
               <Row
                 label="Цвет"
                 value={
-                  <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-2">
                     {colorHex(task.color) ? <span className="size-3 rounded-full" style={{ background: colorHex(task.color)! }} /> : null}
                     {colorLabel(task.color)}
                   </span>
@@ -389,7 +389,7 @@ export function TaskDetail({
               </Row>
               <Row label="Теги" value={task.tags.length ? task.tags.map((t) => `#${t}`).join(" ") : "—"} open={open === "tags"} onClick={() => toggle("tags")}>
                 {task.tags.length ? (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
+                  <div className="mb-2 flex flex-wrap gap-2">
                     {task.tags.map((item) => (
                       <button
                         key={item}

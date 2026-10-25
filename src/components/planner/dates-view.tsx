@@ -79,7 +79,7 @@ function BigCount({ days, color, size = "md" }: { days: number; color: string; s
   return (
     <span className="flex shrink-0 flex-col items-end leading-none" style={{ color: tone }}>
       <span className={cn("font-semibold tabular-nums", size === "lg" ? "text-4xl" : days === 0 ? "text-base" : "text-2xl")}>{label.value}</span>
-      {label.caption ? <span className="mt-1 text-[11px]">{label.caption}</span> : null}
+      {label.caption ? <span className="mt-1 text-[0.6875rem]">{label.caption}</span> : null}
     </span>
   );
 }
@@ -125,7 +125,7 @@ export function DatesView() {
 
   return (
     <div className="mx-auto flex min-h-full max-w-2xl flex-col">
-      <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-2" role="tablist" aria-label="Фильтр по типу">
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-2" role="tablist" aria-label="Фильтр по типу">
         {[{ id: "all" as const, label: "Все" }, ...kinds].map((k) => (
           <button
             key={k.id}
@@ -148,7 +148,7 @@ export function DatesView() {
           <p className="text-base font-semibold">{filter === "all" ? "Памятных дат пока нет" : "Здесь пока пусто"}</p>
           <p className="mt-1 text-sm text-muted">Напомню заранее и посчитаю дни и возраст.</p>
           {filter === "all" ? (
-            <ul className="mx-auto mt-3 max-w-xs space-y-1.5">
+            <ul className="mx-auto mt-3 max-w-xs space-y-2">
               {[
                 { kind: "birthday" as const, icon: "🎂", label: "День рождения · каждый год" },
                 { kind: "countdown" as const, icon: "⏳", label: "Отпуск · отсчёт дней" },
@@ -218,10 +218,10 @@ function DateCard({ row, onOpen }: { row: Upcoming; onOpen: () => void }) {
   const items = item.items ?? [];
   const left = items.filter((i) => !i.done).length;
   return (
-    <button type="button" onClick={onOpen} className="card-lift flex min-h-16 w-full items-center gap-3 rounded-2xl bg-elevated px-3 py-2.5 text-left">
+    <button type="button" onClick={onOpen} className="card-lift flex min-h-16 w-full items-center gap-3 rounded-2xl bg-elevated px-3 py-2 text-left">
       <IconCircle item={item} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-medium">
+        <span className="block truncate text-[0.9375rem] font-medium">
           {item.title}
           {age ? <span className="font-normal text-muted"> {age}</span> : null}
           {(item.members ?? []).length > 0 ? <Users className="ml-1 inline size-3.5 text-accent" aria-label="совместная" /> : null}
@@ -425,7 +425,7 @@ function MilestoneEditor({
 
       <RowGroup>
         <div className="flex min-h-11 items-center gap-3 px-3">
-          <span className="shrink-0 text-[15px]">{meta.dateLabel}</span>
+          <span className="shrink-0 text-[0.9375rem]">{meta.dateLabel}</span>
           <PickerInput
             type="date"
             value={d.date}
@@ -435,7 +435,7 @@ function MilestoneEditor({
           />
         </div>
         <Row label="Напоминания" value={remindValue} open={open === "remind"} onClick={() => toggle("remind")}>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {LEAD_OPTIONS.map((n) => {
               const on = Boolean(d.remindAt) && leads.includes(n);
               return (
@@ -468,7 +468,7 @@ function MilestoneEditor({
 
       <RowGroup>
         <Row label="Тип" value={meta.label} open={open === "kind"} onClick={() => toggle("kind")}>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {KINDS.map((k) => (
               <button
                 key={k.id}
@@ -504,7 +504,7 @@ function MilestoneEditor({
           open={open === "today"}
           onClick={() => toggle("today")}
         >
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {TODAY_OPTIONS.map((o) => (
               <button
                 key={String(o.value)}
@@ -522,7 +522,7 @@ function MilestoneEditor({
         <Row
           label="Цвет"
           value={
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-2">
               <span className="size-3 rounded-full" style={{ background: tint(d.color, d.kind) }} />
               {d.color ? colorLabel(d.color) : "по типу"}
             </span>
@@ -607,7 +607,7 @@ function ItemSection({ item, kind, label, hint }: { item: Milestone; kind: Miles
                   type="button"
                   aria-expanded={shop ? editingRow : undefined}
                   onClick={() => shop && setEditId(editingRow ? null : row.id)}
-                  className={cn("min-w-0 flex-1 truncate text-left text-[15px]", row.done ? "text-subtle line-through" : "text-fg")}
+                  className={cn("min-w-0 flex-1 truncate text-left text-[0.9375rem]", row.done ? "text-subtle line-through" : "text-fg")}
                 >
                   {row.title}
                 </button>
@@ -649,7 +649,7 @@ function ItemSection({ item, kind, label, hint }: { item: Milestone; kind: Miles
           );
         })}
         <form
-          className="px-3 py-1.5"
+          className="px-3 py-2"
           onSubmit={(event) => {
             event.preventDefault();
             if (!title.trim()) return;
@@ -681,7 +681,7 @@ function ItemSection({ item, kind, label, hint }: { item: Milestone; kind: Miles
             ) : null}
           </div>
           {shop && extra ? (
-            <div className="mt-1 grid gap-2 pb-1.5">
+            <div className="mt-1 grid gap-2 pb-2">
               <input value={link} onChange={(event) => setLink(event.target.value)} placeholder="Ссылка (необязательно)" aria-label="Ссылка" inputMode="url" className={input} />
               <input value={price} onChange={(event) => setPrice(event.target.value)} placeholder="Цена, например 2 500 ₽" aria-label="Цена" className={input} />
             </div>

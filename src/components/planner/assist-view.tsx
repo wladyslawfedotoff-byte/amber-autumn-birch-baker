@@ -35,14 +35,14 @@ export function ProviderBadge({ which, source, className }: { which: AnswerSourc
   const name = source?.split(" · ")[0];
   if (which === "app")
     return (
-      <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-ok/12 px-1.5 text-[0.6875rem] font-medium text-ok", className)} title="Ответ посчитан приложением по вашим задачам — без модели, токены не тратятся">
+      <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-ok/12 px-2 text-[0.6875rem] font-medium text-ok", className)} title="Ответ посчитан приложением по вашим задачам — без модели, токены не тратятся">
         <Zap className="size-3 shrink-0" aria-hidden="true" />
         <span className="truncate">без модели</span>
       </span>
     );
   return (
     <span
-      className={cn("inline-flex h-5 max-w-[11rem] shrink-0 items-center gap-1 rounded-full px-1.5 text-[0.6875rem] font-medium", which === "local" ? "bg-accent/12 text-accent" : "bg-elevated text-muted", className)}
+      className={cn("inline-flex h-5 max-w-[11rem] shrink-0 items-center gap-1 rounded-full px-2 text-[0.6875rem] font-medium", which === "local" ? "bg-accent/12 text-accent" : "bg-elevated text-muted", className)}
       title={`${which === "local" ? "Ответила модель на компьютере дома" : "Ответил облачный сервис"}${source ? `: ${source}` : ""}`}
     >
       {which === "local" ? <Cpu className="size-3 shrink-0" aria-hidden="true" /> : <Cloud className="size-3 shrink-0" aria-hidden="true" />}
@@ -107,7 +107,7 @@ function ConsentLine({ title, children }: { title: string; children: ReactNode }
   return (
     <li className="rounded-2xl bg-elevated p-3">
       <p className="font-medium">{title}</p>
-      <p className="mt-0.5 text-muted">{children}</p>
+      <p className="mt-1 text-muted">{children}</p>
     </li>
   );
 }
@@ -192,7 +192,7 @@ function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; on
   const remove = (key: string) => setItems(items.filter((it) => it.key !== key));
   return (
     <div className="mt-2 overflow-hidden rounded-2xl bg-elevated" data-proposal={proposal.id}>
-      <p className="flex items-center gap-2 px-3 pt-2.5 pb-1 text-[0.9375rem] font-semibold">
+      <p className="flex items-center gap-2 px-3 pt-2 pb-1 text-[0.9375rem] font-semibold">
         <Sparkles className="size-4 text-accent" aria-hidden="true" />
         <span className="flex-1">{pending ? proposal.title.replace(/\d+/, String(items.length)) : proposal.title.replace(/\?$/, "")}</span>
       </p>
@@ -218,11 +218,11 @@ function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; on
               ) : itemMeta(item) ? (
                 <span className="block text-xs text-muted">{itemMeta(item)}</span>
               ) : null}
-              {item.op === "create" && item.notes ? <span className="mt-0.5 line-clamp-2 block text-xs text-subtle">{item.notes}</span> : null}
+              {item.op === "create" && item.notes ? <span className="mt-1 line-clamp-2 block text-xs text-subtle">{item.notes}</span> : null}
               {item.op === "create" && item.subtasks.length ? (
-                <ul className="mt-1 space-y-0.5">
+                <ul className="mt-1 space-y-1">
                   {item.subtasks.map((step) => (
-                    <li key={step} className="flex items-center gap-1.5 text-[0.8125rem] text-muted">
+                    <li key={step} className="flex items-center gap-2 text-[0.8125rem] text-muted">
                       <span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] border border-line" />
                       {step}
                     </li>
@@ -248,7 +248,7 @@ function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; on
           </button>
         </div>
       ) : (
-        <p className="flex items-center gap-1 px-3 pb-2.5 text-xs text-muted">
+        <p className="flex items-center gap-1 px-3 pb-2 text-xs text-muted">
           {proposal.status === "applied" ? (
             <>
               <Check className="size-3.5 text-accent" aria-hidden="true" /> Применено
@@ -299,7 +299,7 @@ function dayTitle(day: string): string {
 function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { message: ChatMessage; canQueue: boolean; onRetry: () => void; onPostpone: () => void; onCancel: () => void }) {
   if (message.queued) {
     return (
-      <div className="mt-2 flex items-center gap-2 rounded-2xl bg-elevated py-1.5 pr-1.5 pl-3 text-[0.8125rem]" role="status">
+      <div className="mt-2 flex items-center gap-2 rounded-2xl bg-elevated py-2 pr-2 pl-3 text-[0.8125rem]" role="status">
         <Clock className="size-4 shrink-0 text-accent" aria-hidden="true" />
         <span className="min-w-0 flex-1">{message.queued.offline ? "Спрошу, когда появится связь" : `В очереди, попробую в ${hm(message.queued.nextAt)}`}</span>
         <button type="button" onClick={onCancel} className="h-8 shrink-0 rounded-full px-3 text-muted">
@@ -310,7 +310,7 @@ function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { m
   }
   return (
     <div className="mt-2 flex flex-wrap gap-2">
-      <button type="button" onClick={onRetry} className="flex h-9 items-center gap-1.5 rounded-full bg-elevated px-3 text-[0.8125rem] text-accent">
+      <button type="button" onClick={onRetry} className="flex h-9 items-center gap-2 rounded-full bg-elevated px-3 text-[0.8125rem] text-accent">
         <RotateCw className="size-3.5" aria-hidden="true" />
         Повторить
       </button>
@@ -318,7 +318,7 @@ function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { m
         <button
           type="button"
           onClick={onPostpone}
-          className="flex h-9 items-center gap-1.5 rounded-full bg-elevated px-3 text-[0.8125rem]"
+          className="flex h-9 items-center gap-2 rounded-full bg-elevated px-3 text-[0.8125rem]"
           title={message.offline ? "Вопрос сохранится на устройстве и уйдёт, когда появится связь; ответ придёт в колокольчик" : "Сервер будет спрашивать модели сам до суток; ответ появится здесь и в колокольчике"}
         >
           <Clock className="size-3.5" aria-hidden="true" />
@@ -734,20 +734,20 @@ export function AssistView({
 
       <form
         // Phone: the tab bar under the form already keeps clear of the home indicator.
-        className="sticky bottom-0 -mx-4 bg-surface px-3 pt-1.5 pb-2 md:mx-0 md:px-0 md:pb-[max(0.5rem,var(--safe-b))]"
+        className="sticky bottom-0 -mx-4 bg-surface px-3 pt-2 pb-2 md:mx-0 md:px-0 md:pb-[max(0.5rem,var(--safe-b))]"
         onSubmit={(event) => {
           event.preventDefault();
           void send(draft);
         }}
       >
         {!online ? (
-          <p className="mb-1.5 flex items-center justify-center gap-1.5 text-xs text-muted" role="status">
+          <p className="mb-2 flex items-center justify-center gap-2 text-xs text-muted" role="status">
             <CloudOff className="size-3.5" aria-hidden="true" />
             Помощник доступен при подключении
           </p>
         ) : null}
         {chips.length > 0 && !busy && online ? (
-          <div className="mb-1.5 flex flex-wrap gap-1.5" aria-label="Подсказки">
+          <div className="mb-2 flex flex-wrap gap-2" aria-label="Подсказки">
             {chips.map((chip) => (
               <button
                 key={chip.id}
@@ -763,7 +763,7 @@ export function AssistView({
             ))}
           </div>
         ) : null}
-        <div className="flex items-end gap-1.5 rounded-3xl bg-elevated py-1 pr-1 pl-3">
+        <div className="flex items-end gap-2 rounded-3xl bg-elevated py-1 pr-1 pl-3">
           <textarea
             ref={field}
             value={draft}
@@ -777,7 +777,7 @@ export function AssistView({
                 void send(draft);
               }
             }}
-            className="max-h-36 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-base outline-none [field-sizing:content] placeholder:text-subtle"
+            className="max-h-36 min-h-9 flex-1 resize-none bg-transparent py-2 text-base outline-none [field-sizing:content] placeholder:text-subtle"
           />
           {canSpeak ? (
             <button
@@ -805,7 +805,7 @@ export function AssistView({
       {historyOpen && typeof document !== "undefined"
         ? createPortal(
             <div className="app-frame vv-frame panel-right z-[65] flex flex-col bg-surface" role="dialog" aria-modal="true" aria-label="История бесед">
-              <div className="flex shrink-0 items-center gap-1 px-2 py-1.5">
+              <div className="flex shrink-0 items-center gap-1 px-2 py-2">
                 <button type="button" aria-label="Назад" onClick={() => setHistoryOpen(false)} className="flex size-11 items-center justify-center rounded-full text-fg">
                   <ArrowLeft className="size-5" />
                 </button>
@@ -838,7 +838,7 @@ export function AssistView({
                       <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
                         {group.items.map((c) => (
                           <li key={c.id} className="flex items-center">
-                            <button type="button" onClick={() => void openConversation(c.id)} className={cn("min-w-0 flex-1 px-3 py-2.5 text-left", c.id === conversationId && "text-accent")}>
+                            <button type="button" onClick={() => void openConversation(c.id)} className={cn("min-w-0 flex-1 px-3 py-2 text-left", c.id === conversationId && "text-accent")}>
                               <span className="block truncate text-[0.9375rem]">{c.title}</span>
                               <span className="block text-xs text-muted tabular-nums">{hm(c.updatedAt)}</span>
                             </button>

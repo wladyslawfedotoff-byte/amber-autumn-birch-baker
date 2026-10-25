@@ -263,7 +263,7 @@ function ConnectionSection() {
           />
           <span className="font-medium">{label.text}</span>
         </div>
-        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-muted">
+        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-muted">
           <dt>Последняя синхронизация</dt>
           <dd className="text-right text-fg tabular-nums">{formatSyncTime(status.lastSyncAt)}</dd>
           <dt>Версия на сервере</dt>
@@ -466,12 +466,12 @@ function LookSection() {
         ))}
       </div>
       <p className="mt-5 text-xs font-medium text-subtle">Цвет акцента</p>
-      <p className="mt-0.5 text-xs text-muted">Кнопки, выбранный день и отметки.</p>
+      <p className="mt-1 text-xs text-muted">Кнопки, выбранный день и отметки.</p>
       <div className="mt-3 grid grid-cols-4 gap-3">
         {ACCENTS.map((item) => {
           const on = accent === item.id;
           return (
-            <button key={item.id} type="button" aria-pressed={on} aria-label={item.name} onClick={() => setAccent(item.id)} className="flex flex-col items-center gap-1.5">
+            <button key={item.id} type="button" aria-pressed={on} aria-label={item.name} onClick={() => setAccent(item.id)} className="flex flex-col items-center gap-2">
               <span className={cn("size-10 rounded-full", item.swatch, on ? "ring-2 ring-fg ring-offset-2 ring-offset-surface" : "")} />
               <span className={cn("text-xs", on ? "text-fg" : "text-muted")}>{item.name}</span>
             </button>
@@ -608,7 +608,7 @@ function NavigationSection() {
       {addable.length > 0 ? (
         <>
           <p className={heading}>Можно добавить в панель</p>
-          <ul className="grid grid-cols-3 gap-1.5">
+          <ul className="grid grid-cols-3 gap-2">
             {addable.map((item) => (
               <li key={item.id} className="min-w-0">
                 <button
@@ -616,7 +616,7 @@ function NavigationSection() {
                   aria-label={`Добавить «${item.label}» на панель`}
                   disabled={full}
                   onClick={() => move(item.id, "bottom")}
-                  className="card-lift flex h-10 w-full min-w-0 items-center gap-1.5 rounded-xl bg-elevated px-2.5 text-left text-[0.875rem] disabled:opacity-40"
+                  className="card-lift flex h-10 w-full min-w-0 items-center gap-2 rounded-xl bg-elevated px-3 text-left text-[0.875rem] disabled:opacity-40"
                 >
                   <Plus className="size-4 shrink-0 text-accent" aria-hidden="true" />
                   <span className="min-w-0 truncate">{item.label}</span>
@@ -752,7 +752,7 @@ function NotifySection() {
       {state?.kind === "denied" ? <p className="mt-2 text-xs text-muted">Разрешите уведомления в настройках (на iPhone — «Настройки» → «Уведомления» → «Пора»).</p> : null}
 
       <p className="mt-4 mb-1 px-1 text-xs font-medium text-subtle">Напоминать по умолчанию</p>
-      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Напоминать по умолчанию">
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Напоминать по умолчанию">
         {REMIND_LEADS.map((value) => (
           <button
             key={value}

@@ -12,7 +12,7 @@ import type { AttachmentMeta, ProjectContact, Task } from "@/lib/planner-types";
 import { useCapabilities } from "@/lib/use-capabilities";
 
 const field = "h-11 w-full rounded-md border border-line bg-elevated px-3 text-base text-fg outline-none placeholder:text-subtle";
-const chip = "flex h-12 max-w-full min-w-0 items-center gap-2 rounded-lg border border-line bg-elevated pl-1.5 pr-1 text-sm";
+const chip = "flex h-12 max-w-full min-w-0 items-center gap-2 rounded-lg border border-line bg-elevated pl-2 pr-1 text-sm";
 
 function Badge({ letter, tone }: { letter: string; tone?: string }) {
   return (
@@ -66,7 +66,7 @@ function PhotoChip({ item, onOpen, onRemove }: { item: AttachmentMeta; onOpen: (
       >
         <X className="size-3" />
       </button>
-      <span className="mt-0.5 block truncate text-center text-[0.6rem] leading-tight text-muted" title={item.takenAt ? formatTakenAt(item.takenAt) : item.name}>
+      <span className="mt-1 block truncate text-center text-[0.6rem] leading-tight text-muted" title={item.takenAt ? formatTakenAt(item.takenAt) : item.name}>
         {pending ? "на телефоне" : item.takenAt ? shortDate(item.takenAt) : sizeLabel(item.size)}
       </span>
     </li>
@@ -200,18 +200,18 @@ export function ObjectStrip({
       ) : null}
       <input ref={input} type="file" accept={ACCEPT} multiple className="sr-only" aria-label="Добавить файл" onChange={(event) => void pick(event.target.files)} />
       <div className={cn("flex items-center rounded-lg border border-dashed border-line text-sm text-muted", any && "mt-2")} data-testid="object-add">
-        <Plus className="ml-2.5 size-4 shrink-0 text-accent" aria-hidden="true" />
-        <button type="button" className="h-10 px-1.5" onClick={() => input.current?.click()}>
+        <Plus className="ml-3 size-4 shrink-0 text-accent" aria-hidden="true" />
+        <button type="button" className="h-10 px-2" onClick={() => input.current?.click()}>
           Файл
         </button>
         <span aria-hidden="true">·</span>
-        <button type="button" className="h-10 px-1.5" onClick={() => setSheet("link")}>
+        <button type="button" className="h-10 px-2" onClick={() => setSheet("link")}>
           Ссылка
         </button>
         {onAddContact ? (
           <>
             <span aria-hidden="true">·</span>
-            <button type="button" className="h-10 px-1.5" onClick={() => setSheet("contact")}>
+            <button type="button" className="h-10 px-2" onClick={() => setSheet("contact")}>
               Контакт
             </button>
           </>
@@ -221,7 +221,7 @@ export function ObjectStrip({
             ждут: {pendingHere}
           </span>
         ) : (
-          <span className="ml-auto pr-0.5">
+          <span className="ml-auto pr-1">
             <Hint label="Что можно прикрепить">
               Фото (камера или галерея, HEIC станет JPEG), PDF, документы и таблицы; ссылка открывается в новой вкладке; у контакта — «Позвонить» и «Написать». Без сети всё
               сохраняется на телефоне и уйдёт позже.
@@ -355,7 +355,7 @@ export function LinkSheet({ open, onAdd, onClose }: { open: boolean; onAdd: (hre
         {url && !href ? <p className="text-xs text-warn">Нужен адрес http:// или https://</p> : null}
         <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Название (необязательно)" aria-label="Название ссылки" className={field} />
         {suggested && suggested !== title ? (
-          <button type="button" onClick={() => setTitle(suggested)} className="flex w-full items-center gap-1.5 truncate text-left text-xs text-accent" data-testid="title-suggestion">
+          <button type="button" onClick={() => setTitle(suggested)} className="flex w-full items-center gap-2 truncate text-left text-xs text-accent" data-testid="title-suggestion">
             <Link2 className="size-3.5 shrink-0" aria-hidden="true" />
             <span className="truncate">{suggested}</span>
           </button>
@@ -416,7 +416,7 @@ export function ContactSheet({
         {onPickProject && projectContacts.length ? (
           <div data-testid="project-contact-pick">
             <p className="mb-1 text-xs text-subtle">Из проекта</p>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-2">
               {projectContacts.map((c) => (
                 <button
                   key={c.id}
@@ -425,7 +425,7 @@ export function ContactSheet({
                     onPickProject?.(c.id);
                     onClose();
                   }}
-                  className="inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border border-line bg-elevated px-3 text-sm text-fg"
+                  className="inline-flex h-9 max-w-full items-center gap-2 rounded-full border border-line bg-elevated px-3 text-sm text-fg"
                 >
                   <UserRound className="size-3.5 shrink-0 text-muted" aria-hidden="true" />
                   <span className="truncate">{c.name}</span>
@@ -477,7 +477,7 @@ export function ContactSheet({
           </button>
         </form>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => card.current?.click()} className="inline-flex h-9 items-center gap-1.5 rounded-full px-1 text-sm text-accent">
+          <button type="button" onClick={() => card.current?.click()} className="inline-flex h-9 items-center gap-2 rounded-full px-1 text-sm text-accent">
             <Paperclip className="size-4" aria-hidden="true" />
             Из карточки .vcf
           </button>

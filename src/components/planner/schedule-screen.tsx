@@ -19,7 +19,7 @@ function rangeLabel(days: number): string {
 /** One-row segmented control (never wraps on a phone). */
 export function RangeControl({ value, onChange }: { value: number; onChange: (days: number) => void }) {
   return (
-    <div className="mb-1 grid grid-cols-5 gap-0.5 rounded-lg bg-elevated p-0.5" role="radiogroup" aria-label="Сколько дней показывать">
+    <div className="mb-1 grid grid-cols-5 gap-1 rounded-lg bg-elevated p-1" role="radiogroup" aria-label="Сколько дней показывать">
       {SCHEDULE_RANGES.map((n) => (
         <button
           key={n}
@@ -97,7 +97,7 @@ function AgendaDays({
     <div ref={rootRef} className="mx-auto max-w-3xl">
       <div className="sticky -top-2 z-20 -mx-4 -mt-2 bg-surface px-3 pt-2 pb-1 md:static md:mx-0 md:px-0">
         {control}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
           <button type="button" aria-label="Раньше" onClick={() => setStart(shiftIso(start, -count))} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted">
             <ChevronLeft className="size-5" />
           </button>
@@ -157,7 +157,7 @@ function AgendaDays({
                 <TaskRow key={task.id} task={task} today={today} selected={false} showDue={false} showList onOpen={onOpen} />
               ))}
               {dayHabits.length > 0 ? (
-                <div className="no-scrollbar mt-1.5 flex gap-1 overflow-x-auto">
+                <div className="no-scrollbar mt-2 flex gap-1 overflow-x-auto">
                   {dayHabits.map((habit) => {
                     const on = habit.checks.includes(day);
                     return (
@@ -169,7 +169,7 @@ function AgendaDays({
                         onClick={() => toggleHabit(habit.id, day)}
                         title={future ? "Отметить можно в сам день" : on ? "Снять отметку" : "Отметить"}
                         className={cn(
-                          "flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs",
+                          "flex h-7 shrink-0 items-center gap-1 rounded-full px-3 text-xs",
                           on ? "bg-accent text-accent-fg" : "bg-elevated text-muted",
                           future && "opacity-50",
                         )}

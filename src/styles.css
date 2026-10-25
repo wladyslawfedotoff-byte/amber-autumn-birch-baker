@@ -143,6 +143,14 @@
 @layer utilities {
   .scrim {
     background: color-mix(in oklab, var(--fg) 32%, transparent);
+    /* 1.18: the content under a sheet or menu is softly blurred (iOS). */
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  .scrim-menu {
+    background: rgb(0 0 0 / 0.22);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
   }
 
   .press {
@@ -273,7 +281,7 @@ textarea.text-sm {
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea {
-    font-size: 16px;
+    font-size: max(16px, 1rem);
   }
 }
 
@@ -428,6 +436,12 @@ svg.lucide[stroke-width="2"] {
   box-shadow: 0 -0.5px 0 var(--line);
 }
 @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  .scrim,
+  .scrim-menu {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: color-mix(in oklab, var(--fg) 45%, transparent);
+  }
   .frost {
     background: var(--surface);
     -webkit-backdrop-filter: none;

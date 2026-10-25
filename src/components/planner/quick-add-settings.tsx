@@ -132,7 +132,7 @@ export function QuickAddSection({ onChange }: { onChange?: () => void }) {
         <div className="mt-3 rounded-2xl border border-accent/40 bg-accent/5 p-3">
           <p className="text-xs text-muted">Ключ показывается один раз — сразу вставьте его в команду.</p>
           <p className="mt-1 font-mono text-sm break-all select-all">{fresh}</p>
-          <button type="button" onClick={() => copy(fresh, "Ключ скопирован.")} className="mt-2 flex h-9 items-center gap-1.5 rounded-xl bg-elevated px-3 text-sm">
+          <button type="button" onClick={() => copy(fresh, "Ключ скопирован.")} className="mt-2 flex h-9 items-center gap-2 rounded-xl bg-elevated px-3 text-sm">
             <Copy className="size-4" aria-hidden="true" /> Скопировать ключ
           </button>
         </div>

@@ -46,7 +46,7 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
   const menuH = page === "projects" ? Math.min(320, 52 + projects.length * 44) : 290;
   const previewTop = Math.max(12, Math.min(rect.top, vh - menuH - rect.height - 24));
   const below = previewTop + rect.height + 8 + menuH < vh;
-  const item = "flex h-11 w-full items-center gap-3 px-4 text-left text-[15px] text-fg active:bg-fg/10";
+  const item = "flex h-11 w-full items-center gap-3 px-4 text-left text-[0.9375rem] text-fg active:bg-fg/10";
 
   return createPortal(
     <div
@@ -60,15 +60,15 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
         event.stopPropagation();
       }}
     >
-      <button type="button" aria-label="Закрыть меню задачи" className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" onClick={onClose} />
+      <button type="button" aria-label="Закрыть меню задачи" className="scrim scrim-menu absolute inset-0" onClick={onClose} />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute flex items-start gap-3 rounded-xl bg-elevated px-3 py-2.5 shadow-[0_12px_32px_rgb(0_0_0/0.25)]"
+        className="pointer-events-none absolute flex items-start gap-3 rounded-xl bg-elevated px-3 py-2 shadow-[0_12px_32px_rgb(0_0_0/0.25)]"
         style={{ top: previewTop, left: rect.left, width: rect.width, animation: "ctx-in 160ms var(--ease)" }}
       >
-        <span className={cn("mt-0.5 size-[1.125rem] shrink-0 rounded-full border-2", PRIORITIES[task.priority]?.ring)} />
+        <span className={cn("mt-1 size-[1.125rem] shrink-0 rounded-full border-2", PRIORITIES[task.priority]?.ring)} />
         <span className="min-w-0">
-          <span className="block text-[15px] leading-snug text-fg">{task.title}</span>
+          <span className="block text-[0.9375rem] leading-snug text-fg">{task.title}</span>
           {task.due ? <span className="text-xs text-muted">{dueLabel(task.due, today)}</span> : null}
         </span>
       </div>
@@ -86,11 +86,11 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
                 <Sunrise className="size-5 text-muted" />
               </button>
             ) : null}
-            <div className="border-t border-line/70 px-4 pt-2 pb-2.5">
-              <p className="flex items-center justify-between pb-1.5 text-xs text-muted">
+            <div className="border-t border-line/70 px-4 pt-2 pb-2">
+              <p className="flex items-center justify-between pb-2 text-xs text-muted">
                 Приоритет <Flag className="size-4" />
               </p>
-              <div className="flex gap-1.5" role="group" aria-label="Приоритет">
+              <div className="flex gap-2" role="group" aria-label="Приоритет">
                 {PRIORITIES.map((p) => (
                   <button
                     key={p.value}

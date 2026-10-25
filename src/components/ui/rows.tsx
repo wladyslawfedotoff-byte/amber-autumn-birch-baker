@@ -39,7 +39,7 @@ export function Row({
         type="button"
         aria-expanded={children !== undefined ? Boolean(open) : undefined}
         onClick={onClick}
-        className={cn("flex min-h-11 w-full items-center gap-3 px-3 text-left text-[15px]", danger ? "text-danger" : "text-fg")}
+        className={cn("flex min-h-11 w-full items-center gap-3 px-3 text-left text-[0.9375rem]", danger ? "text-danger" : "text-fg")}
       >
         {icon ? <span className="flex size-5 shrink-0 items-center justify-center text-subtle">{icon}</span> : null}
         <span className="shrink-0">{label}</span>
@@ -54,7 +54,7 @@ export function Row({
 /** Row with a switch on the right. */
 export function SwitchRow({ label, checked, onChange, hint }: { label: ReactNode; checked: boolean; onChange: (next: boolean) => void; hint?: ReactNode }) {
   return (
-    <label className="flex min-h-11 w-full cursor-pointer items-center gap-3 px-3 text-[15px]">
+    <label className="flex min-h-11 w-full cursor-pointer items-center gap-3 px-3 text-[0.9375rem]">
       <span className="min-w-0 flex-1">
         {label}
         {hint ? <span className="block text-xs text-muted">{hint}</span> : null}

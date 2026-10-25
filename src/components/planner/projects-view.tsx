@@ -54,10 +54,10 @@ export function ProjectsView({
             const { done, total } = projectProgress(item);
             return (
               <li key={item.id} className="border-line not-first:border-t">
-                <button type="button" onClick={() => setOpenId(item.id)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left">
+                <button type="button" onClick={() => setOpenId(item.id)} className="flex w-full items-center gap-3 px-3 py-2 text-left">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[0.9375rem] font-medium">{item.title || "Без названия"}</span>
-                    <span className="mt-0.5 flex items-center gap-2 text-[0.75rem] text-muted">
+                    <span className="mt-1 flex items-center gap-2 text-[0.75rem] text-muted">
                       <span className="shrink-0">{spanLabel(item)}</span>
                       <span className="h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-bg" aria-hidden="true">
                         <span className="block h-full rounded-full bg-accent" style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} />
@@ -191,7 +191,7 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
 
   return (
     <div className="flex flex-col">
-      <div className="-mx-2 flex items-center gap-0.5">
+      <div className="-mx-2 flex items-center gap-1">
         <button type="button" aria-label="К списку проектов" onClick={onBack} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted">
           <ChevronLeft className="size-5" />
         </button>
@@ -214,7 +214,7 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
         </button>
       </div>
       <div className="flex items-center gap-2 text-[0.75rem] text-muted">
-        <button type="button" onClick={() => setSettings(true)} className="flex h-8 items-center gap-1.5 rounded-full bg-elevated px-2.5">
+        <button type="button" onClick={() => setSettings(true)} className="flex h-8 items-center gap-2 rounded-full bg-elevated px-3">
           <CalendarRange className="size-3.5" aria-hidden="true" />
           {spanLabel(project)}
         </button>
@@ -262,7 +262,7 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
             <ul className="flex min-h-10 flex-col gap-1">
               {stage.cards.map((card) => (
                 <li key={card.id}>
-                  <div className="drag-handle flex items-start rounded-lg bg-elevated pl-2.5" onPointerDown={(event) => beginCard(event, card, stage.id)}>
+                  <div className="drag-handle flex items-start rounded-lg bg-elevated pl-3" onPointerDown={(event) => beginCard(event, card, stage.id)}>
                     <p className="min-w-0 flex-1 py-2 text-[0.9375rem] leading-snug">
                       {card.taskId && isBlocked(tasks.find((item) => item.id === card.taskId) ?? { dependsOn: null, done: false }, tasks) ? (
                         <Lock className="mr-1 inline size-3.5 text-warn" aria-label="Ждёт другого дела" />
@@ -284,7 +284,7 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
               ))}
             </ul>
             <form
-              className="mt-1 flex items-center gap-1.5 px-1"
+              className="mt-1 flex items-center gap-2 px-1"
               onSubmit={(event) => {
                 event.preventDefault();
                 const data = new FormData(event.currentTarget);
@@ -304,7 +304,7 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
           </section>
         ))}
         <form
-          className="flex w-40 shrink-0 snap-start items-center gap-1.5 rounded-xl border border-dashed border-line px-2"
+          className="flex w-40 shrink-0 snap-start items-center gap-2 rounded-xl border border-dashed border-line px-2"
           onSubmit={(event) => {
             event.preventDefault();
             addStage(project.id, stageName);

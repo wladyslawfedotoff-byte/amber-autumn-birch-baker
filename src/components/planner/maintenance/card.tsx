@@ -58,7 +58,7 @@ function Section({ title, hint, action, fold, children }: { title: string; hint?
         ) : null}
         <FieldLabel hint={hint} className="flex-1">
           {title}
-          {fold && !open && fold.summary ? <span className="ml-1.5 font-normal normal-case text-subtle">· {fold.summary}</span> : null}
+          {fold && !open && fold.summary ? <span className="ml-2 font-normal normal-case text-subtle">· {fold.summary}</span> : null}
         </FieldLabel>
         {action ? (
           <button type="button" onClick={() => { if (!open) toggle(); action.onClick(); }} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent">
@@ -100,17 +100,17 @@ function CarSummary({ asset, lead, onMileage }: { asset: Asset; lead: { title: s
   const fuel = (asset.fuel ?? []).filter((f) => f.date.startsWith(year)).reduce((n, f) => n + (f.sum ?? 0), 0);
   return (
     <section aria-label="Сводка" className="mt-3 grid grid-cols-3 divide-x divide-line/60 rounded-xl bg-elevated" data-testid="car-summary">
-      <button type="button" onClick={onMileage} className="min-w-0 px-2.5 py-2 text-left">
+      <button type="button" onClick={onMileage} className="min-w-0 px-3 py-2 text-left">
         <span className="block text-[0.6875rem] text-muted">Пробег</span>
         <span className="block truncate text-[0.9375rem] font-semibold tabular-nums">{asset.km != null ? `${groupKm(asset.km)} км` : "указать"}</span>
         <span className="block truncate text-[0.6875rem] text-subtle">{asset.kmAt ? formatShortDay(asset.kmAt) : "—"}</span>
       </button>
-      <div className="min-w-0 px-2.5 py-2">
+      <div className="min-w-0 px-3 py-2">
         <span className="block text-[0.6875rem] text-muted">Ближайшее</span>
         <span className="block truncate text-[0.9375rem] font-semibold">{lead ? lead.title : "—"}</span>
         <span className={cn("block truncate text-[0.6875rem]", lead?.status === "overdue" ? "text-danger" : lead?.status === "soon" ? "text-warn" : "text-subtle")}>{lead ? lead.text : "всё сделано"}</span>
       </div>
-      <div className="min-w-0 px-2.5 py-2">
+      <div className="min-w-0 px-3 py-2">
         <span className="block text-[0.6875rem] text-muted">Расходы {year}</span>
         <span className="block truncate text-[0.9375rem] font-semibold tabular-nums">{money(service + fuel)}</span>
         <span className="block truncate text-[0.6875rem] text-subtle">топливо {money(fuel)}</span>
@@ -167,7 +167,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
   return (
     <div className="mx-auto w-full max-w-3xl pb-10">
       <div className="-mt-1 flex items-center">
-        <button type="button" onClick={onBack} className="flex h-11 items-center gap-0.5 pr-3 text-sm text-muted" aria-label="Назад к списку">
+        <button type="button" onClick={onBack} className="flex h-11 items-center gap-1 pr-3 text-sm text-muted" aria-label="Назад к списку">
           <ChevronLeft className="size-4" aria-hidden="true" />
           {kindLabel(asset.kind)}
         </button>
@@ -177,7 +177,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
         </button>
       </div>
       <h2 className="text-[1.125rem] leading-tight font-semibold">{asset.name}</h2>
-      {sub ? <p className="mt-0.5 text-[0.8125rem] text-muted">{sub}</p> : null}
+      {sub ? <p className="mt-1 text-[0.8125rem] text-muted">{sub}</p> : null}
       {asset.notes ? <p className="mt-1 text-[0.8125rem] whitespace-pre-wrap text-muted">{asset.notes}</p> : null}
 
       {car ? (
@@ -207,17 +207,17 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
         action={{ label: "Правило", onClick: () => setRule("new") }}
       >
         {mainRules.length ? (
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {mainRules.map(({ rule: r, state }) => {
               const progress = progressOf(r, state);
               return (
                 <li key={r.id}>
-                  <button type="button" onClick={() => setRule(r)} className="w-full rounded-xl bg-elevated px-3 py-2.5 text-left">
+                  <button type="button" onClick={() => setRule(r)} className="w-full rounded-xl bg-elevated px-3 py-2 text-left">
                     <span className="flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold">{r.title}</span>
                       {state.finished ? <Badge status="ok">сделано</Badge> : <Badge status={state.status}>{stateText(r, state)}</Badge>}
                     </span>
-                    <span className="mt-0.5 block text-xs text-subtle">{ruleLine(r)}</span>
+                    <span className="mt-1 block text-xs text-subtle">{ruleLine(r)}</span>
                     {progress !== null && !state.finished ? <Bar value={progress} status={state.status} /> : null}
                   </button>
                 </li>
@@ -239,16 +239,16 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
           action={{ label: "Платёж", onClick: () => setRule("ins") }}
         >
           {insRules.length ? (
-            <ul className="space-y-1.5">
+            <ul className="space-y-2">
               {insRules.map(({ rule: r, state }) => (
                 <li key={r.id}>
-                  <button type="button" onClick={() => setRule(r)} className="w-full rounded-xl bg-elevated px-3 py-2.5 text-left">
+                  <button type="button" onClick={() => setRule(r)} className="w-full rounded-xl bg-elevated px-3 py-2 text-left">
                     <span className="flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold">{r.title}</span>
                       {r.cost ? <span className="text-[0.8125rem] text-muted tabular-nums">{money(r.cost)}</span> : null}
                       {state.finished ? <Badge status="ok">сделано</Badge> : <Badge status={state.status}>{stateText(r, state)}</Badge>}
                     </span>
-                    <span className="mt-0.5 block text-xs text-subtle">{ruleLine(r)}</span>
+                    <span className="mt-1 block text-xs text-subtle">{ruleLine(r)}</span>
                   </button>
                 </li>
               ))}
@@ -275,10 +275,10 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
           </form>
         ) : null}
         {open.length ? (
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {open.map((p) => (
-              <li key={p.id} className="flex items-start gap-2 rounded-lg border-l-[3px] border-warn bg-elevated py-2 pr-2 pl-2.5">
-                <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden="true" />
+              <li key={p.id} className="flex items-start gap-2 rounded-lg border-l-[3px] border-warn bg-elevated py-2 pr-2 pl-3">
+                <TriangleAlert className="mt-1 size-4 shrink-0 text-warn" aria-hidden="true" />
                 <button type="button" onClick={() => setPainSheet(p.id)} aria-label={`Изменить: ${p.text}`} className="min-w-0 flex-1 text-left text-[0.9375rem]">
                   <span className="block break-words">{p.text}</span>
                   {p.todo ? <span className="block text-[0.8125rem] break-words text-muted">Сделать: {p.todo}</span> : null}
@@ -329,18 +329,18 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
 
       <Section title="История" fold={car ? { id: `${asset.id}:log`, open: false, summary: log.length ? `${log.length} · ${formatShortDay(log[0]!.date)}` : "пусто" } : undefined} hint="Что и когда делали, при каком пробеге, где и за сколько. Фото чека и документы прикрепляются к записи." action={{ label: "Запись", onClick: () => setService("new") }}>
         {log.length ? (
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {shown.map((e) => {
               const files = [asset.attachments, asset.links, asset.contacts].reduce((n, list) => n + (list ?? []).filter((a) => a.entryId === e.id).length, 0);
               return (
                 <li key={e.id}>
-                  <button type="button" onClick={() => setEntry(e.id)} className="flex w-full items-center gap-2 rounded-xl bg-elevated px-3 py-2.5 text-left">
+                  <button type="button" onClick={() => setEntry(e.id)} className="flex w-full items-center gap-2 rounded-xl bg-elevated px-3 py-2 text-left">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[0.9375rem] font-semibold">{e.title}</span>
                       <span className="block truncate text-xs text-subtle">
                         {[`${formatShortDay(e.date)}${e.date.slice(0, 4) !== String(new Date().getFullYear()) ? ` ${e.date.slice(0, 4)}` : ""}`, e.km != null ? `${groupKm(e.km)} км` : null, e.place ? `«${e.place}»` : null].filter(Boolean).join(" · ")}
                         {files ? (
-                          <span className="ml-1 inline-flex items-center gap-0.5">
+                          <span className="ml-1 inline-flex items-center gap-1">
                             · <Paperclip className="size-3" aria-hidden="true" />
                             {files}
                           </span>

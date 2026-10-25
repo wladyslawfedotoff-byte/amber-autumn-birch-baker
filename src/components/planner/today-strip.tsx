@@ -38,7 +38,7 @@ export function TodaySummary() {
     <div className="mb-3">
       <p className="text-base font-semibold tracking-tight text-fg">{line}</p>
       {flagged.length ? (
-        <ul className="mt-1 space-y-0.5">
+        <ul className="mt-1 space-y-1">
           {flagged.map((row) => (
             <li key={row.item.id} className="truncate text-sm">
               <span aria-hidden="true">{iconOf(row.item)} </span>
@@ -84,14 +84,14 @@ export function WeekDays({
             aria-label={`${weekdayLetter(day)} ${Number(day.slice(8))}, задач ${count}`}
             onClick={() => onPick(day)}
             className={cn(
-              "flex min-h-14 flex-col items-center justify-center rounded-xl px-1 py-1.5 text-xs",
+              "flex min-h-14 flex-col items-center justify-center rounded-xl px-1 py-2 text-xs",
               on ? "bg-accent text-accent-fg" : "text-muted",
             )}
           >
             <span>{weekdayLetter(day)}</span>
             <span className="tabular-nums">{Number(day.slice(8))}</span>
             <span className="mt-1 tabular-nums">{count > 0 ? count : "·"}</span>
-            <span className={cn("mt-0.5 size-1.5 rounded-full", habitsDone ? "bg-current" : "bg-transparent")} />
+            <span className={cn("mt-1 size-1.5 rounded-full", habitsDone ? "bg-current" : "bg-transparent")} />
           </button>
         );
       })}

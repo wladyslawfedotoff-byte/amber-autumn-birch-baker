@@ -17,6 +17,7 @@ import { useSubtasksOpen } from "@/lib/use-subtasks-open";
 import { colorStyle } from "@/lib/task-colors";
 import { useDoneToast } from "@/lib/done-toast";
 import { haptic } from "@/lib/haptics";
+import { honestDue } from "@/lib/maintenance/honest-due";
 import { TaskContextMenu } from "@/components/planner/task-menu";
 
 function ring(priority: Priority): string {
@@ -242,15 +243,20 @@ export const TaskRow = memo(function TaskRow({
               {task.maint ? shortMaintTitle(task, assets) : task.title}
             </span>
             {preview ? (
-              <span className="mt-0.5 flex items-center gap-1 text-[0.75rem] text-muted">
+              <span className="mt-1 flex items-center gap-1 text-[0.75rem] text-muted">
                 <NotebookText className="size-3 shrink-0" aria-hidden="true" />
                 <span className="min-w-0 truncate">{preview}</span>
               </span>
             ) : null}
-            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.75rem] leading-4 text-muted empty:hidden">
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] leading-4 text-muted empty:hidden">
               {ticked ? <span className="text-ok">отмечено · дальше {task.due ? dueLabel(task.due, today) : "—"}</span> : null}
               {showDue && task.due && !ticked ? (
-                <span className={overdue ? "text-danger" : undefined}>{dueLabel(task.due, today)}</span>
+                task.maint && !checked ? (
+                  // «Обслуживание»: the real deadline («через 300 км», «до 5 нояб.»), red only when truly late.
+                  <MaintDue task={task} assets={assets} today={today} />
+                ) : (
+                  <span className={overdue ? "text-danger" : undefined}>{dueLabel(task.due, today)}</span>
+                )
               ) : null}
               {task.startAt ? (
                 <span className="tabular-nums">
@@ -268,13 +274,13 @@ export const TaskRow = memo(function TaskRow({
               ))}
               <ShareBadges task={task} />
               {blockedBy ? (
-                <span className="flex min-w-0 items-center gap-0.5 text-warn" data-testid="blocked-badge">
+                <span className="flex min-w-0 items-center gap-1 text-warn" data-testid="blocked-badge">
                   <Lock className="size-3 shrink-0" aria-hidden="true" />
                   <span className="max-w-40 truncate">ждёт: {blockedBy.title}</span>
                 </span>
               ) : null}
               {files > 0 ? (
-                <span className="flex items-center gap-0.5" aria-label={`Вложения, ссылки, контакты: ${files}`} data-testid="objects-badge">
+                <span className="flex items-center gap-1" aria-label={`Вложения, ссылки, контакты: ${files}`} data-testid="objects-badge">
                   <Paperclip className="size-3" aria-hidden="true" />
                   <span className="tabular-nums">{files}</span>
                 </span>
@@ -285,7 +291,7 @@ export const TaskRow = memo(function TaskRow({
             <button
               type="button"
               onClick={() => openMileage(kmAsset)}
-              className="mt-0.5 h-7 shrink-0 rounded-full bg-accent/10 px-2.5 text-xs font-medium text-accent"
+              className="mt-1 h-7 shrink-0 rounded-full bg-accent/10 px-3 text-xs font-medium text-accent"
             >
               Обновить пробег
             </button>
@@ -298,7 +304,7 @@ export const TaskRow = memo(function TaskRow({
               title={open ? "Свернуть подзадачи" : "Показать подзадачи"}
               onClick={() => setOpen(!open)}
               className={cn(
-                "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-1.5 text-[0.75rem] tabular-nums",
+                "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-2 text-[0.75rem] tabular-nums",
                 progress.done === progress.total ? "text-accent" : "text-muted",
               )}
             >
@@ -312,9 +318,9 @@ export const TaskRow = memo(function TaskRow({
               type="button"
               aria-label={`Перенести «${task.title}» на завтра`}
               onClick={() => updateTask(task.id, { due: tomorrow })}
-              className="-my-2 flex h-10 shrink-0 items-center px-0.5 [@media(pointer:coarse)]:hidden"
+              className="-my-2 flex h-10 shrink-0 items-center px-1 [@media(pointer:coarse)]:hidden"
             >
-              <span className="rounded-full bg-bg px-1.5 text-[0.6875rem] leading-[1.125rem] text-muted">завтра</span>
+              <span className="rounded-full bg-bg px-2 text-[0.6875rem] leading-[1.125rem] text-muted">завтра</span>
             </button>
           ) : null}
         </div>
@@ -507,4 +513,10 @@ function QuickChip({ label, off, onToggle, what }: { label: string; off: boolean
       <span aria-hidden="true">{off ? "↺" : "×"}</span>
     </button>
   );
+}
+
+
+function MaintDue({ task, assets, today }: { task: Task; assets: Asset[]; today: string }) {
+  const due = honestDue(task, assets, today);
+  return <span className={due.tone === "danger" ? "text-danger" : due.tone === "accent" ? "text-accent" : undefined}>{due.text}</span>;
 }

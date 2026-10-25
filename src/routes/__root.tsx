@@ -1,9 +1,9 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
-import { APPLE_TOUCH_ICONS, FAVICON_ICO, FAVICON_SVG, MANIFEST_URL } from "@/lib/app-icons";
+import { APPLE_TOUCH_ICONS, FAVICON_ICO, FAVICON_SVG, MANIFEST_URL, STARTUP_IMAGES } from "@/lib/app-icons";
 import { APP_DESCRIPTION, APP_NAME, APP_TITLE } from "@/lib/site";
 import { PREFETCH_SCRIPT } from "@/lib/sync/prefetch";
+import { TEXT_SIZE_SCRIPT } from "@/lib/text-size";
 import appCss from "../styles.css?url";
-// The main text font is requested together with the CSS, not after it (1.17).
 
 export const Route = createRootRoute({
   head: () => ({
@@ -17,7 +17,9 @@ export const Route = createRootRoute({
         name: "description",
         content: APP_DESCRIPTION,
       },
-      { name: "theme-color", content: "#f6f4ef" },
+      { name: "theme-color", content: "#f6f4ef", media: "(prefers-color-scheme: light)" },
+      { name: "theme-color", content: "#000000", media: "(prefers-color-scheme: dark)" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
       { property: "og:type", content: "website" },
       { property: "og:title", content: APP_TITLE },
       { property: "og:description", content: APP_DESCRIPTION },
@@ -30,6 +32,7 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: MANIFEST_URL },
       ...APPLE_TOUCH_ICONS.map(({ size, href }) => ({ rel: "apple-touch-icon", sizes: `${size}x${size}`, href })),
+      ...STARTUP_IMAGES.map(({ href, media }) => ({ rel: "apple-touch-startup-image", href, media })),
     ],
   }),
   component: () => (
@@ -37,6 +40,8 @@ export const Route = createRootRoute({
       <head>
         {/* 1.17: a fresh device asks for its first copy while the app's files load. */}
         <script dangerouslySetInnerHTML={{ __html: PREFETCH_SCRIPT }} />
+        {/* 1.18: text size follows «Размер текста» on iPhone. */}
+        <script dangerouslySetInnerHTML={{ __html: TEXT_SIZE_SCRIPT }} />
         <HeadContent />
       </head>
       <body>

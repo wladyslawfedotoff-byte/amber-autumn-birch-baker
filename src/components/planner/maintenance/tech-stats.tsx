@@ -14,9 +14,9 @@ function Rows({ title, rows, hint }: { title: string; rows: WarrantyRow[]; hint?
       <FieldLabel hint={hint} className="mb-1">
         {title} · {rows.length}
       </FieldLabel>
-      <ul className="space-y-1.5">
+      <ul className="space-y-2">
         {rows.map((r) => (
-          <li key={`${r.assetId}-${r.subject.id}`} className="flex items-center gap-2 rounded-xl bg-elevated px-3 py-2.5">
+          <li key={`${r.assetId}-${r.subject.id}`} className="flex items-center gap-2 rounded-xl bg-elevated px-3 py-2">
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[0.9375rem] font-semibold">{r.subject.part ? r.subject.part.name : r.assetName}</span>
               <span className="block truncate text-xs text-subtle">{[r.subject.part ? r.assetName : null, r.state.until ? `до ${day(r.state.until)}` : null].filter(Boolean).join(" · ")}</span>
@@ -47,9 +47,9 @@ export function TechStats({ assets }: { assets: Asset[] }) {
           Вложено в технику
         </FieldLabel>
         {s.invested > 0 ? (
-          <div className="rounded-xl bg-elevated px-3.5 py-3">
+          <div className="rounded-xl bg-elevated px-4 py-3">
             <p className="text-[1.5rem] leading-tight font-bold tabular-nums">{money(s.invested)}</p>
-            <ul className="mt-2 space-y-1.5">
+            <ul className="mt-2 space-y-2">
               {s.byYear.map(([y, v]) => (
                 <li key={y} className="flex items-center gap-2 text-[0.8125rem]">
                   <span className="w-9 shrink-0 text-muted">{y}</span>
@@ -70,9 +70,9 @@ export function TechStats({ assets }: { assets: Asset[] }) {
           <FieldLabel hint="Возраст — от самой ранней покупки в карточке. «≈ в год» — вложенное, делённое на возраст (не меньше года)." className="mb-1">
             Возраст и цена владения
           </FieldLabel>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {sorted.map((i) => (
-              <li key={i.asset.id} className="flex items-center gap-2 rounded-xl bg-elevated px-3 py-2.5">
+              <li key={i.asset.id} className="flex items-center gap-2 rounded-xl bg-elevated px-3 py-2">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[0.9375rem] font-semibold">{i.asset.name}</span>
                   <span className="block truncate text-xs text-subtle">{[i.age, i.perYear ? `≈ ${money(Math.round(i.perYear))} в год` : null].filter(Boolean).join(" · ") || "без даты покупки"}</span>

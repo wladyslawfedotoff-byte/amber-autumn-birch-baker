@@ -76,12 +76,12 @@ export function QuickComposer({
           open ? "translate-y-0 opacity-100" : "translate-y-[110%] opacity-0",
         )}
       >
-        <div className="-mx-3 -mt-2 touch-none px-3 pt-0 pb-1.5" onPointerDown={onDragDown}>
+        <div className="-mx-3 -mt-2 touch-none px-3 pt-0 pb-2" onPointerDown={onDragDown}>
           <span aria-hidden="true" className="sheet-grabber md:hidden" />
           <p className="px-1 text-xs font-medium text-subtle">{title}</p>
         </div>
         <AddTaskForm placeholder={placeholder} inputRef={inputRef} onAdd={onAdd} onEscape={onClose} />
-        <p className="px-1 pt-1.5 text-xs text-subtle">«завтра в 10», «в пятницу в 15» — дата и время распознаются сами. Несколько строк — несколько задач.</p>
+        <p className="px-1 pt-2 text-xs text-subtle">«завтра в 10», «в пятницу в 15» — дата и время распознаются сами. Несколько строк — несколько задач.</p>
       </div>
     </div>
   );

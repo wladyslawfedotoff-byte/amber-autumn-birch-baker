@@ -14,7 +14,7 @@ const BADGE: Record<Status, string> = { ok: "bg-ok/15 text-ok", soon: "bg-warn/1
 export const STATUS_WORD: Record<Status, string> = { ok: "ок", soon: "скоро", overdue: "просрочено" };
 
 export function Badge({ status, children, className }: { status: Status; children?: ReactNode; className?: string }) {
-  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap", BADGE[status], className)}>{children ?? STATUS_WORD[status]}</span>;
+  return <span className={cn("shrink-0 rounded-full px-2 py-1 text-[0.6875rem] font-semibold whitespace-nowrap", BADGE[status], className)}>{children ?? STATUS_WORD[status]}</span>;
 }
 
 export function KindIcon({ kind, className }: { kind: AssetKind; className?: string }) {
@@ -42,7 +42,7 @@ export function progressOf(rule: MaintRule, state: RuleState): number | null {
 
 export function Bar({ value, status }: { value: number; status: Status }) {
   return (
-    <div className="mt-1.5 h-[5px] overflow-hidden rounded-full bg-line" aria-hidden="true">
+    <div className="mt-2 h-[5px] overflow-hidden rounded-full bg-line" aria-hidden="true">
       <div className={cn("h-full rounded-full", status === "overdue" ? "bg-danger" : status === "soon" ? "bg-warn" : "bg-accent")} style={{ width: `${Math.round(value * 100)}%` }} />
     </div>
   );
@@ -65,7 +65,7 @@ export function subtitle(asset: Asset): string {
 /** Two or three choices on one row (like the kind chips, but one line). */
 export function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: { id: T; label: string }[]; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex rounded-xl bg-elevated p-0.5">
+    <div role="radiogroup" aria-label={label} className="flex rounded-xl bg-elevated p-1">
       {options.map((o) => (
         <button key={o.id} type="button" role="radio" aria-checked={value === o.id} onClick={() => onChange(o.id)} className={cn("h-9 min-w-0 flex-1 rounded-[0.6rem] px-2 text-[0.8125rem] font-medium", value === o.id ? "bg-surface text-fg shadow-sm" : "text-muted")}>
           {o.label}
@@ -78,5 +78,5 @@ export function Seg<T extends string>({ value, options, onChange, label }: { val
 const WARR: Record<WarrantyStatus, string> = { ok: "bg-ok/15 text-ok", soon: "bg-warn/15 text-warn", expired: "bg-line text-muted", none: "bg-line text-muted" };
 
 export function WarrBadge({ state, short, className }: { state: WarrantyState; short?: boolean; className?: string }) {
-  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap", WARR[state.status], className)}>{short ? warrantyBadge(state) : warrantyText(state)}</span>;
+  return <span className={cn("shrink-0 rounded-full px-2 py-1 text-[0.6875rem] font-semibold whitespace-nowrap", WARR[state.status], className)}>{short ? warrantyBadge(state) : warrantyText(state)}</span>;
 }

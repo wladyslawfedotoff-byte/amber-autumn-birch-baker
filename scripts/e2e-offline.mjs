@@ -76,7 +76,7 @@ async function openTask(page, title) {
 }
 
 async function closeDetail(page) {
-  await page.getByRole("button", { name: "Закрыть", exact: true }).click();
+  await page.locator("aside.sheet").getByRole("button", { name: /^(Закрыть|Готово)$/ }).first().click();
 }
 
 async function openSettings(page) {

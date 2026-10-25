@@ -52,14 +52,14 @@ export function DateMultiPicker({ value, onChange }: { value: string[]; onChange
           <ChevronRight className="size-4" />
         </button>
       </div>
-      <div className="grid grid-cols-7 text-center text-[11px] text-subtle" aria-hidden="true">
+      <div className="grid grid-cols-7 text-center text-[0.6875rem] text-subtle" aria-hidden="true">
         {WEEK.map((d) => (
           <span key={d} className="py-1">
             {d}
           </span>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-0.5" role="group" aria-label="Дни месяца">
+      <div className="grid grid-cols-7 gap-1" role="group" aria-label="Дни месяца">
         {cells.map((iso, index) =>
           iso ? (
             <button

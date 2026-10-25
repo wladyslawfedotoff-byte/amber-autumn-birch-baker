@@ -15,7 +15,7 @@ export function HintButton({ open, onToggle, label = "Подсказка", class
         className,
       )}
     >
-      <span className="flex size-4 items-center justify-center rounded-full border border-current text-[10px] font-semibold leading-none">?</span>
+      <span className="flex size-4 items-center justify-center rounded-full border border-current text-[0.625rem] font-semibold leading-none">?</span>
     </button>
   );
 }
@@ -25,11 +25,11 @@ export function FieldLabel({ children, hint, className }: { children: ReactNode;
   const [open, setOpen] = useState(false);
   return (
     <div className={className}>
-      <p className="flex items-center gap-0.5 text-xs font-medium text-subtle">
+      <p className="flex items-center gap-1 text-xs font-medium text-subtle">
         {children}
         {hint ? <HintButton open={open} onToggle={() => setOpen(!open)} /> : null}
       </p>
-      {hint && open ? <p className="mt-0.5 mb-1 text-xs text-muted">{hint}</p> : null}
+      {hint && open ? <p className="mt-1 mb-1 text-xs text-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -50,8 +50,8 @@ export function InlineHint({ label, children, className }: { label: string; chil
   const [open, setOpen] = useState(false);
   return (
     <div className={cn("text-xs text-subtle", className)}>
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={cn("inline-flex h-8 items-center gap-1.5 px-1", open && "text-accent")}>
-        <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full border border-current text-[10px] font-semibold leading-none">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={cn("inline-flex h-8 items-center gap-2 px-1", open && "text-accent")}>
+        <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full border border-current text-[0.625rem] font-semibold leading-none">
           ?
         </span>
         {label}

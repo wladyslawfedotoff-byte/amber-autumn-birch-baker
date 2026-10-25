@@ -5,7 +5,7 @@ import { AddTaskForm, TaskRow } from "@/components/planner/task-row";
 import { RowWindow } from "@/components/planner/row-window";
 import { Button } from "@/components/ui/button";
 import { InlineHint } from "@/components/ui/hint";
-import { Empty } from "@/components/planner/empty-state";
+import { AllDone, Empty } from "@/components/planner/empty-state";
 import { canBoard } from "@/lib/ui-prefs";
 import { cn } from "@/lib/cn";
 import { dueLabel, formatShortDay, shiftIso, todayIso, occursOn } from "@/lib/dates";
@@ -108,7 +108,7 @@ export function TaskViews({
         type="button"
         onClick={() => setShowBlocked(!showBlocked)}
         aria-pressed={showBlocked}
-        className="mb-1 flex h-9 items-center gap-1.5 rounded-full px-2 text-xs text-muted hover:text-fg"
+        className="mb-1 flex h-9 items-center gap-2 rounded-full px-2 text-xs text-muted hover:text-fg"
         data-testid="blocked-toggle"
       >
         <Lock className="size-3.5" aria-hidden="true" />
@@ -215,7 +215,7 @@ export function TaskViews({
           title={
             view === "inbox" ? "Входящие пусты" : view === "tomorrow" ? "На завтра пусто" : view.startsWith("tag:") ? "С этим тегом пусто" : "Список пуст"
           }
-          hint={share ? "Добавьте задачу — она видна только вам, пока вы ею не поделитесь." : "Добавьте задачу — она останется на этом устройстве."}
+          hint={share ? "Добавьте задачу — она видна только вам, пока вы ею не поделитесь." : "Добавьте задачу — она сохранится на вашем сервере и появится на всех устройствах."}
         />
       ) : view === "done" ? (
         doneAll(recentDone(tasks, now, archiveDays), selectedId, today, onOpen, archiveDays)
@@ -278,6 +278,12 @@ function doneAll(
   );
 }
 
+/** Local calendar day of a timestamp («2026-10-25»). */
+function localIso(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function TodayGroups({
   tasks,
   today,
@@ -291,8 +297,9 @@ function TodayGroups({
 }) {
   const overdue = tasks.filter((task) => task.due != null && task.due < today);
   const current = tasks.filter((task) => task.due === today);
+  const doneToday = usePlanner((s) => s.tasks.reduce((n, t) => (t.done && t.completedAt && localIso(t.completedAt) === today ? n + 1 : n), 0));
   if (overdue.length === 0 && current.length === 0) {
-    return <Empty title="День свободен" hint="Добавьте задачу на сегодня — или оставьте паузу." />;
+    return doneToday > 0 ? <AllDone title="Всё сделано" hint="На сегодня дел больше нет. Можно выдохнуть." /> : <AllDone title="День свободен" hint="Ничего не запланировано — хорошая пауза." />;
   }
   return (
     <div>
@@ -463,16 +470,16 @@ function PriorityBoard({
                   <li key={task.id}>
                     <div
                       className={cn(
-                        "drag-handle rounded-lg bg-elevated px-2.5 py-2",
+                        "drag-handle rounded-lg bg-elevated px-3 py-2",
                         selectedId === task.id && "ring-1 ring-accent",
                       )}
                       onPointerDown={(event) => begin(event, task)}
                     >
-                      <span className="flex items-start gap-1.5">
-                        <GripVertical className="mt-0.5 size-3.5 shrink-0 text-subtle" />
+                      <span className="flex items-start gap-2">
+                        <GripVertical className="mt-1 size-3.5 shrink-0 text-subtle" />
                         <span className="min-w-0 flex-1">
                           <span className="block text-[0.9375rem] leading-snug text-fg">{task.title}</span>
-                          <span className="mt-0.5 block text-[0.75rem] text-muted">
+                          <span className="mt-1 block text-[0.75rem] text-muted">
                             {task.due ? dueLabel(task.due, today) : "без даты"}
                           </span>
                         </span>

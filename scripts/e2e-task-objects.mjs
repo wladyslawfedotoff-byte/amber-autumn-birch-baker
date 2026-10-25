@@ -107,7 +107,7 @@ try {
   await page.getByTestId("task-objects").scrollIntoViewIfNeeded();
   await shot(page, "02-filled-task");
 
-  await page.getByRole("button", { name: "Закрыть", exact: true }).first().click();
+  await page.locator("aside.sheet").getByRole("button", { name: /^(Закрыть|Готово)$/ }).first().click();
   await page.getByTestId("objects-badge").first().waitFor();
   const badge = await page.getByTestId("objects-badge").first().textContent();
   if (badge?.trim() !== "5") fail(`badge ${badge}`);

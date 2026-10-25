@@ -180,7 +180,7 @@ try {
   ok("entry: file, link and contact in one chip strip (same row as tasks)");
   await shot(page, "13-entry-edited");
   ok("entry edited inline: place, cost, note changed, the receipt photo is kept");
-  await back.getByRole("button", { name: "Закрыть" }).click();
+  await back.getByRole("button", { name: /^(Отменить|Готово)$/ }).first().click();
   await page.getByText(/через 10 000 км|10 000 км/).first().waitFor();
   ok("rule still counts from the edited entry");
 
@@ -208,14 +208,14 @@ try {
   const cs = dialog(page, /Автомобиль: изменить/);
   await cs.getByLabel(/Марка, модель/).fill("Седан 1.6");
   await shot(page, "15-card-edit");
-  await cs.getByRole("button", { name: "Закрыть" }).click();
+  await cs.getByRole("button", { name: /^(Отменить|Готово)$/ }).first().click();
   await page.getByText(/Седан 1\.6/).first().waitFor();
   ok("card edited: model shown under the name");
   await page.getByRole("button", { name: "Изменить", exact: true }).first().click();
   const ms = dialog(page, "Пробег");
   await ms.getByText("Прежние показания").waitFor();
   await shot(page, "16-readings");
-  await ms.getByRole("button", { name: "Закрыть" }).click();
+  await ms.getByRole("button", { name: /^(Отменить|Готово)$/ }).first().click();
 
   // --- consumable + device ------------------------------------------------
   await page.getByRole("button", { name: "Назад к списку" }).click();

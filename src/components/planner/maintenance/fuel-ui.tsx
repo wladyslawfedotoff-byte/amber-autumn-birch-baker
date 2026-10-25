@@ -45,11 +45,11 @@ export function SpendLegend({ spend }: { spend: { fuel: number; service: number;
 
 function Tile({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <div className="min-w-0 flex-1 rounded-xl bg-elevated px-2.5 py-2">
+    <div className="min-w-0 flex-1 rounded-xl bg-elevated px-3 py-2">
       <p className="truncate text-[0.6875rem] text-muted">{label}</p>
       <p className="text-[1.0625rem] leading-tight font-bold tabular-nums">
         {value}
-        <span className="ml-0.5 text-[0.6875rem] font-medium text-subtle">{unit}</span>
+        <span className="ml-1 text-[0.6875rem] font-medium text-subtle">{unit}</span>
       </p>
     </div>
   );
@@ -93,35 +93,35 @@ export function FuelBlock({ asset }: { asset: Asset }) {
           Заправка
         </button>
       </div>
-      <div className="flex gap-1.5">
+      <div className="flex gap-2">
         <Tile label="Средний расход" value={stats.per100 !== null ? fmt1(stats.per100) : "—"} unit="л/100 км" />
         <Tile label="Топливо на км" value={stats.perKm !== null ? fmt1(stats.perKm) : "—"} unit="₽" />
         <Tile label={`Всё на км, ${year}`} value={own.perKm !== null ? fmt1(own.perKm) : "—"} unit="₽" />
       </div>
-      {stats.per100 === null ? <p className="mt-1.5 px-1 text-xs text-muted">Расход появится после двух полных заправок с пробегом.</p> : <p className="mt-1.5 px-1 text-xs text-subtle">по {stats.stretches} {stats.stretches === 1 ? "отрезку" : "отрезкам"} между полными баками · {groupKm(Math.round(stats.km))} км</p>}
+      {stats.per100 === null ? <p className="mt-2 px-1 text-xs text-muted">Расход появится после двух полных заправок с пробегом.</p> : <p className="mt-2 px-1 text-xs text-subtle">по {stats.stretches} {stats.stretches === 1 ? "отрезку" : "отрезкам"} между полными баками · {groupKm(Math.round(stats.km))} км</p>}
       <form
-        className="mt-2 flex items-center gap-1.5"
+        className="mt-2 flex items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           quick();
         }}
       >
-        <input inputMode="decimal" value={l} onChange={(e) => setL(e.target.value)} placeholder="литры" aria-label="Литры" className={cn(field, "min-w-0 flex-1 px-2.5")} />
-        <input inputMode="decimal" value={sum} onChange={(e) => setSum(e.target.value)} placeholder="сумма ₽" aria-label="Сумма заправки" className={cn(field, "min-w-0 flex-1 px-2.5")} />
-        <input inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} placeholder={asset.km ? `${groupKm(asset.km)} км` : "пробег"} aria-label="Пробег заправки" className={cn(field, "min-w-0 flex-1 px-2.5")} />
+        <input inputMode="decimal" value={l} onChange={(e) => setL(e.target.value)} placeholder="литры" aria-label="Литры" className={cn(field, "min-w-0 flex-1 px-3")} />
+        <input inputMode="decimal" value={sum} onChange={(e) => setSum(e.target.value)} placeholder="сумма ₽" aria-label="Сумма заправки" className={cn(field, "min-w-0 flex-1 px-3")} />
+        <input inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} placeholder={asset.km ? `${groupKm(asset.km)} км` : "пробег"} aria-label="Пробег заправки" className={cn(field, "min-w-0 flex-1 px-3")} />
         <Button type="submit" variant="primary" disabled={!can} aria-label="Добавить заправку" className="size-11 shrink-0 px-0">
           <Plus className="size-5" aria-hidden="true" />
         </Button>
       </form>
       {fills.length ? (
         <>
-          <ul className="mt-2 space-y-1.5">
+          <ul className="mt-2 space-y-2">
             {shown.map((f) => (
               <li key={f.id}>
                 <button type="button" onClick={() => setSheet(f)} className="flex w-full items-center gap-2 rounded-xl bg-elevated px-3 py-2 text-left">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[0.9375rem] font-semibold tabular-nums">
-                      {liters(f.liters)} л{f.sum > 0 ? <span className="ml-1.5 font-normal text-muted">{money(f.sum)}</span> : null}
+                      {liters(f.liters)} л{f.sum > 0 ? <span className="ml-2 font-normal text-muted">{money(f.sum)}</span> : null}
                     </span>
                     <span className="block truncate text-xs text-subtle">{fillLine(f)}</span>
                   </span>
@@ -233,7 +233,7 @@ export function OwnershipBlock({ asset }: { asset: Asset }) {
   const own = ownership(asset, year);
   if (own.total <= 0) return null;
   return (
-    <section className="mt-4 rounded-xl bg-elevated px-3.5 py-3" aria-label="Всего на машину">
+    <section className="mt-4 rounded-xl bg-elevated px-4 py-3" aria-label="Всего на машину">
       <div className="flex items-center gap-2">
         <FieldLabel hint="Топливо + обслуживание + страховка и налоги за год. ₽ на км — всё это, делённое на пройденные за год километры по обновлениям пробега." className="flex-1">
           Всего на машину
@@ -248,7 +248,7 @@ export function OwnershipBlock({ asset }: { asset: Asset }) {
           <span className="text-xs text-subtle">{year}</span>
         )}
       </div>
-      <p className="mt-0.5 text-[1.5rem] leading-tight font-bold tabular-nums">{money(own.total)}</p>
+      <p className="mt-1 text-[1.5rem] leading-tight font-bold tabular-nums">{money(own.total)}</p>
       <p className="mb-2 text-xs text-subtle">{own.perKm !== null ? `≈ ${fmt1(own.perKm)} ₽ на км · ${groupKm(own.km)} км за год` : "₽ на км появится, когда будут обновления пробега за этот год"}</p>
       <SpendBar spend={own.spend} />
       <SpendLegend spend={own.spend} />

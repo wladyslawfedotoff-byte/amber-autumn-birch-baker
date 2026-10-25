@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { Columns3, List, Menu, Search, Trash2, X } from "lucide-react";
+import { Columns3, List, Menu, Search, X } from "lucide-react";
 import { AssistantNoticeList } from "@/components/planner/assist-notices";
 import { useAssistantNotices } from "@/lib/assistant/use-notices";
 import { ChecklistView } from "@/components/planner/checklist-view";
@@ -259,7 +259,7 @@ export function PlannerApp() {
     document.documentElement.dataset.accent = accent;
     // Safari tints its bars from theme-color: match the app surface (no grey band under the tab bar).
     const surface = getComputedStyle(document.documentElement).getPropertyValue("--surface").trim();
-    if (surface) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", surface);
+    if (surface) document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", surface));
   }, [theme, accent]);
 
   useViewportFrame();
@@ -430,7 +430,7 @@ export function PlannerApp() {
       ) : null}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className={cn("relative z-35 shrink-0 px-2 py-1.5 transition-shadow duration-200 md:px-8 md:py-3", collapsed && "max-md:shadow-[0_0.5px_0_var(--line)]")}>
+        <header className={cn("relative z-35 shrink-0 px-2 py-2 transition-shadow duration-200 md:px-8 md:py-3", collapsed && "max-md:shadow-[0_0.5px_0_var(--line)]")}>
           <div className="flex items-center gap-2">
             <Button size="icon" variant="ghost" className="md:hidden" aria-label="Открыть меню" onClick={() => setDrawer(true)}>
               <Menu className="size-5" />
@@ -438,7 +438,7 @@ export function PlannerApp() {
             <div className="min-w-0 flex-1">
               {listId ? (
                 <>
-                <p className={cn("truncate text-center text-[17px] font-semibold transition-opacity duration-200 md:hidden", !collapsed && "opacity-0")} aria-hidden="true">
+                <p className={cn("truncate text-center text-[1.0625rem] font-semibold transition-opacity duration-200 md:hidden", !collapsed && "opacity-0")} aria-hidden="true">
                   {lists.find((list) => list.id === listId)?.name ?? ""}
                 </p>
                 <input
@@ -455,7 +455,7 @@ export function PlannerApp() {
               ) : (
                 <h1
                   className={cn(
-                    "truncate text-center text-[17px] font-semibold transition-opacity duration-200 md:text-left md:text-4xl md:font-bold md:tracking-tight",
+                    "truncate text-center text-[1.0625rem] font-semibold transition-opacity duration-200 md:text-left md:text-4xl md:font-bold md:tracking-tight",
                     !collapsed && !bigTitleOff && "max-md:opacity-0",
                   )}
                 >
@@ -490,7 +490,7 @@ export function PlannerApp() {
           </div>
           <SyncPill />
           {showSearch ? (
-            <label className="relative mt-1.5 block">
+            <label className="relative mt-2 block">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle" />
               <input
                 value={query}
@@ -605,7 +605,7 @@ export function PlannerApp() {
             />
           ) : null}
           {listId && !query.trim() ? (
-            <div className="mt-6 flex justify-center">
+            <div className="mt-16 flex justify-center">
               {confirmList ? (
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setConfirmList(false)}>
@@ -624,9 +624,9 @@ export function PlannerApp() {
                   </Button>
                 </div>
               ) : (
-                <Button variant="ghost" size="sm" className="text-subtle" onClick={() => setConfirmList(true)}>
-                  <Trash2 className="size-4" /> Удалить список
-                </Button>
+                <button type="button" className="h-11 px-4 text-xs text-subtle underline-offset-2 active:underline" onClick={() => setConfirmList(true)}>
+                  Удалить список…
+                </button>
               )}
             </div>
           ) : null}
@@ -699,10 +699,10 @@ export function PlannerApp() {
                 type="button"
                 aria-current={active ? "page" : undefined}
                 onClick={() => openView(id)}
-                className={cn("flex h-[3.25rem] min-w-0 flex-col items-center justify-center gap-0.5 text-[0.6875rem]", active ? "text-accent" : "text-subtle")}
+                className={cn("flex h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 text-[0.6875rem]", active ? "text-accent" : "text-subtle")}
               >
                 <Icon className="size-[1.375rem]" strokeWidth={active ? 2 : 1.75} />
-                <span className="max-w-full truncate px-0.5">{label}</span>
+                <span className="max-w-full truncate px-1">{label}</span>
               </button>
             );
           })}

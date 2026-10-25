@@ -67,7 +67,7 @@ export function PainSheet({ asset, painId, onClose, onOpenTask }: { asset: Asset
       <div className="space-y-2">
         <label className="block">
           <span className={smallLabel}>Что болит</span>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} aria-label="Текст заметки" rows={2} maxLength={500} className={cn(field, "h-auto py-2.5")} />
+          <textarea value={text} onChange={(e) => setText(e.target.value)} aria-label="Текст заметки" rows={2} maxLength={500} className={cn(field, "h-auto py-2")} />
         </label>
         <label className="block">
           <span className={smallLabel}>Что сделать</span>
@@ -91,9 +91,9 @@ export function PainSheet({ asset, painId, onClose, onOpenTask }: { asset: Asset
                   </>
                 ) : null}
               </p>
-              {pain.planKm && !task ? <p className="mt-0.5 text-xs text-muted">Задача появится, когда пробег подойдёт ближе чем на {groupKm(asset.soonKm ?? 500)} км.</p> : null}
-              {task?.done ? <p className="mt-0.5 text-xs text-muted">Задача выполнена.</p> : null}
-              {!task && pain.planDate && pain.taskMade ? <p className="mt-0.5 text-xs text-muted">Задачу удалили — запланируйте заново, если нужна.</p> : null}
+              {pain.planKm && !task ? <p className="mt-1 text-xs text-muted">Задача появится, когда пробег подойдёт ближе чем на {groupKm(asset.soonKm ?? 500)} км.</p> : null}
+              {task?.done ? <p className="mt-1 text-xs text-muted">Задача выполнена.</p> : null}
+              {!task && pain.planDate && pain.taskMade ? <p className="mt-1 text-xs text-muted">Задачу удалили — запланируйте заново, если нужна.</p> : null}
               <div className="mt-1 flex gap-2">
                 <Button variant="soft" onClick={() => setChanging(true)}>Изменить срок</Button>
                 <Button variant="soft" className="text-danger" onClick={() => unplan(asset.id, pain.id)}>Снять план</Button>

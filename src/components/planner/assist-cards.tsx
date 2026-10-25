@@ -40,7 +40,7 @@ function TaskRow({ task, mode, onOpen }: { task: Task; mode: "overdue" | "day"; 
   const meta = (mode === "overdue" ? [task.due ? dueLabel(task.due, today) : null, time, list] : [list]).filter(Boolean);
   const finished = task.done || ticked;
   return (
-    <li className="flex items-center gap-2.5 py-1.5 pr-1 pl-3" data-task-row={task.id}>
+    <li className="flex items-center gap-3 py-2 pr-1 pl-3" data-task-row={task.id}>
       {mode === "day" ? (
         <span className={cn("w-11 shrink-0 text-[0.8125rem] tabular-nums", time ? "font-medium" : "text-subtle")}>{task.startAt ?? "—"}</span>
       ) : null}
@@ -59,7 +59,7 @@ function TaskRow({ task, mode, onOpen }: { task: Task; mode: "overdue" | "day"; 
             <Undo2 className="size-4" />
           </button>
         ) : (
-          <Check className="mr-2.5 size-4 shrink-0 text-ok" aria-label="Готово" />
+          <Check className="mr-3 size-4 shrink-0 text-ok" aria-label="Готово" />
         )
       ) : (
         <>
@@ -114,14 +114,14 @@ export function AnswerViewCard({ view, onOpen }: { view: AnswerView; onOpen: (id
     return (
       <div className="mt-1" data-answer-view="free">
         <p className="text-[0.9375rem]">{view.title}</p>
-        <ul className="mt-1.5 overflow-hidden rounded-2xl bg-elevated">
+        <ul className="mt-2 overflow-hidden rounded-2xl bg-elevated">
           {view.days.map((d) => (
             <li key={d.date} className="flex items-start gap-3 border-b border-line/60 px-3 py-2 last:border-0">
-              <span className="w-24 shrink-0 pt-0.5 text-[0.8125rem] font-medium">{d.label}</span>
-              <span className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+              <span className="w-24 shrink-0 pt-1 text-[0.8125rem] font-medium">{d.label}</span>
+              <span className="flex min-w-0 flex-1 flex-wrap gap-2">
                 {d.slots.length ? (
                   d.slots.map((s) => (
-                    <span key={s} className="rounded-full bg-ok/12 px-2 py-0.5 text-[0.8125rem] text-ok tabular-nums">
+                    <span key={s} className="rounded-full bg-ok/12 px-2 py-1 text-[0.8125rem] text-ok tabular-nums">
                       {s}
                     </span>
                   ))
@@ -140,13 +140,13 @@ export function AnswerViewCard({ view, onOpen }: { view: AnswerView; onOpen: (id
   return (
     <div className="mt-1" data-answer-view={view.mode}>
       <p className="text-[0.9375rem]">{view.title}</p>
-      <ul className="mt-1.5 divide-y divide-line/60 overflow-hidden rounded-2xl bg-elevated">
+      <ul className="mt-2 divide-y divide-line/60 overflow-hidden rounded-2xl bg-elevated">
         {rows.map((t) => (
           <TaskRow key={t.id} task={t} mode={view.mode} onOpen={onOpen} />
         ))}
         {view.more ? <li className="px-3 py-2 text-xs text-muted">…и ещё {view.more}</li> : null}
       </ul>
-      {view.note ? <p className="mt-1.5 text-[0.8125rem] text-muted">{view.note}</p> : null}
+      {view.note ? <p className="mt-2 text-[0.8125rem] text-muted">{view.note}</p> : null}
     </div>
   );
 }
@@ -163,9 +163,9 @@ export function DiffRows({ item, done }: { item: Update; done: boolean }) {
   const lines = diffLines(item, done ? undefined : current, done ? null : listName);
   if (!lines.length) return null;
   return (
-    <span className="mt-0.5 block space-y-0.5">
+    <span className="mt-1 block space-y-1">
       {lines.map((l) => (
-        <span key={l.label} className="flex items-center gap-1.5 text-xs">
+        <span key={l.label} className="flex items-center gap-2 text-xs">
           <span className="shrink-0 text-subtle">{l.label}</span>
           <span className="truncate text-muted line-through decoration-muted/60">{l.was}</span>
           <ArrowRight className="size-3 shrink-0 text-subtle" aria-label="стало" />
@@ -192,7 +192,7 @@ export function PlanTimeline({ items, pending, onRemove }: { items: Update[]; pe
           const before = item.was && "start" in item.was ? item.was.start : null;
           return (
             <li key={item.key} className="relative flex items-stretch gap-3">
-              <span className="w-11 shrink-0 py-1.5 text-right tabular-nums">
+              <span className="w-11 shrink-0 py-2 text-right tabular-nums">
                 <span className="block text-[0.8125rem] font-semibold">{item.start}</span>
                 {item.end ? <span className="block text-[0.6875rem] text-muted">{item.end}</span> : null}
               </span>
@@ -200,7 +200,7 @@ export function PlanTimeline({ items, pending, onRemove }: { items: Update[]; pe
                 <span aria-hidden="true" className={cn("absolute w-px bg-line", index === 0 ? "top-1/2" : "top-0", index === sorted.length - 1 ? "bottom-1/2" : "bottom-0")} />
                 <Dot color={dotColor(task)} className="relative mt-[0.6rem] ring-2 ring-elevated" />
               </span>
-              <span className="min-w-0 flex-1 py-1.5">
+              <span className="min-w-0 flex-1 py-2">
                 <span className="line-clamp-2 block text-[0.9375rem] leading-snug">{item.taskTitle}</span>
                 {before && before !== item.start ? <span className="block text-xs text-muted">было {before}</span> : null}
               </span>
