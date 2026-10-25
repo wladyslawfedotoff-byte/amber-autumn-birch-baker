@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { AlertCircle, CalendarCheck, Sunrise, ChevronDown, ChevronRight, Columns3, Hash, Inbox, List, ListChecks, Pin, PinOff, Plus, Search, Settings, Users } from "lucide-react";
+import { AlertCircle, CalendarCheck, Folder, Sunrise, ChevronDown, ChevronRight, Hash, Inbox, List, ListChecks, Pin, PinOff, Plus, Search, Settings, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NAV_ICONS } from "@/components/planner/tab-icons";
 import { cn } from "@/lib/cn";
@@ -26,6 +26,7 @@ import { projectProgress } from "@/lib/projects";
 import { summarize } from "@/lib/maintenance/ops";
 import { useShareScope } from "@/lib/use-share-scope";
 import { isTaskOverdue } from "@/lib/maintenance/honest-due";
+import { activeScope } from "@/lib/offline/device-store";
 
 /** Navigation items that are screens of their own (not drawer groups). */
 type ViewNav = Extract<NavId, View>;
@@ -35,15 +36,50 @@ type Tile = "today" | "inbox" | "tomorrow" | "checklist" | "overdue";
 const TILES: Tile[] = ["today", "inbox", "tomorrow", "checklist", "overdue"];
 const TILE_META: Record<Tile, { label: string; color: string; icon: typeof Inbox }> = {
   today: { label: "Сегодня", color: "#0a84ff", icon: CalendarCheck },
-  inbox: { label: "Входящие", color: "#5e5ce6", icon: Inbox },
-  tomorrow: { label: "Завтра", color: "#ff9f0a", icon: Sunrise },
-  checklist: { label: "Все", color: "#636366", icon: ListChecks },
+  inbox: { label: "Входящие", color: "#5856d6", icon: Inbox },
+  tomorrow: { label: "Завтра", color: "#ff9500", icon: Sunrise },
+  checklist: { label: "Все", color: "#8e8e93", icon: ListChecks },
   overdue: { label: "Просрочено", color: "#ff3b30", icon: AlertCircle },
 };
 /** Everything else that is a screen: one row each in «Разделы». */
 const ROWS: ViewNav[] = ["week", "shared", "calendar", "schedule", "habits", "assist", "focus", "matrix", "dates", "maintenance"];
-/** List circles, by position (lists have no colour of their own). */
-const LIST_COLORS = ["#ff9500", "#34c759", "#0a84ff", "#af52de", "#ff2d55", "#5ac8fa", "#a2845e"];
+/** Folded menu groups, remembered on this device per profile (UI state, not synced). */
+const FOLD_DEFAULT: Record<DrawerTab, boolean> = { lists: false, projects: true, tags: true };
+const foldKey = () => `pora-menu-folded:${activeScope()}`;
+function readFolded(): Record<DrawerTab, boolean> {
+  try {
+    const raw = typeof window === "undefined" ? null : window.localStorage.getItem(foldKey());
+    const saved = raw ? (JSON.parse(raw) as Partial<Record<DrawerTab, unknown>>) : {};
+    const pick = (id: DrawerTab) => (typeof saved[id] === "boolean" ? (saved[id] as boolean) : FOLD_DEFAULT[id]);
+    return { lists: pick("lists"), projects: pick("projects"), tags: pick("tags") };
+  } catch {
+    return { ...FOLD_DEFAULT };
+  }
+}
+function saveFolded(value: Record<DrawerTab, boolean>) {
+  try {
+    window.localStorage.setItem(foldKey(), JSON.stringify(value));
+  } catch {
+    /* private mode / quota: just not remembered */
+  }
+}
+
+/** One colour per section (iOS system colours). */
+const ROW_COLORS: Partial<Record<ViewNav, string>> = {
+  week: "#30b0c7",
+  shared: "#a2845e",
+  calendar: "#ff3b30",
+  schedule: "#0a84ff",
+  habits: "#34c759",
+  assist: "#af52de",
+  focus: "#ff2d55",
+  matrix: "#00c7be",
+  dates: "#ff9500",
+  maintenance: "#8e8e93",
+};
+/** Lists, projects and tags have no colour of their own: they cycle this palette by position. */
+const PALETTE = ["#0a84ff", "#ff9500", "#34c759", "#af52de", "#ff2d55", "#30b0c7", "#5856d6", "#ff3b30"];
+const GLYPH: Record<DrawerTab, typeof Inbox> = { lists: List, projects: Folder, tags: Hash };
 
 const label = (id: NavId) => NAV_ITEMS.find((item) => item.id === id)?.label ?? id;
 
@@ -122,7 +158,13 @@ export function Sidebar({
   const [adding, setAdding] = useState<DrawerTab | null>(null);
   const [draft, setDraft] = useState("");
   /** Folded groups (projects and tags start folded). */
-  const [folded, setFolded] = useState<Record<DrawerTab, boolean>>({ lists: false, projects: true, tags: true });
+  const [folded, setFoldedState] = useState<Record<DrawerTab, boolean>>(readFolded);
+  const setFolded = (update: (f: Record<DrawerTab, boolean>) => Record<DrawerTab, boolean>) =>
+    setFoldedState((f) => {
+      const next = update(f);
+      saveFolded(next);
+      return next;
+    });
   /** Key of the item whose menu («Закрепить» / «Открепить») is open. */
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
@@ -166,12 +208,12 @@ export function Sidebar({
       name: list.name,
       count: n > 0 ? String(n) : null,
       pin: `list:${list.id}`,
-      color: LIST_COLORS[index % LIST_COLORS.length],
+      color: PALETTE[index % PALETTE.length],
       shared: Boolean(share && ((list.members ?? []).length > 0 || ownerOf(list, share.dataOwner) !== share.me)),
       open: () => onView(`list:${list.id}`),
     };
   });
-  const projectItems: GroupItem[] = projects.map((project) => {
+  const projectItems: GroupItem[] = projects.map((project, index) => {
     const { done, total } = projectProgress(project);
     return {
       key: `project:${project.id}`,
@@ -179,14 +221,15 @@ export function Sidebar({
       // «0/2» says something (nothing done yet); an empty project shows nothing.
       count: total > 0 ? `${done}/${total}` : null,
       pin: `project:${project.id}`,
+      color: PALETTE[(index + 3) % PALETTE.length],
       open: () => openProject(project.id),
     };
   });
   const tagItems: GroupItem[] = [...new Set(tasks.flatMap((task) => task.tags ?? []))]
     .sort((a, b) => a.localeCompare(b, "ru"))
-    .map((tag) => {
+    .map((tag, index) => {
       const n = tasks.filter((task) => !task.done && (task.tags ?? []).includes(tag)).length;
-      return { key: `tag:${tag}`, name: `#${tag}`, count: n > 0 ? String(n) : null, pin: null, open: () => onView(`tag:${tag}`) };
+      return { key: `tag:${tag}`, name: tag, count: n > 0 ? String(n) : null, pin: null, color: PALETTE[(index + 5) % PALETTE.length], open: () => onView(`tag:${tag}`) };
     });
   const groupItems: Record<DrawerTab, GroupItem[]> = { lists: listItems, projects: projectItems, tags: tagItems };
   const searching = query.trim().length > 0;
@@ -206,7 +249,6 @@ export function Sidebar({
   }
 
   const activeKey = view.startsWith("list:") || view.startsWith("tag:") ? view : null;
-  const addKind: DrawerTab | null = groups.some((g) => g.id === "lists") ? "lists" : groups.some((g) => g.id === "projects") ? "projects" : null;
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-bg text-fg">
@@ -261,9 +303,7 @@ export function Sidebar({
                     )}
                   >
                     <span className="flex w-full items-start justify-between">
-                      <span className="flex size-7 items-center justify-center rounded-full text-white" style={{ background: meta.color }}>
-                        <Icon className="size-4" strokeWidth={2} aria-hidden="true" />
-                      </span>
+                      <Badge color={meta.color} icon={Icon} big />
                       <span className={cn("text-[1.375rem] leading-none font-bold tabular-nums", n === 0 && "opacity-35")}>{n}</span>
                     </span>
                     <span className="truncate text-[0.875rem] leading-tight font-semibold text-muted">{meta.label}</span>
@@ -280,7 +320,7 @@ export function Sidebar({
               <GroupRow
                 key={item.key}
                 item={item}
-                icon={<Pin className="size-3.5" aria-hidden="true" />}
+                icon={item.key.startsWith("project:") ? Folder : List}
                 active={activeKey === item.key}
                 pinned
                 hidePinMark
@@ -309,7 +349,7 @@ export function Sidebar({
                     onClick={() => onView(id)}
                     className={cn(ROW, active && "bg-fg/[0.06]")}
                   >
-                    <Icon className="size-[1.125rem] shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+                    <Badge color={ROW_COLORS[id] ?? "#8e8e93"} icon={Icon} />
                     <span className="min-w-0 flex-1 truncate">{label(id)}</span>
                     {n > 0 ? <span className="shrink-0 text-[0.9375rem] text-subtle tabular-nums">{n}</span> : null}
                     <ChevronRight className="size-4 shrink-0 text-subtle/60" aria-hidden="true" />
@@ -341,7 +381,7 @@ export function Sidebar({
                     <GroupRow
                       key={item.key}
                       item={item}
-                      icon={group.id === "lists" ? <List className="size-3.5" aria-hidden="true" /> : group.id === "projects" ? <Columns3 className="size-3.5" aria-hidden="true" /> : <Hash className="size-3.5" aria-hidden="true" />}
+                      icon={GLYPH[group.id]}
                       active={activeKey === item.key}
                       pinned={item.pin ? pins.includes(item.pin) : false}
                       menuOpen={menuFor === item.key}
@@ -353,15 +393,15 @@ export function Sidebar({
                     />
                   ))}
               {!isFolded && all.length === 0 ? (
-                <li className="px-3 py-2 text-[0.8125rem] text-subtle">{group.id === "projects" ? "Проектов пока нет." : "Списков пока нет."}</li>
+                <li className="py-2 pr-3 pl-[3.25rem] text-[0.8125rem] text-subtle">{group.id === "projects" ? "Проектов пока нет." : "Списков пока нет."}</li>
               ) : null}
-              {!isFolded && group.id === "projects" && group.add ? (
-                adding === "projects" ? (
-                  <AddField kind="projects" draft={draft} setDraft={setDraft} onSubmit={() => submitNew("projects")} onCancel={() => setAdding(null)} />
+              {!isFolded && !searching && group.add ? (
+                adding === group.id ? (
+                  <AddField kind={group.id} draft={draft} setDraft={setDraft} onSubmit={() => submitNew(group.id)} onCancel={() => setAdding(null)} />
                 ) : (
                   <li>
-                    <button type="button" onClick={() => setAdding("projects")} className={cn(ROW, "text-accent")}>
-                      <Plus className="size-[1.125rem]" aria-hidden="true" />
+                    <button type="button" onClick={() => setAdding(group.id)} className={cn(ROW, "menu-add font-medium")}>
+                      <Badge color="#0a84ff" icon={Plus} />
                       {group.add}
                     </button>
                   </li>
@@ -375,26 +415,14 @@ export function Sidebar({
           <p className="px-1 pt-3 text-[0.8125rem] text-subtle">Ничего не нашлось.</p>
         ) : null}
 
-        {!searching && addKind === "lists" ? (
-          adding === "lists" ? (
-            <ul className="menu-card mt-3 overflow-hidden rounded-xl">
-              <AddField kind="lists" draft={draft} setDraft={setDraft} onSubmit={() => submitNew("lists")} onCancel={() => setAdding(null)} />
-            </ul>
-          ) : (
-            <button type="button" onClick={() => setAdding("lists")} className="mt-2 flex h-10 w-full items-center gap-2 px-1 text-left text-[0.9375rem] font-medium text-accent">
-              <Plus className="size-5" aria-hidden="true" />
-              Новый список
-            </button>
-          )
-        ) : null}
       </nav>
     </div>
   );
 }
 
-/** One row inside a grouped card: 40 px tall, hairline between rows (not after the last one). */
+/** One row inside a grouped card: 44 px, a 28 px badge; hairlines between rows start after the badge (.menu-card). */
 const ROW =
-  "flex h-10 w-full touch-manipulation items-center gap-3 px-3 text-left text-[0.9375rem] transition-colors duration-150 select-none [-webkit-touch-callout:none] active:bg-fg/[0.06]";
+  "flex h-11 w-full touch-manipulation items-center gap-3 px-3 text-left text-[0.9375rem] transition-colors duration-150 select-none [-webkit-touch-callout:none] active:bg-fg/[0.06]";
 
 /** A grouped inset card with a small caption; the caption folds the card when onFold is set. */
 function Card({ title, children, folded, onFold, count }: { title: string; children: ReactNode; folded?: boolean; onFold?: () => void; count?: number }) {
@@ -411,7 +439,7 @@ function Card({ title, children, folded, onFold, count }: { title: string; child
           <SectionLabel>{title}</SectionLabel>
         </div>
       )}
-      {folded ? null : <ul className="menu-card divide-y divide-line overflow-hidden rounded-xl [&>li]:border-line">{children}</ul>}
+      {folded ? null : <ul className="menu-card overflow-hidden rounded-xl">{children}</ul>}
     </section>
   );
 }
@@ -435,10 +463,23 @@ function AddField({ kind, draft, setDraft, onSubmit, onCancel }: { kind: DrawerT
           }}
           placeholder={name}
           aria-label={name}
-          className="h-10 w-full bg-transparent px-3 text-[0.9375rem] text-fg outline-none placeholder:text-subtle"
+          className="h-11 w-full bg-transparent pr-3 pl-[3.25rem] text-[0.9375rem] text-fg outline-none placeholder:text-subtle"
         />
       </form>
     </li>
+  );
+}
+
+/** The one icon style of the menu: a solid squircle (radius 25%) with a white glyph. */
+function Badge({ color, icon: Icon, big }: { color: string; icon: typeof Inbox; big?: boolean }) {
+  return (
+    <span
+      className={cn("flex shrink-0 items-center justify-center text-white", big ? "size-8 rounded-[0.5rem]" : "size-7 rounded-[0.4375rem]")}
+      style={{ background: color }}
+      aria-hidden="true"
+    >
+      <Icon className={big ? "size-[1.125rem]" : "size-4"} strokeWidth={2.25} />
+    </span>
   );
 }
 
@@ -457,7 +498,7 @@ function GroupRow({
   onTogglePin,
 }: {
   item: GroupItem;
-  icon: ReactNode;
+  icon: typeof Inbox;
   active: boolean;
   pinned: boolean;
   hidePinMark?: boolean;
@@ -481,9 +522,7 @@ function GroupRow({
         }}
         className={cn(ROW, active && "bg-fg/[0.06] font-medium")}
       >
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full text-white" style={{ background: item.color ?? "var(--accent)" }}>
-          {icon}
-        </span>
+        <Badge color={item.color ?? "#8e8e93"} icon={icon} />
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
         {pinned && !hidePinMark ? <Pin className="size-3.5 shrink-0 text-subtle" aria-label="закреплён" /> : null}
         {item.shared ? <Users className="size-3.5 shrink-0 text-subtle" aria-label="общий список" /> : null}
