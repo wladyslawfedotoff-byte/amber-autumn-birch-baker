@@ -1,3 +1,4 @@
+import { CAPS } from "@/components/ui/kit";
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Archive, CalendarRange, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -63,7 +64,7 @@ export function HabitsView({ onOpenFocus }: { onOpenFocus?: () => void }) {
               setWeek(!week);
               setOffset(0);
             }}
-            className={cn("flex size-10 items-center justify-center rounded-full", week ? "bg-elevated text-accent" : "text-muted")}
+            className={cn("flex size-10 items-center justify-center rounded-full", week ? "bg-elevated text-accent-ink" : "text-muted")}
           >
             <CalendarRange className="size-5" />
           </button>
@@ -80,13 +81,13 @@ export function HabitsView({ onOpenFocus }: { onOpenFocus?: () => void }) {
           </button>
           <div className="grid flex-1 grid-cols-7 text-center text-[0.6875rem] text-subtle">
             {days.map((day) => (
-              <span key={day} className={cn(day === today && "font-semibold text-accent")}>
+              <span key={day} className={cn(day === today && "font-semibold text-accent-ink")}>
                 {weekdayLetter(day)} {dayNumber(day)}
               </span>
             ))}
           </div>
           {offset < 0 ? (
-            <button type="button" aria-label="Эта неделя" onClick={() => setOffset(0)} className="flex h-9 items-center px-1 text-xs text-accent">
+            <button type="button" aria-label="Эта неделя" onClick={() => setOffset(0)} className="flex h-9 items-center px-1 text-xs text-accent-ink">
               Сейчас
             </button>
           ) : null}
@@ -109,8 +110,8 @@ export function HabitsView({ onOpenFocus }: { onOpenFocus?: () => void }) {
 
       {groups.map(({ section, items }) => (
         <section key={section.id} className="mt-2" data-section={section.id}>
-          <h3 className="px-1 pb-1 text-[0.6875rem] font-semibold tracking-wide text-subtle uppercase">{section.label}</h3>
-          <ul className="overflow-hidden rounded-card bg-card">
+          <h3 className={cn("px-1 pb-1", CAPS)}>{section.label}</h3>
+          <ul className="menu-card overflow-hidden rounded-card">
             {items.map((habit, index) => (
               <HabitRow
                 key={habit.id}

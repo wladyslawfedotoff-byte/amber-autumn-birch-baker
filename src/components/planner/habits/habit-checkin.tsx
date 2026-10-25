@@ -48,7 +48,7 @@ export function CheckinSheet({ habit, day, onClose }: { habit: Habit; day: strin
         save();
       }}
     >
-      <div className="divide-y divide-line overflow-hidden rounded-card bg-card">
+      <div className="menu-card overflow-hidden rounded-card">
         {radio(
           "done",
           "Выполнено",

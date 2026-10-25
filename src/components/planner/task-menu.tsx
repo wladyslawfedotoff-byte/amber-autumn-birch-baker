@@ -140,7 +140,7 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
           </>
         ) : (
           <>
-            <button type="button" className={cn(item, "text-accent")} onClick={() => setPage("main")}>
+            <button type="button" className={cn(item, "text-accent-ink")} onClick={() => setPage("main")}>
               <ChevronLeft className="-ml-1 size-5" />
               <span className="flex-1">В проект</span>
             </button>

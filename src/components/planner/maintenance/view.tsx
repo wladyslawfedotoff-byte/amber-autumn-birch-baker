@@ -44,7 +44,7 @@ function Nearest({ tasks, assets, onOpenTask, onOpenCard }: { tasks: Task[]; ass
                   <li key={task.id}>
                     <button type="button" onClick={() => onOpenTask?.(task.id)} className="flex h-9 w-full items-center gap-2 text-left text-sm">
                       <span className="min-w-0 flex-1 truncate text-fg">{shortMaintTitle(task, assets)}</span>
-                      <span className={cn("shrink-0 text-xs tabular-nums", due.tone === "danger" ? "text-danger" : due.tone === "accent" ? "text-accent" : "text-muted")}>
+                      <span className={cn("shrink-0 text-xs tabular-nums", due.tone === "danger" ? "text-danger" : due.tone === "accent" ? "text-accent-ink" : "text-muted")}>
                         {due.text}
                       </span>
                     </button>
@@ -80,7 +80,7 @@ function Row({ asset, summary, onOpen }: { asset: Asset; summary: AssetSummary; 
         <KindIcon kind={asset.kind} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-body font-semibold">{asset.name}</span>
-          <span className="block truncate text-xs text-accent">{subtitle(asset)}</span>
+          <span className="block truncate text-xs text-accent-ink">{subtitle(asset)}</span>
           <span className="block truncate text-xs text-subtle">{lineOf(asset, summary)}</span>
         </span>
         {summary.openPains > 0 ? <TriangleAlert className="size-4 shrink-0 text-warn" aria-label={`Что болит: ${summary.openPains}`} /> : null}
@@ -156,7 +156,7 @@ export function MaintenanceView({ onOpenTask }: { onOpenTask?: (taskId: string) 
               </ul>
             </section>
           ))}
-          <button type="button" onClick={() => setStats(true)} className="mt-3 flex h-11 items-center gap-2 px-1 text-[0.8125rem] font-medium text-accent md:hidden">
+          <button type="button" onClick={() => setStats(true)} className="mt-3 flex h-11 items-center gap-2 px-1 text-[0.8125rem] font-medium text-accent-ink md:hidden">
             <BarChart3 className="size-4" aria-hidden="true" /> Статистика: авто и техника
           </button>
         </>

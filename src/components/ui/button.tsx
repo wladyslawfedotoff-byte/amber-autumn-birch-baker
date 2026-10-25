@@ -9,14 +9,14 @@ import { cn } from "@/lib/cn";
  * older names of secondary / plain. All are ≥ 44 px tall.
  */
 const buttonVariants = cva(
-  "press inline-flex items-center justify-center gap-2 rounded-md font-medium transition-[opacity,background-color] duration-[var(--dur-fast)] disabled:pointer-events-none disabled:opacity-40 aria-busy:pointer-events-none",
+  "press inline-flex items-center justify-center gap-2 rounded-md font-medium transition-[opacity,background-color,filter] duration-[var(--dur-fast)] disabled:pointer-events-none disabled:opacity-40 aria-busy:pointer-events-none",
   {
     variants: {
       variant: {
-        primary: "bg-accent text-accent-fg active:opacity-80",
-        secondary: "border border-accent/60 bg-transparent text-accent active:bg-accent/10",
-        plain: "bg-transparent text-accent active:bg-accent/10",
-        destructive: "bg-danger text-on-danger active:opacity-80",
+        primary: "bg-accent text-accent-fg font-semibold active:brightness-90 disabled:bg-line disabled:text-muted disabled:opacity-100",
+        secondary: "border border-accent/60 bg-transparent text-accent-ink active:bg-accent/10",
+        plain: "bg-transparent text-accent-ink active:bg-accent/10",
+        destructive: "bg-danger text-on-danger active:brightness-90",
         soft: "border border-line bg-elevated text-fg active:bg-surface",
         ghost: "bg-transparent text-fg active:bg-elevated",
       },

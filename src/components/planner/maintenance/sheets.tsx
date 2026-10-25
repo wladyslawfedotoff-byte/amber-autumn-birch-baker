@@ -281,7 +281,7 @@ export function MileageSheet({ assetId, onClose }: { assetId: string; onClose: (
                 <li key={r.id} className="flex items-center gap-2 px-3 text-body">
                   <span className="w-20 shrink-0 text-xs text-muted">{formatShortDay(r.date)} {r.date.slice(0, 4)}</span>
                   <span className="flex-1 tabular-nums">{groupKm(r.km)} км</span>
-                  <button type="button" className="h-10 px-1 text-[0.8125rem] text-accent" onClick={() => { setFixing(r.id); setFixValue(String(r.km)); }}>Изменить</button>
+                  <button type="button" className="h-10 px-1 text-[0.8125rem] text-accent-ink" onClick={() => { setFixing(r.id); setFixValue(String(r.km)); }}>Изменить</button>
                   {asset.readings.length > 1 ? <button type="button" className="h-10 px-1 text-[0.8125rem] text-danger" aria-label={`Удалить показание ${r.date}`} onClick={() => dropReading(asset.id, r.id)}>Удалить</button> : null}
                 </li>
               ),

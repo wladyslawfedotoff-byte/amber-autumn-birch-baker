@@ -25,7 +25,7 @@ function inline(nodes: Inline[]): ReactNode[] {
         );
       case "link":
         return (
-          <a key={i} href={node.href} target="_blank" rel="noopener noreferrer nofollow" className="text-accent underline underline-offset-2">
+          <a key={i} href={node.href} target="_blank" rel="noopener noreferrer nofollow" className="text-accent-ink underline underline-offset-2">
             {inline(node.children)}
           </a>
         );

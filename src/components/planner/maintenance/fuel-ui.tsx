@@ -88,7 +88,7 @@ export function FuelBlock({ asset }: { asset: Asset }) {
         <FieldLabel hint="Расход считается между двумя полными баками с пробегом: сколько литров ушло на пройденные километры. Неполная заправка не обрывает отрезок — её литры просто прибавляются. Пробег и сумму можно не указывать: тогда заправка попадёт только в расходы." className="flex-1">
           Заправки
         </FieldLabel>
-        <button type="button" onClick={() => setSheet("new")} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent">
+        <button type="button" onClick={() => setSheet("new")} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent-ink">
           <Plus className="size-3.5" aria-hidden="true" />
           Заправка
         </button>
@@ -131,7 +131,7 @@ export function FuelBlock({ asset }: { asset: Asset }) {
             ))}
           </ul>
           {fills.length > 3 ? (
-            <button type="button" onClick={() => setAll(!all)} className="mt-1 h-9 px-1 text-[0.8125rem] text-accent">
+            <button type="button" onClick={() => setAll(!all)} className="mt-1 h-9 px-1 text-[0.8125rem] text-accent-ink">
               {all ? "Свернуть" : `Все заправки (${fills.length})`}
             </button>
           ) : null}

@@ -369,7 +369,7 @@ function WeekGroups({
     <div>
       {groups.map((group) => (
         <section key={group.day} className="mt-3">
-          <h2 className={cn("px-1 pb-1 text-xs font-semibold uppercase tracking-wide", group.day === today ? "text-accent" : "text-subtle")}>
+          <h2 className={cn("px-1 pb-1 text-xs font-semibold uppercase tracking-wide", group.day === today ? "text-accent-ink" : "text-subtle")}>
             {group.day === today ? "Сегодня · " : group.day === shiftIso(today, 1) ? "Завтра · " : ""}
             {formatShortDay(group.day, true)}
           </h2>

@@ -85,7 +85,7 @@ export function PainSheet({ asset, painId, onClose, onOpenTask }: { asset: Asset
                 {task && !task.done ? (
                   <>
                     {" · "}
-                    <button type="button" className="font-medium text-accent underline underline-offset-2" onClick={() => { onClose(); onOpenTask?.(task.id); }}>
+                    <button type="button" className="font-medium text-accent-ink underline underline-offset-2" onClick={() => { onClose(); onOpenTask?.(task.id); }}>
                       открыть задачу
                     </button>
                   </>

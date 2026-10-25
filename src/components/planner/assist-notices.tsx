@@ -16,7 +16,7 @@ export function AssistantNoticeList({ notices, onOpen }: { notices: AssistantNot
         {notices.map((n) => (
           <li key={n.id} className="border-b border-line last:border-b-0">
             <button type="button" onClick={() => onOpen(n)} className="flex w-full items-center gap-2 py-2 text-left">
-              <Sparkles className="size-4 shrink-0 text-accent" aria-hidden="true" />
+              <Sparkles className="size-4 shrink-0 text-accent-ink" aria-hidden="true" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-fg">{n.text}</span>
                 <span className="block truncate text-xs text-subtle">

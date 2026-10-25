@@ -10,8 +10,8 @@ export function HintButton({ open, onToggle, label = "Подсказка", class
       aria-label={label}
       onClick={onToggle}
       className={cn(
-        "-my-2 inline-flex size-8 shrink-0 items-center justify-center rounded-full align-middle",
-        open ? "text-accent" : "text-subtle",
+        "hit -my-2 inline-flex size-8 shrink-0 items-center justify-center rounded-full align-middle",
+        open ? "text-accent-ink" : "text-subtle",
         className,
       )}
     >
@@ -51,7 +51,7 @@ export function InlineHint({ label, children, className }: { label: string; chil
   const [open, setOpen] = useState(false);
   return (
     <div className={cn("text-xs text-subtle", className)}>
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={cn("inline-flex h-8 items-center gap-2 px-1", open && "text-accent")}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={cn("inline-flex h-8 items-center gap-2 px-1", open && "text-accent-ink")}>
         <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full border border-current text-[0.625rem] font-semibold leading-none">
           ?
         </span>

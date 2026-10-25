@@ -10,8 +10,13 @@
   --muted: #5c5f59;
   --subtle: #62655e;
   --line: #ddd8ce;
-  --accent: #243e4a;
-  --accent-fg: #f4f2eb;
+  /* Основной цвет «Пора» — оранжевый на базе #FE6907.
+     --accent: заливка (кнопки, чекбоксы, FAB, кольцо фокуса); белый текст на ней 4.79:1.
+     --accent-ink: оранжевый для текста и ссылок на светлом фоне, 4.77:1 на bg. */
+  --accent: #c24e00;
+  --accent-fg: #ffffff;
+  --accent-ink: #a84300;
+  --accent-brand: #fe6907;
   --danger: #8d3b3b;
   --on-danger: #f7f3ee;
   --warn: #8a5a2a;
@@ -31,7 +36,7 @@
   --success: var(--ok);
   --warning: var(--warn);
   --info: #2a5f9e;
-  --link: #0062cc;
+  --link: var(--accent-ink);
   --scrim: rgb(0 0 0 / 0.22);
   --knob: #ffffff;
   --on-badge: #ffffff;
@@ -100,8 +105,9 @@
   --muted: #c2c4bc;
   --subtle: #9a9d95;
   --line: #38383a;
-  --accent: #d7e0da;
-  --accent-fg: #141614;
+  --accent: #ff8a3d;
+  --accent-fg: #1a0e05;
+  --accent-ink: #ff9a52;
   --danger: #e7b0b0;
   --on-danger: #2a1414;
   --warn: #e2c39a;
@@ -110,32 +116,32 @@
 
   --card: var(--elevated);
   --info: #9cc1f0;
-  --link: #409cff;
+  --link: var(--accent-ink);
   --scrim: rgb(0 0 0 / 0.5);
   color-scheme: dark;
 }
 
-:root[data-accent="blue"] { --accent: #34609f; --accent-fg: #f4f7fb; }
-:root[data-accent="teal"] { --accent: #1f6f73; --accent-fg: #f2f7f7; }
-:root[data-accent="green"] { --accent: #2f6b4f; --accent-fg: #f3f7f4; }
-:root[data-accent="orange"] { --accent: #95511f; --accent-fg: #fbf6f1; }
-:root[data-accent="red"] { --accent: #8d3b3b; --accent-fg: #fbf4f4; }
-:root[data-accent="purple"] { --accent: #5c4d8a; --accent-fg: #f6f4fb; }
-:root[data-accent="pink"] { --accent: #8d4d68; --accent-fg: #fbf4f7; }
+:root[data-accent="blue"] { --accent: #34609f; --accent-fg: #f4f7fb; --accent-ink: #34609f; }
+:root[data-accent="teal"] { --accent: #1f6f73; --accent-fg: #f2f7f7; --accent-ink: #1f6f73; }
+:root[data-accent="green"] { --accent: #2f6b4f; --accent-fg: #f3f7f4; --accent-ink: #2f6b4f; }
+:root[data-accent="ink"] { --accent: #243e4a; --accent-fg: #f4f2eb; --accent-ink: #243e4a; }
+:root[data-accent="red"] { --accent: #8d3b3b; --accent-fg: #fbf4f4; --accent-ink: #8d3b3b; }
+:root[data-accent="purple"] { --accent: #5c4d8a; --accent-fg: #f6f4fb; --accent-ink: #5c4d8a; }
+:root[data-accent="pink"] { --accent: #8d4d68; --accent-fg: #fbf4f7; --accent-ink: #8d4d68; }
 
-:root[data-theme="dark"][data-accent="blue"] { --accent: #9eb6e0; --accent-fg: #12151c; }
-:root[data-theme="dark"][data-accent="teal"] { --accent: #9fd4d4; --accent-fg: #101616; }
-:root[data-theme="dark"][data-accent="green"] { --accent: #a9d2bc; --accent-fg: #121614; }
-:root[data-theme="dark"][data-accent="orange"] { --accent: #e2c09a; --accent-fg: #1a1410; }
-:root[data-theme="dark"][data-accent="red"] { --accent: #e7b0b0; --accent-fg: #1a1010; }
-:root[data-theme="dark"][data-accent="purple"] { --accent: #c9bfe0; --accent-fg: #141218; }
-:root[data-theme="dark"][data-accent="pink"] { --accent: #e7b8cb; --accent-fg: #1a1014; }
+:root[data-theme="dark"][data-accent="blue"] { --accent: #9eb6e0; --accent-fg: #12151c; --accent-ink: #9eb6e0; }
+:root[data-theme="dark"][data-accent="teal"] { --accent: #9fd4d4; --accent-fg: #101616; --accent-ink: #9fd4d4; }
+:root[data-theme="dark"][data-accent="green"] { --accent: #a9d2bc; --accent-fg: #121614; --accent-ink: #a9d2bc; }
+:root[data-theme="dark"][data-accent="ink"] { --accent: #d7e0da; --accent-fg: #141614; --accent-ink: #d7e0da; }
+:root[data-theme="dark"][data-accent="red"] { --accent: #e7b0b0; --accent-fg: #1a1010; --accent-ink: #e7b0b0; }
+:root[data-theme="dark"][data-accent="purple"] { --accent: #c9bfe0; --accent-fg: #141218; --accent-ink: #c9bfe0; }
+:root[data-theme="dark"][data-accent="pink"] { --accent: #e7b8cb; --accent-fg: #1a1014; --accent-ink: #e7b8cb; }
 
 .swatch-ink { background: #243e4a; }
 .swatch-blue { background: #34609f; }
 .swatch-teal { background: #1f6f73; }
 .swatch-green { background: #2f6b4f; }
-.swatch-orange { background: #95511f; }
+.swatch-orange { background: #c24e00; }
 .swatch-red { background: #8d3b3b; }
 .swatch-purple { background: #5c4d8a; }
 .swatch-pink { background: #8d4d68; }

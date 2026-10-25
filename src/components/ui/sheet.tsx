@@ -56,7 +56,7 @@ export function Sheet({
         <span aria-hidden="true" className="sheet-grabber md:hidden" />
         <div className="flex items-center gap-2 px-2 pt-1 pb-1">
           {action ? (
-            <button type="button" onClick={onClose} className="h-11 min-w-11 shrink-0 rounded-full px-2 text-body text-accent">
+            <button type="button" onClick={onClose} className="h-11 min-w-11 shrink-0 rounded-full px-2 text-body text-accent-ink">
               Отменить
             </button>
           ) : (
@@ -84,7 +84,7 @@ export function Sheet({
               {action.label}
             </button>
           ) : (
-            <button type="button" onClick={onClose} className="h-11 min-w-11 shrink-0 rounded-full px-2 text-body font-semibold text-accent">
+            <button type="button" onClick={onClose} className="h-11 min-w-11 shrink-0 rounded-full px-2 text-body font-semibold text-accent-ink">
               Готово
             </button>
           )}

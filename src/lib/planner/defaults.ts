@@ -44,7 +44,7 @@ export function seed(): Pick<
   const today = todayIso();
   return {
     theme: "light",
-    accent: "ink",
+    accent: "orange",
     pomoDate: today,
     pomoCount: 1,
     remindAck: {},

@@ -1,3 +1,4 @@
+import { FIELD } from "@/components/ui/kit";
 import type { ReactNode } from "react";
 import { Car, Droplets, Plug, Wrench } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -5,7 +6,7 @@ import type { Asset, AssetKind } from "@/lib/planner-types";
 import { warrantyBadge, warrantyText, type WarrantyState, type WarrantyStatus } from "@/lib/maintenance/warranty";
 import type { MaintRule, RuleState, Status } from "@/lib/maintenance/rules";
 
-export const field = "h-11 w-full rounded-card bg-card px-3 text-base outline-none placeholder:text-subtle";
+export const field = `${FIELD} border-separator`;
 export const smallLabel = "mb-1 px-1 text-xs font-medium text-subtle";
 
 export const KIND_ICON: Record<AssetKind, typeof Car> = { car: Car, device: Plug, consumable: Droplets, other: Wrench };
@@ -20,7 +21,7 @@ export function Badge({ status, children, className }: { status: Status; childre
 export function KindIcon({ kind, className }: { kind: AssetKind; className?: string }) {
   const Icon = KIND_ICON[kind];
   return (
-    <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-accent", className)} aria-hidden="true">
+    <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-accent-ink", className)} aria-hidden="true">
       <Icon className="size-[1.125rem]" strokeWidth={1.75} />
     </span>
   );

@@ -28,7 +28,7 @@ export function IconBadge({ icon: Icon, color, size = "md" }: { icon: LucideIcon
 export function Counter({ value, tone = "plain" }: { value: number | string | null | undefined; tone?: "plain" | "danger" | "accent" }) {
   if (value === null || value === undefined || value === 0 || value === "") return null;
   return (
-    <span className={cn("shrink-0 text-body tabular-nums", tone === "danger" ? "text-danger" : tone === "accent" ? "text-accent" : "text-tertiary-label")}>{value}</span>
+    <span className={cn("shrink-0 text-body tabular-nums", tone === "danger" ? "text-danger" : tone === "accent" ? "text-accent-ink" : "text-tertiary-label")}>{value}</span>
   );
 }
 
@@ -37,8 +37,11 @@ export function Spinner({ className }: { className?: string }) {
 }
 
 /** Caps caption above a card; a button with a chevron when the card folds. */
+/** Подпись секции капсом — общий стиль для всех экранов. */
+export const CAPS = "text-[0.6875rem] font-semibold tracking-wide text-tertiary-label uppercase";
+
 export function SectionHeader({ title, count, folded, onFold }: { title: string; count?: number; folded?: boolean; onFold?: () => void }) {
-  const label = <span className="text-[0.6875rem] font-semibold tracking-wide text-tertiary-label uppercase">{title}</span>;
+  const label = <span className={CAPS}>{title}</span>;
   if (!onFold) return <div className="mb-1 px-1">{label}</div>;
   return (
     <button type="button" aria-expanded={!folded} onClick={onFold} className="mb-1 flex min-h-8 w-full items-center gap-1 px-1 text-left">
@@ -211,8 +214,8 @@ export function InfoCard({ icon, color, title, subtitle, value, onClick }: { ico
 }
 
 type FieldState = "error" | "success" | undefined;
-const FIELD =
-  "h-11 w-full rounded-md border bg-surface-2 px-3 text-body text-label outline-none transition-[border-color,box-shadow] duration-[var(--dur-fast)] placeholder:text-tertiary-label focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-40";
+export const FIELD =
+  "h-11 w-full rounded-md border bg-surface-2 px-3 text-base text-label outline-none transition-[border-color,box-shadow] duration-[var(--dur-fast)] placeholder:text-tertiary-label focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-40";
 
 /** Text field: label above, helper or error below; error = red border, success = green check. */
 export function TextField({

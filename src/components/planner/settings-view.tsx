@@ -1,5 +1,5 @@
 import { icon } from "@/lib/design/tokens";
-import { GroupedCard, ListRow } from "@/components/ui/kit";
+import { GroupedCard, ListRow, CAPS } from "@/components/ui/kit";
 import { APP_NAME, APP_VERSION } from "@/lib/site";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
@@ -66,22 +66,22 @@ function ArchiveSection({ onView }: { onView?: (view: View) => void }) {
   const [help, setHelp] = useState(false);
   return (
     <section aria-label="Готово и архив" className="text-sm">
-      <div className="divide-y divide-line overflow-hidden rounded-card bg-card">
+      <div className="menu-card overflow-hidden rounded-card">
         <button type="button" disabled={!onView} onClick={() => onView?.("done")} className="flex min-h-11 w-full items-center gap-3 px-3 text-left">
-          <CheckCheck className="size-[1.125rem] shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+          <CheckCheck className="size-[1.125rem] shrink-0 text-accent-ink" strokeWidth={1.75} aria-hidden="true" />
           <span className="min-w-0 flex-1 text-body">Выполненные</span>
           <span className="text-muted tabular-nums">{done}</span>
           <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
         </button>
         <button type="button" disabled={!onView} onClick={() => onView?.("archive")} className="flex min-h-11 w-full items-center gap-3 px-3 text-left">
-          <Archive className="size-[1.125rem] shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+          <Archive className="size-[1.125rem] shrink-0 text-accent-ink" strokeWidth={1.75} aria-hidden="true" />
           <span className="min-w-0 flex-1 text-body">Архив</span>
           <span className="text-muted tabular-nums">{archived}</span>
           <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
         </button>
       </div>
       <div className="mt-4 mb-1 flex items-center gap-1 px-1">
-        <p className="min-w-0 flex-1 text-[0.6875rem] font-semibold tracking-wide text-subtle uppercase">Убирать в архив</p>
+        <p className={cn("min-w-0 flex-1", CAPS)}>Убирать в архив</p>
         <button
           type="button"
           aria-expanded={help}
@@ -535,7 +535,7 @@ function NavigationSection() {
       <p className={heading}>
         Нижняя панель · {tabs.length} из {MAX_TABS}
       </p>
-      <ul className="divide-y divide-line overflow-hidden rounded-card bg-card">
+      <ul className="menu-card overflow-hidden rounded-card">
         {shown.map((id, index) => {
           const Icon = TAB_ICONS[id];
           const name = label(id);
@@ -552,7 +552,7 @@ function NavigationSection() {
               >
                 <MinusCircle className="size-5" />
               </button>
-              <Icon className="size-5 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+              <Icon className="size-5 shrink-0 text-accent-ink" strokeWidth={1.75} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate text-body">{name}</span>
               {/* Keyboard / screen-reader fallback for the drag handle. */}
               <button type="button" aria-label={`${name}: левее`} disabled={index === 0} onClick={() => setTabs(moveTab(tabs, id, -1))} className="sr-only focus:not-sr-only">
@@ -593,7 +593,7 @@ function NavigationSection() {
                   onClick={() => move(item.id, "bottom")}
                   className="card-lift flex h-10 w-full min-w-0 items-center gap-2 rounded-card bg-card px-3 text-left text-[0.875rem] disabled:opacity-40"
                 >
-                  <Plus className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                  <Plus className="size-4 shrink-0 text-accent-ink" aria-hidden="true" />
                   <span className="min-w-0 truncate">{item.label}</span>
                 </button>
               </li>
@@ -604,7 +604,7 @@ function NavigationSection() {
       ) : null}
 
       <p className={heading}>Боковое меню</p>
-      <ul className="divide-y divide-line overflow-hidden rounded-card bg-card">
+      <ul className="menu-card overflow-hidden rounded-card">
         {menu.map((item) => {
           const Icon = NAV_ICONS[item.id];
           const on = placementOf(item.id, prefs) === "menu";
@@ -628,7 +628,7 @@ function NavigationSection() {
       </ul>
       <div className="mt-2 flex items-center justify-between gap-2 px-1">
         <p className="text-xs text-muted">Пункты из нижней панели в меню не повторяются.</p>
-        <button type="button" onClick={() => setNav({ tabBar: [...DEFAULT_TABS], drawerHidden: [] })} className="h-9 shrink-0 text-sm text-accent">
+        <button type="button" onClick={() => setNav({ tabBar: [...DEFAULT_TABS], drawerHidden: [] })} className="h-9 shrink-0 text-sm text-accent-ink">
           Сбросить
         </button>
       </div>
@@ -680,7 +680,7 @@ function NotifySection() {
 
   return (
     <div className="text-sm" data-testid="notify-settings">
-      <div className="divide-y divide-line overflow-hidden rounded-card bg-card">
+      <div className="menu-card overflow-hidden rounded-card">
         <div className="flex min-h-11 items-center gap-3 px-3">
           <span className="min-w-0 flex-1">Напоминания на этом устройстве</span>
           <span className={cn("text-sm", state?.kind === "on" ? "text-ok" : state?.kind === "denied" ? "text-danger" : "text-muted")}>{label}</span>
@@ -761,7 +761,7 @@ function DateTimeSection() {
   const field = "h-9 w-24 rounded-lg bg-surface px-2 text-right tabular-nums outline-none";
   return (
     <div className="text-body">
-      <div className="divide-y divide-line overflow-hidden rounded-card bg-card">
+      <div className="menu-card overflow-hidden rounded-card">
         <label className="flex min-h-11 items-center gap-3 px-3">
           <span className="min-w-0 flex-1">Рабочий день с</span>
           <input type="time" value={workStart} onChange={(event) => setWorkHours(event.target.value || "09:00", workEnd)} className={field} />
@@ -772,7 +772,7 @@ function DateTimeSection() {
         </label>
       </div>
       <p className="mt-1 px-1 text-xs text-muted">Подсвечивается в «Расписании». Общая настройка для всех ваших устройств.</p>
-      <div className="mt-4 divide-y divide-line overflow-hidden rounded-card bg-card">
+      <div className="mt-4 menu-card overflow-hidden rounded-card">
         <SwitchRow label="Номера недель" hint="В календаре: «41» слева от строки месяца" checked={weekNumbers} onChange={setWeekNumbers} />
         <label className="flex min-h-11 items-center gap-3 px-3">
           <span className="min-w-0 flex-1">Календарь открывать как</span>

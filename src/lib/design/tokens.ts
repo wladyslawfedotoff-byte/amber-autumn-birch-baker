@@ -47,5 +47,5 @@ export const ICON_STROKE = 1.75;
 /** Every colour token, for the /kit page. */
 export const COLOR_TOKENS = [
   "bg", "surface", "surface-2", "card", "separator", "label", "secondary-label", "tertiary-label",
-  "accent", "accent-fg", "success", "warning", "danger", "info", "link",
+  "accent", "accent-fg", "accent-ink", "success", "warning", "danger", "info", "link",
 ] as const;

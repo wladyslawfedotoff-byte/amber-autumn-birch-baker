@@ -232,7 +232,7 @@ export function ChipRow({ chips, disabled, onChip }: { chips: Chip[]; disabled: 
           onClick={() => onChip(chip)}
           className={cn(
             "flex h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-[0.8125rem] whitespace-nowrap disabled:opacity-40",
-            chip.proposal ? "border-accent/30 bg-accent/10 text-accent" : "border-line bg-surface text-fg",
+            chip.proposal ? "border-accent/30 bg-accent/10 text-accent-ink" : "border-line bg-surface text-fg",
           )}
         >
           {chip.proposal ? <Sparkles className="size-3.5" aria-hidden="true" /> : null}

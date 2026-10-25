@@ -104,7 +104,7 @@ function AgendaDays({
           <div className="min-w-0 flex-1 text-center leading-tight">
             <p className="truncate text-body font-semibold">{formatRange(days[0]!, days[days.length - 1]!)}</p>
             {start !== today ? (
-              <button type="button" className="text-[0.6875rem] text-accent" onClick={() => setStart(today)}>
+              <button type="button" className="text-[0.6875rem] text-accent-ink" onClick={() => setStart(today)}>
                 к сегодня
               </button>
             ) : (
@@ -126,7 +126,7 @@ function AgendaDays({
           return (
             <section key={day} className="mt-3" aria-label={formatLong(day)}>
               <div className="flex items-center gap-2 px-1 pb-1">
-                <h2 className={cn("min-w-0 flex-1 truncate text-xs font-semibold uppercase", day === today ? "text-accent" : "text-muted")}>
+                <h2 className={cn("min-w-0 flex-1 truncate text-xs font-semibold uppercase", day === today ? "text-accent-ink" : "text-muted")}>
                   {day === today ? "Сегодня · " : ""}
                   {formatShortDay(day, true)}
                 </h2>

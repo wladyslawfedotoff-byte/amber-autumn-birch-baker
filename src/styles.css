@@ -21,6 +21,7 @@
   --color-line: var(--line);
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
+  --color-accent-ink: var(--accent-ink);
   --color-danger: var(--danger);
   --color-on-danger: var(--on-danger);
   --color-warn: var(--warn);
@@ -539,4 +540,16 @@ nav[aria-label="Основные разделы"] {
   left: var(--space-3);
   height: 0.5px;
   background: var(--separator);
+}
+
+/* 1.20: невидимая зона нажатия не меньше 44×44 при прежнем размере значка. */
+.hit { position: relative; }
+.hit::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--tap));
+  height: max(100%, var(--tap));
+  transform: translate(-50%, -50%);
 }

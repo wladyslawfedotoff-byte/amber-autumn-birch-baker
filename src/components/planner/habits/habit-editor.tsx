@@ -1,3 +1,4 @@
+import { FIELD } from "@/components/ui/kit";
 import { useState, type ReactNode } from "react";
 import { Check, ChevronRight, Pencil, Plus, RefreshCw, XCircle } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
@@ -81,7 +82,7 @@ function NumberField({ label, value, onValue, min, max, placeholder }: { label: 
           const n = Math.round(Number(raw));
           if (Number.isFinite(n)) onValue(Math.min(max, Math.max(min, n)));
         }}
-        className="mt-1 h-11 w-full rounded-card bg-card px-3 text-base text-fg outline-none placeholder:text-subtle"
+        className={cn(FIELD, "border-separator mt-1")}
       />
     </label>
   );
@@ -275,7 +276,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
               ))}
             </div>
           ) : null}
-          <button type="button" onClick={() => setPicker({ time: null })} className="mt-1 flex h-9 items-center gap-1 text-[0.875rem] text-accent">
+          <button type="button" onClick={() => setPicker({ time: null })} className="mt-1 flex h-9 items-center gap-1 text-[0.875rem] text-accent-ink">
             <Plus className="size-4" /> Добавить
           </button>
         </Card>
@@ -291,7 +292,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
         <Card
           title="Мотивация"
           extra={
-            <button type="button" aria-label="Другая фраза" onClick={() => set({ why: randomQuote(draft.why) })} className="-mr-2 flex size-9 items-center justify-center text-accent">
+            <button type="button" aria-label="Другая фраза" onClick={() => set({ why: randomQuote(draft.why) })} className="-mr-2 flex size-9 items-center justify-center text-accent-ink">
               <RefreshCw className="size-4" />
             </button>
           }
@@ -471,7 +472,7 @@ function GoalPicker({ draft, set, onClose }: { draft: HabitDraft; set: (patch: P
               maxLength={20}
               placeholder="стаканов"
               onChange={(event) => set({ unit: event.target.value })}
-              className="mt-1 h-11 w-full rounded-card bg-card px-3 text-base text-fg outline-none placeholder:text-subtle"
+              className={cn(FIELD, "border-separator mt-1")}
             />
           </label>
           <NumberField label="За нажатие" value={draft.step} min={1} max={10000} onValue={(n) => set({ step: n ?? 1 })} />

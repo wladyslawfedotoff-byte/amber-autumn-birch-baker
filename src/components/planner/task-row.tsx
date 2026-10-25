@@ -217,7 +217,7 @@ export const TaskRow = memo(function TaskRow({
         aria-pressed={checked}
         title={ticked ? "Отменить отметку — задача вернётся на прежнюю дату" : task.done ? "Вернуть в работу" : "Выполнить"}
         onClick={tick}
-        className="flex h-10 w-10 shrink-0 items-center justify-center"
+        className="hit flex h-10 w-10 shrink-0 items-center justify-center"
       >
         <span
           className={cn(
@@ -292,7 +292,7 @@ export const TaskRow = memo(function TaskRow({
             <button
               type="button"
               onClick={() => openMileage(kmAsset)}
-              className="mt-1 h-7 shrink-0 rounded-full bg-accent/10 px-3 text-xs font-medium text-accent"
+              className="mt-1 h-7 shrink-0 rounded-full bg-accent/10 px-3 text-xs font-medium text-accent-ink"
             >
               Обновить пробег
             </button>
@@ -306,7 +306,7 @@ export const TaskRow = memo(function TaskRow({
               onClick={() => setOpen(!open)}
               className={cn(
                 "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-2 text-caption tabular-nums",
-                progress.done === progress.total ? "text-accent" : "text-muted",
+                progress.done === progress.total ? "text-accent-ink" : "text-muted",
               )}
             >
               <ListChecks className="size-3.5" aria-hidden="true" />
@@ -384,7 +384,7 @@ export const TaskRow = memo(function TaskRow({
         <button
           type="button"
           aria-label={`Перенести ${task.title}`}
-          className="drag-handle flex size-10 shrink-0 items-center justify-center text-subtle"
+          className="hit drag-handle flex size-10 shrink-0 items-center justify-center text-subtle"
           onPointerDown={onDragStart}
         >
           <GripVertical className="size-4" />
@@ -519,5 +519,5 @@ function QuickChip({ label, off, onToggle, what }: { label: string; off: boolean
 
 function MaintDue({ task, assets, today }: { task: Task; assets: Asset[]; today: string }) {
   const due = honestDue(task, assets, today);
-  return <span className={due.tone === "danger" ? "text-danger" : due.tone === "accent" ? "text-accent" : undefined}>{due.text}</span>;
+  return <span className={due.tone === "danger" ? "text-danger" : due.tone === "accent" ? "text-accent-ink" : undefined}>{due.text}</span>;
 }

@@ -92,7 +92,7 @@ export function TechBlock({ asset }: { asset: Asset }) {
           <FieldLabel hint="Для компьютера и другой сборной техники: у каждой детали своя дата покупки, цена, гарантия и чек. Простой технике (пылесос, монитор) компоненты не нужны — достаточно самой карточки." className="flex-1">
             Компоненты
           </FieldLabel>
-          <button type="button" onClick={() => setSheet("new")} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent">
+          <button type="button" onClick={() => setSheet("new")} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent-ink">
             <Plus className="size-3.5" aria-hidden="true" />
             Компонент
           </button>
@@ -214,7 +214,7 @@ export function PartSheet({ asset, part, onClose }: { asset: Asset; part: TechPa
             <input value={serial} onChange={(e) => setSerial(e.target.value)} aria-label="Серийный номер" maxLength={80} className={field} />
           </label>
         ) : (
-          <button type="button" onClick={() => setMore(true)} className="h-9 px-1 text-[0.8125rem] text-accent">
+          <button type="button" onClick={() => setMore(true)} className="h-9 px-1 text-[0.8125rem] text-accent-ink">
             Ещё: серийный номер
           </button>
         )}

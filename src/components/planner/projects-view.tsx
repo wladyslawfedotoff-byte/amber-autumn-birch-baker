@@ -1,3 +1,4 @@
+import { FIELD } from "@/components/ui/kit";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CalendarRange, ChevronLeft, ChevronRight, Lock, MoreHorizontal, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,7 +50,7 @@ export function ProjectsView({
       {projects.length === 0 ? (
         <Empty title="Пока нет проектов" hint="Проект — дело длиннее одного дня, с этапами. Нажмите «+», чтобы создать." />
       ) : (
-        <ul className="overflow-hidden rounded-card bg-card">
+        <ul className="menu-card overflow-hidden rounded-card">
           {projects.map((item) => {
             const { done, total } = projectProgress(item);
             return (
@@ -112,7 +113,7 @@ function NewProjectSheet({ open, onClose, onCreated }: { open: boolean; onClose:
           placeholder="Например: ремонт кухни"
           aria-label="Название проекта"
           enterKeyHint="done"
-          className="h-11 w-full rounded-card bg-card px-3 text-base outline-none placeholder:text-subtle"
+          className={cn(FIELD, "border-separator border-separator")}
         />
         <DateRows start={start} end={end} onStart={setStart} onEnd={setEnd} />
         <p className="mt-2 px-1 text-xs text-muted">Этапы «План → В работе → Готово» появятся сами, их можно переименовать.</p>
@@ -123,7 +124,7 @@ function NewProjectSheet({ open, onClose, onCreated }: { open: boolean; onClose:
 
 function DateRows({ start, end, onStart, onEnd }: { start: string; end: string; onStart: (v: string) => void; onEnd: (v: string) => void }) {
   return (
-    <div className="mt-3 divide-y divide-line overflow-hidden rounded-card bg-card text-body">
+    <div className="mt-3 menu-card overflow-hidden rounded-card text-body">
       <label className="flex min-h-11 items-center gap-3 px-3">
         <span className="flex-1">Начало</span>
         <input type="date" aria-label="Начало" value={start} onChange={(event) => onStart(event.target.value)} style={{ minWidth: "8.5rem" }} className="h-9 rounded-lg bg-surface px-2 text-right outline-none" />

@@ -262,7 +262,7 @@ export function Sidebar({
           aria-current={view === "settings" ? "page" : undefined}
           title="Настройки"
           onClick={() => onView("settings")}
-          className={cn("size-9 text-muted", view === "settings" && "text-accent")}
+          className={cn("size-9 text-muted", view === "settings" && "text-accent-ink")}
         >
           <Settings className="size-5" strokeWidth={1.75} />
         </Button>

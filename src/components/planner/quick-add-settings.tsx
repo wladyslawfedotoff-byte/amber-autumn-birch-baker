@@ -109,7 +109,7 @@ export function QuickAddSection({ onChange }: { onChange?: () => void }) {
       </div>
 
       {devices?.length ? (
-        <ul className="card-lift mt-3 divide-y divide-line overflow-hidden rounded-card bg-card">
+        <ul className="card-lift mt-3 menu-card overflow-hidden rounded-card">
           {devices.map((d) => (
             <li key={d.id} className="flex min-h-12 items-center gap-3 px-3">
               <Smartphone className="size-4 shrink-0 text-muted" aria-hidden="true" />

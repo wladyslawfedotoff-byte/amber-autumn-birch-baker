@@ -172,7 +172,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
           <ChevronLeft className="size-4" aria-hidden="true" />
           {kindLabel(asset.kind)}
         </button>
-        <button type="button" onClick={() => setEditing(true)} aria-label="Изменить карточку" className="ml-auto flex h-11 items-center gap-1 rounded-full px-3 text-[0.8125rem] font-medium text-accent">
+        <button type="button" onClick={() => setEditing(true)} aria-label="Изменить карточку" className="ml-auto flex h-11 items-center gap-1 rounded-full px-3 text-[0.8125rem] font-medium text-accent-ink">
           <Pencil className="size-3.5" aria-hidden="true" />
           Изменить
         </button>
@@ -288,11 +288,11 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
                   </span>
                 </button>
                 {planText(p) ? null : (
-                  <button type="button" onClick={() => setPainSheet(p.id)} className="flex h-9 shrink-0 items-center rounded-lg px-2 text-[0.8125rem] font-medium text-accent">
+                  <button type="button" onClick={() => setPainSheet(p.id)} className="flex h-9 shrink-0 items-center rounded-lg px-2 text-[0.8125rem] font-medium text-accent-ink">
                     Запланировать
                   </button>
                 )}
-                <button type="button" onClick={() => solvePain(asset.id, p.id, true)} className="flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[0.8125rem] font-medium text-accent">
+                <button type="button" onClick={() => solvePain(asset.id, p.id, true)} className="flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[0.8125rem] font-medium text-accent-ink">
                   <Check className="size-3.5" aria-hidden="true" />
                   Решено
                 </button>
@@ -314,7 +314,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
                     <button type="button" onClick={() => setPainSheet(p.id)} aria-label={`Изменить: ${p.text}`} className="min-w-0 flex-1 truncate text-left line-through">
                       {p.text}
                     </button>
-                    <button type="button" onClick={() => solvePain(asset.id, p.id, false)} className="h-8 px-1 text-accent">
+                    <button type="button" onClick={() => solvePain(asset.id, p.id, false)} className="h-8 px-1 text-accent-ink">
                       Вернуть
                     </button>
                     <button type="button" onClick={() => deletePain(asset.id, p.id)} className="h-8 px-1 text-danger" aria-label={`Удалить: ${p.text}`}>
@@ -359,7 +359,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
           <p className="rounded-xl border border-dashed border-line px-3 py-3 text-[0.8125rem] text-muted">Записей пока нет. Добавьте то, что уже делали, — например, {car ? "«замена масла, 6 400 ₽»" : "«чистка от пыли, 1 500 ₽»"} с фото чека.</p>
         )}
         {log.length > 5 ? (
-          <button type="button" onClick={() => setShowAll(!showAll)} className="mt-1 h-9 px-1 text-[0.8125rem] text-accent">
+          <button type="button" onClick={() => setShowAll(!showAll)} className="mt-1 h-9 px-1 text-[0.8125rem] text-accent-ink">
             {showAll ? "Свернуть" : `Показать все (${log.length})`}
           </button>
         ) : null}

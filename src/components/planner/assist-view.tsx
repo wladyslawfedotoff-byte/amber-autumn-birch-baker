@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+import { CAPS } from "@/components/ui/kit";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowUp, Check, Zap, Clock, Cloud, CloudOff, Cpu, History, Mic, MicOff, RotateCw, Search, ShieldCheck, Sparkles, Square, SquarePen, Trash2, X } from "lucide-react";
@@ -43,7 +45,7 @@ export function ProviderBadge({ which, source, className }: { which: AnswerSourc
     );
   return (
     <span
-      className={cn("inline-flex h-5 max-w-[11rem] shrink-0 items-center gap-1 rounded-full px-2 text-[0.6875rem] font-medium", which === "local" ? "bg-accent/12 text-accent" : "bg-elevated text-muted", className)}
+      className={cn("inline-flex h-5 max-w-[11rem] shrink-0 items-center gap-1 rounded-full px-2 text-[0.6875rem] font-medium", which === "local" ? "bg-accent/12 text-accent-ink" : "bg-elevated text-muted", className)}
       title={`${which === "local" ? "Ответила модель на компьютере дома" : "Ответил облачный сервис"}${source ? `: ${source}` : ""}`}
     >
       {which === "local" ? <Cpu className="size-3 shrink-0" aria-hidden="true" /> : <Cloud className="size-3 shrink-0" aria-hidden="true" />}
@@ -66,7 +68,7 @@ function ConsentScreen({ status, provider, onAccept, onCancel }: { status: Assis
   const cloudNow = provider === "cloud" && locals.length > 0;
   return (
     <div className="mx-auto flex max-w-md flex-col py-4" role="dialog" aria-label="Согласие на работу помощника">
-      <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-accent/12 text-accent">
+      <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-accent/12 text-accent-ink">
         <ShieldCheck className="size-6" aria-hidden="true" />
       </span>
       <h2 className="mt-3 text-center text-lg font-semibold">{cloudNow ? "Сейчас ответит облако" : "Прежде чем начать"}</h2>
@@ -94,9 +96,9 @@ function ConsentScreen({ status, provider, onAccept, onCancel }: { status: Assis
           </ConsentLine>
         ) : null}
       </ul>
-      <button type="button" onClick={onAccept} className="mt-6 h-11 rounded-full bg-accent text-body font-medium text-accent-fg">
+      <Button variant="primary" onClick={onAccept} className="mt-6">
         Понятно, начать
-      </button>
+      </Button>
       <button type="button" onClick={onCancel} className="mt-1 h-11 text-body text-muted">
         Не сейчас
       </button>
@@ -194,7 +196,7 @@ function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; on
   return (
     <div className="mt-2 overflow-hidden rounded-card bg-card" data-proposal={proposal.id}>
       <p className="flex items-center gap-2 px-3 pt-2 pb-1 text-body font-semibold">
-        <Sparkles className="size-4 text-accent" aria-hidden="true" />
+        <Sparkles className="size-4 text-accent-ink" aria-hidden="true" />
         <span className="flex-1">{pending ? proposal.title.replace(/\d+/, String(items.length)) : proposal.title.replace(/\?$/, "")}</span>
       </p>
       {timeline ? <PlanTimeline items={updates} pending={pending} onRemove={remove} /> : null}
@@ -241,18 +243,18 @@ function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; on
       </ul>
       {pending ? (
         <div className="flex gap-2 p-2">
-          <button type="button" onClick={onDismiss} className="h-10 flex-1 rounded-full bg-surface text-[0.875rem] text-muted">
+          <Button variant="secondary" onClick={onDismiss} className="flex-1">
             Отклонить
-          </button>
-          <button type="button" disabled={!items.length} onClick={() => onApply(items)} className="h-10 flex-[2] rounded-full bg-accent text-[0.875rem] font-medium text-accent-fg disabled:opacity-40">
+          </Button>
+          <Button variant="primary" disabled={!items.length} onClick={() => onApply(items)} className="flex-[2]">
             Применить
-          </button>
+          </Button>
         </div>
       ) : (
         <p className="flex items-center gap-1 px-3 pb-2 text-xs text-muted">
           {proposal.status === "applied" ? (
             <>
-              <Check className="size-3.5 text-accent" aria-hidden="true" /> Применено
+              <Check className="size-3.5 text-accent-ink" aria-hidden="true" /> Применено
             </>
           ) : (
             "Отклонено"
@@ -301,7 +303,7 @@ function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { m
   if (message.queued) {
     return (
       <div className="mt-2 flex items-center gap-2 rounded-card bg-card py-2 pr-2 pl-3 text-[0.8125rem]" role="status">
-        <Clock className="size-4 shrink-0 text-accent" aria-hidden="true" />
+        <Clock className="size-4 shrink-0 text-accent-ink" aria-hidden="true" />
         <span className="min-w-0 flex-1">{message.queued.offline ? "Спрошу, когда появится связь" : `В очереди, попробую в ${hm(message.queued.nextAt)}`}</span>
         <button type="button" onClick={onCancel} className="h-8 shrink-0 rounded-full px-3 text-muted">
           Отменить
@@ -311,7 +313,7 @@ function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { m
   }
   return (
     <div className="mt-2 flex flex-wrap gap-2">
-      <button type="button" onClick={onRetry} className="flex h-9 items-center gap-2 rounded-full bg-elevated px-3 text-[0.8125rem] text-accent">
+      <button type="button" onClick={onRetry} className="flex h-9 items-center gap-2 rounded-full bg-elevated px-3 text-[0.8125rem] text-accent-ink">
         <RotateCw className="size-3.5" aria-hidden="true" />
         Повторить
       </button>
@@ -683,7 +685,7 @@ export function AssistView({
       <div className="flex-1 pb-3">
         {empty ? (
           <div className="flex flex-col items-center px-2 pt-8 text-center">
-            <span className="flex size-10 items-center justify-center rounded-2xl bg-accent/12 text-accent">
+            <span className="flex size-10 items-center justify-center rounded-2xl bg-accent/12 text-accent-ink">
               <Sparkles className="size-5" aria-hidden="true" />
             </span>
             <p className="mt-2 max-w-xs text-[0.875rem] text-muted" title="Без вашего «Применить» ничего не изменится">
@@ -756,7 +758,7 @@ export function AssistView({
                 onClick={() => void send(chip.ask)}
                 className={cn(
                   "h-8 max-w-full truncate rounded-full px-3 text-[0.8125rem]",
-                  chip.id === "from-text" || chip.id === "overdue" || chip.id === "maint" ? "bg-accent/12 text-accent" : "card-lift bg-elevated text-fg",
+                  chip.id === "from-text" || chip.id === "overdue" || chip.id === "maint" ? "bg-accent/12 text-accent-ink" : "card-lift bg-elevated text-fg",
                 )}
               >
                 {chip.label}
@@ -835,11 +837,11 @@ export function AssistView({
                 ) : (
                   historyGroups.map((group) => (
                     <section key={group.day} className="mb-3">
-                      <p className="mb-1 px-1 text-[0.6875rem] font-semibold tracking-wide text-subtle uppercase">{dayTitle(group.day)}</p>
-                      <ul className="divide-y divide-line overflow-hidden rounded-card bg-card">
+                      <p className={cn("mb-1 px-1", CAPS)}>{dayTitle(group.day)}</p>
+                      <ul className="menu-card overflow-hidden rounded-card">
                         {group.items.map((c) => (
                           <li key={c.id} className="flex items-center">
-                            <button type="button" onClick={() => void openConversation(c.id)} className={cn("min-w-0 flex-1 px-3 py-2 text-left", c.id === conversationId && "text-accent")}>
+                            <button type="button" onClick={() => void openConversation(c.id)} className={cn("min-w-0 flex-1 px-3 py-2 text-left", c.id === conversationId && "text-accent-ink")}>
                               <span className="block truncate text-body">{c.title}</span>
                               <span className="block text-xs text-muted tabular-nums">{hm(c.updatedAt)}</span>
                             </button>

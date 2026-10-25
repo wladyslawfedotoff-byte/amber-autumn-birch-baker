@@ -136,7 +136,7 @@ export function DatesView() {
             onClick={() => setFilter(k.id)}
             className={cn(
               "h-8 shrink-0 rounded-full border px-3 text-sm",
-              filter === k.id ? "border-accent bg-accent/10 font-medium text-accent" : "border-line bg-elevated text-muted",
+              filter === k.id ? "border-accent bg-accent/10 font-medium text-accent-ink" : "border-line bg-elevated text-muted",
             )}
           >
             {k.label}
@@ -162,7 +162,7 @@ export function DatesView() {
                   >
                     <span aria-hidden="true">{ex.icon}</span>
                     <span className="min-w-0 flex-1 truncate">{ex.label}</span>
-                    <Plus className="size-4 shrink-0 text-accent" aria-label="Добавить" />
+                    <Plus className="size-4 shrink-0 text-accent-ink" aria-label="Добавить" />
                   </button>
                 </li>
               ))}
@@ -225,7 +225,7 @@ function DateCard({ row, onOpen }: { row: Upcoming; onOpen: () => void }) {
         <span className="block truncate text-body font-medium">
           {item.title}
           {age ? <span className="font-normal text-muted"> {age}</span> : null}
-          {(item.members ?? []).length > 0 ? <Users className="ml-1 inline size-3.5 text-accent" aria-label="совместная" /> : null}
+          {(item.members ?? []).length > 0 ? <Users className="ml-1 inline size-3.5 text-accent-ink" aria-label="совместная" /> : null}
         </span>
         <span className="block truncate text-xs text-subtle">
           {formatLong(row.when)}
@@ -244,10 +244,10 @@ function MilestoneDetails({ row, today, onBack, onEdit }: { row: Upcoming; today
   return (
     <div className="mx-auto max-w-2xl pb-6">
       <div className="-mx-2 flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={onBack} className="px-2 text-accent">
+        <Button variant="ghost" size="sm" onClick={onBack} className="px-2 text-accent-ink">
           <ChevronLeft className="size-5" /> Даты
         </Button>
-        <Button variant="ghost" size="sm" onClick={onEdit} className="px-3 text-accent">
+        <Button variant="ghost" size="sm" onClick={onEdit} className="px-3 text-accent-ink">
           <Pencil className="size-4" /> Изменить
         </Button>
       </div>
@@ -586,7 +586,7 @@ function ItemSection({ item, kind, label, hint }: { item: Milestone; kind: Miles
       <h3 className="mb-1 px-1 text-xs font-medium text-subtle">
         {label} {rows.length ? <span className="tabular-nums">· {rows.filter((row) => row.done).length}/{rows.length}</span> : null}
       </h3>
-      <div className="divide-y divide-line overflow-hidden rounded-card bg-card">
+      <div className="menu-card overflow-hidden rounded-card">
         {rows.map((row) => {
           const href = safeLink(row.link);
           const editingRow = editId === row.id;
@@ -614,7 +614,7 @@ function ItemSection({ item, kind, label, hint }: { item: Milestone; kind: Miles
                 </button>
                 {row.price ? <span className="shrink-0 text-xs tabular-nums text-muted">{row.price}</span> : null}
                 {href ? (
-                  <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="flex size-9 shrink-0 items-center justify-center text-accent" aria-label={`Ссылка: ${row.title}`}>
+                  <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="flex size-9 shrink-0 items-center justify-center text-accent-ink" aria-label={`Ссылка: ${row.title}`}>
                     <ExternalLink className="size-4" />
                   </a>
                 ) : null}
@@ -671,7 +671,7 @@ function ItemSection({ item, kind, label, hint }: { item: Milestone; kind: Miles
               className="h-9 min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-subtle"
             />
             {shop && title.trim() && !extra ? (
-              <button type="button" onClick={() => setExtra(true)} className="h-9 shrink-0 px-1 text-xs text-accent">
+              <button type="button" onClick={() => setExtra(true)} className="h-9 shrink-0 px-1 text-xs text-accent-ink">
                 + ссылка, цена
               </button>
             ) : null}

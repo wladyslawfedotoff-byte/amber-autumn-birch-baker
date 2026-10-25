@@ -36,7 +36,7 @@ function stateOf(p: ProviderStatus, check: boolean | undefined): { text: string;
   return { text: "не проверен", tone: "muted" };
 }
 
-const TONE = { ok: "text-accent", warn: "text-danger/70", bad: "text-danger", muted: "text-muted" } as const;
+const TONE = { ok: "text-accent-ink", warn: "text-danger/70", bad: "text-danger", muted: "text-muted" } as const;
 
 function ProviderRow({ provider, index, check }: { provider: ProviderStatus; index: number; check: boolean | undefined }) {
   const state = stateOf(provider, check);
@@ -104,7 +104,7 @@ export function AssistantSection() {
       </div>
 
       <p className="mt-4 mb-2 px-1 text-xs text-muted">{status.providers.length > 1 ? "Модели спрашиваются по порядку: если одна занята или выдала ошибку, отвечает следующая." : "Модель"}</p>
-      <ul className="divide-y divide-line overflow-hidden rounded-card bg-card" aria-label="Модели помощника">
+      <ul className="menu-card overflow-hidden rounded-card" aria-label="Модели помощника">
         {status.providers.map((p, i) => (
           <ProviderRow key={p.name} provider={p} index={i} check={results[p.name]} />
         ))}
@@ -123,14 +123,14 @@ export function AssistantSection() {
               })
               .catch(() => setCheck({}));
           }}
-          className="h-9 rounded-full bg-elevated px-3 text-[0.8125rem] text-accent disabled:opacity-50"
+          className="h-9 rounded-full bg-elevated px-3 text-[0.8125rem] text-accent-ink disabled:opacity-50"
         >
           {check === "busy" ? "Проверяем…" : "Проверить связь"}
         </button>
       </div>
 
       {(hasLocal && hasCloud) || hasPaid ? (
-        <div className="mt-3 divide-y divide-line overflow-hidden rounded-card bg-card">
+        <div className="mt-3 menu-card overflow-hidden rounded-card">
           {hasLocal && hasCloud ? (
             <SwitchRow
               label="Разрешить облако, когда ПК выключен"
