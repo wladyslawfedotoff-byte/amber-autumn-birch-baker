@@ -5,7 +5,7 @@ import { FieldLabel } from "@/components/ui/hint";
 import { usePlanner } from "@/lib/planner-store";
 import type { ProjectContact } from "@/lib/planner-types";
 
-const field = "h-11 w-full rounded-md border border-line bg-elevated px-3 text-base text-fg outline-none placeholder:text-subtle";
+const field = "h-11 w-full rounded-md border border-separator bg-card px-3 text-base text-label outline-none placeholder:text-tertiary-label";
 
 export function ContactsBlock({ projectId, contacts }: { projectId: string; contacts: ProjectContact[] }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -39,9 +39,9 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
       </div>
       <ul className="mt-2 space-y-2">
         {contacts.map((contact) => (
-          <li key={contact.id} className="rounded-xl border border-line bg-elevated p-3">
+          <li key={contact.id} className="rounded-card bg-card p-3">
             <div className="flex items-start gap-2">
-              <UserRound className="mt-1 size-4 shrink-0 text-muted" aria-hidden="true" />
+              <UserRound className="mt-1 size-4 shrink-0 text-secondary-label" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 {editing === contact.id ? (
                   <>
@@ -49,23 +49,23 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
                       value={contact.name}
                       aria-label="Имя"
                       onChange={(event) => updateContact(projectId, contact.id, { name: event.target.value })}
-                      className="w-full bg-transparent text-sm font-medium text-fg outline-none"
+                      className="w-full bg-transparent text-base font-medium text-label outline-none"
                     />
                     <input
                       value={contact.role ?? ""}
                       aria-label="Роль"
                       placeholder="Роль: заказчик, поставщик…"
                       onChange={(event) => updateContact(projectId, contact.id, { role: event.target.value })}
-                      className="mt-1 w-full bg-transparent text-xs text-muted outline-none placeholder:text-subtle"
+                      className="mt-1 w-full bg-transparent text-base text-secondary-label outline-none placeholder:text-tertiary-label"
                     />
                   </>
                 ) : (
                   <>
-                    <p className="truncate text-sm font-medium text-fg">{contact.name}</p>
-                    {contact.role ? <p className="truncate text-xs text-muted">{contact.role}</p> : null}
+                    <p className="truncate text-sm font-medium text-label">{contact.name}</p>
+                    {contact.role ? <p className="truncate text-xs text-secondary-label">{contact.role}</p> : null}
                   </>
                 )}
-                {contact.note ? <p className="mt-1 text-xs text-muted">{contact.note}</p> : null}
+                {contact.note ? <p className="mt-1 text-xs text-secondary-label">{contact.note}</p> : null}
               </div>
               <Button size="icon" variant="ghost" aria-label={`Удалить ${contact.name}`} onClick={() => deleteContact(projectId, contact.id)}>
                 <Trash2 className="size-4" />
@@ -74,24 +74,24 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
             <div className="mt-2 flex flex-wrap gap-2">
               {contact.phone ? (
                 <>
-                  <a href={`tel:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-sm text-fg">
+                  <a href={`tel:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-separator px-3 text-sm text-label">
                     <Phone className="size-3.5" aria-hidden="true" />
                     {contact.phone}
                   </a>
-                  <a href={`sms:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-sm text-fg" aria-label={`Сообщение ${contact.name}`}>
+                  <a href={`sms:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-separator px-3 text-sm text-label" aria-label={`Сообщение ${contact.name}`}>
                     <MessageSquare className="size-3.5" aria-hidden="true" />
                     SMS
                   </a>
                 </>
               ) : null}
               {contact.email ? (
-                <a href={`mailto:${contact.email}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-sm text-fg">
+                <a href={`mailto:${contact.email}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-separator px-3 text-sm text-label">
                   <Mail className="size-3.5" aria-hidden="true" />
                   {contact.email}
                 </a>
               ) : null}
             </div>
-            <button type="button" className="mt-1 text-xs text-muted underline-offset-2 hover:underline" onClick={() => setEditing(editing === contact.id ? null : contact.id)}>
+            <button type="button" className="mt-1 text-xs text-secondary-label underline-offset-2 hover:underline" onClick={() => setEditing(editing === contact.id ? null : contact.id)}>
               {editing === contact.id ? "Готово" : "Изменить"}
             </button>
             {editing === contact.id ? (
@@ -119,7 +119,7 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
       </ul>
       {open ? (
         <form
-          className="mt-2 space-y-2 rounded-xl border border-line bg-elevated p-3"
+          className="mt-2 space-y-2 rounded-card bg-card p-3"
           onSubmit={(event) => {
             event.preventDefault();
             save();

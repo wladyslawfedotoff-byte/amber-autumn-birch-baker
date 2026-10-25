@@ -141,6 +141,9 @@ function KitPage() {
           <ListRow icon={LayoutGrid} color="mint" title="Навигация" value="5 вкладок" onClick={() => {}} />
           <ListRow icon={Wrench} color="grey" title="С подзаголовком" subtitle="Замена масла · через 300 км" counter={2} onClick={() => {}} />
           <ListRow icon={Bell} color="red" title="Переключатель" toggle={{ checked: toggle, onChange: setToggle }} />
+          <ListRow title="Раскрывается" value="Нет" expanded={toggle} onClick={() => setToggle(!toggle)}>
+            {toggle ? <p className="px-3 pb-3 text-caption text-secondary-label">Редактор под строкой, как в карточке задачи.</p> : null}
+          </ListRow>
           <ListRow icon={ShieldCheck} color="green" title="Загрузка" loading onClick={() => {}} />
           <ListRow icon={Bell} color="purple" title="Отключена" disabled onClick={() => {}} />
           <ListRow icon={Trash2} title="Удалить" destructive onClick={() => {}} />
@@ -176,6 +179,7 @@ function KitPage() {
           <Chip>завтра</Chip>
           <Chip tone="outline">25 окт. ×</Chip>
           <Chip tone="off">10:00 ↺</Chip>
+          <Chip tone="on">Завтра</Chip>
         </div>
         <div className="menu-card mt-2 rounded-card">
           <SheetHeader title="Новая задача" onCancel={() => {}} onDone={() => {}} />

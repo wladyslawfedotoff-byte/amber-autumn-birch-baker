@@ -11,8 +11,8 @@ import { usePlanner } from "@/lib/planner-store";
 import type { AttachmentMeta, ProjectContact, Task } from "@/lib/planner-types";
 import { useCapabilities } from "@/lib/use-capabilities";
 
-const field = "h-11 w-full rounded-md border border-line bg-elevated px-3 text-base text-fg outline-none placeholder:text-subtle";
-const chip = "flex h-12 max-w-full min-w-0 items-center gap-2 rounded-lg border border-line bg-elevated pl-2 pr-1 text-sm";
+const field = "h-11 w-full rounded-md border border-separator bg-card px-3 text-base text-label outline-none placeholder:text-tertiary-label";
+const chip = "flex h-12 max-w-full min-w-0 items-center gap-2 rounded-lg border border-separator bg-card pl-2 pr-1 text-sm";
 
 function Badge({ letter, tone }: { letter: string; tone?: string }) {
   return (
@@ -24,7 +24,7 @@ function Badge({ letter, tone }: { letter: string; tone?: string }) {
 
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button type="button" aria-label={label} onClick={onClick} className="flex size-8 shrink-0 items-center justify-center rounded-full text-subtle hover:text-danger">
+    <button type="button" aria-label={label} onClick={onClick} className="flex size-8 shrink-0 items-center justify-center rounded-full text-tertiary-label hover:text-danger">
       <X className="size-3.5" />
     </button>
   );
@@ -35,10 +35,10 @@ function ContactActions({ name, phone }: { name: string; phone?: string }) {
   const to = dialable(phone);
   return (
     <>
-      <a href={`tel:${to}`} aria-label={`Позвонить: ${name}`} className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-fg">
+      <a href={`tel:${to}`} aria-label={`Позвонить: ${name}`} className="hit flex size-9 shrink-0 items-center justify-center rounded-full border border-separator bg-surface text-label">
         <Phone className="size-4" />
       </a>
-      <a href={`sms:${to}`} aria-label={`Написать: ${name}`} className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-fg">
+      <a href={`sms:${to}`} aria-label={`Написать: ${name}`} className="hit flex size-9 shrink-0 items-center justify-center rounded-full border border-separator bg-surface text-label">
         <MessageSquare className="size-4" />
       </a>
     </>
@@ -55,18 +55,18 @@ function PhotoChip({ item, onOpen, onRemove }: { item: AttachmentMeta; onOpen: (
   const pending = isPending(item.id);
   return (
     <li className="relative w-14 shrink-0" data-testid="object-photo">
-      <button type="button" onClick={onOpen} aria-label={item.name} className="flex size-14 items-center justify-center overflow-hidden rounded-lg border border-line bg-elevated">
+      <button type="button" onClick={onOpen} aria-label={item.name} className="flex size-14 items-center justify-center overflow-hidden rounded-lg border border-separator bg-card">
         <Thumb item={item} />
       </button>
       <button
         type="button"
         aria-label={`Удалить ${item.name}`}
         onClick={onRemove}
-        className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-surface text-subtle"
+        className="hit absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-separator bg-surface text-tertiary-label"
       >
         <X className="size-3" />
       </button>
-      <span className="mt-1 block truncate text-center text-[0.6rem] leading-tight text-muted" title={item.takenAt ? formatTakenAt(item.takenAt) : item.name}>
+      <span className="mt-1 block truncate text-center text-[0.6rem] leading-tight text-secondary-label" title={item.takenAt ? formatTakenAt(item.takenAt) : item.name}>
         {pending ? "на телефоне" : item.takenAt ? shortDate(item.takenAt) : sizeLabel(item.size)}
       </span>
     </li>
@@ -155,8 +155,8 @@ export function ObjectStrip({
                   <KindIcon mime={item.mime} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-fg">{item.name}</span>
-                  <span className="block text-[0.7rem] text-subtle">{isPending(item.id) ? "на телефоне" : sizeLabel(item.size)}</span>
+                  <span className="block truncate text-label">{item.name}</span>
+                  <span className="block text-[0.7rem] text-tertiary-label">{isPending(item.id) ? "на телефоне" : sizeLabel(item.size)}</span>
                 </span>
               </button>
               <RemoveButton label={`Удалить ${item.name}`} onClick={() => void deleteFile(fileTarget, item.id)} />
@@ -167,8 +167,8 @@ export function ObjectStrip({
               <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex min-w-0 flex-1 items-center gap-2">
                 <Badge letter={siteLetter(link.url)} />
                 <span className="min-w-0">
-                  <span className="block truncate text-fg">{link.title || siteName(link.url)}</span>
-                  <span className="block truncate text-[0.7rem] text-subtle">{siteName(link.url)} ↗</span>
+                  <span className="block truncate text-label">{link.title || siteName(link.url)}</span>
+                  <span className="block truncate text-[0.7rem] text-tertiary-label">{siteName(link.url)} ↗</span>
                 </span>
               </a>
               <RemoveButton label={`Удалить ссылку ${link.title || siteName(link.url)}`} onClick={() => onRemoveLink(link.id)} />
@@ -178,8 +178,8 @@ export function ObjectStrip({
             <li className={cn(chip, "w-full")} data-testid="object-contact">
               <Badge letter={(linked.name[0] ?? "?").toUpperCase()} tone="bg-muted" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-fg">{linked.name}</span>
-                <span className="block truncate text-[0.7rem] text-subtle">{[linked.role, linked.phone].filter(Boolean).join(" · ") || "из проекта"}</span>
+                <span className="block truncate text-label">{linked.name}</span>
+                <span className="block truncate text-[0.7rem] text-tertiary-label">{[linked.role, linked.phone].filter(Boolean).join(" · ") || "из проекта"}</span>
               </span>
               <ContactActions name={linked.name} phone={linked.phone} />
               <RemoveButton label={`Убрать ${linked.name}`} onClick={() => onUnlink?.()} />
@@ -189,8 +189,8 @@ export function ObjectStrip({
             <li key={c.id} className={cn(chip, "w-full")} data-testid="object-contact">
               <Badge letter={(c.name[0] ?? "?").toUpperCase()} tone="bg-muted" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-fg">{c.name}</span>
-                {c.phone ? <span className="block truncate text-[0.7rem] text-subtle">{c.phone}</span> : null}
+                <span className="block truncate text-label">{c.name}</span>
+                {c.phone ? <span className="block truncate text-[0.7rem] text-tertiary-label">{c.phone}</span> : null}
               </span>
               <ContactActions name={c.name} phone={c.phone} />
               <RemoveButton label={`Удалить ${c.name}`} onClick={() => onRemoveContact?.(c.id)} />
@@ -199,7 +199,7 @@ export function ObjectStrip({
         </ul>
       ) : null}
       <input ref={input} type="file" accept={ACCEPT} multiple className="sr-only" aria-label="Добавить файл" onChange={(event) => void pick(event.target.files)} />
-      <div className={cn("flex items-center rounded-lg border border-dashed border-line text-sm text-muted", any && "mt-2")} data-testid="object-add">
+      <div className={cn("flex items-center rounded-lg border border-dashed border-separator text-sm text-secondary-label", any && "mt-2")} data-testid="object-add">
         <Plus className="ml-3 size-4 shrink-0 text-accent-ink" aria-hidden="true" />
         <button type="button" className="h-10 px-2" onClick={() => input.current?.click()}>
           Файл
@@ -229,7 +229,7 @@ export function ObjectStrip({
           </span>
         )}
       </div>
-      {notice ? <p className="mt-1 text-xs text-muted">{notice}</p> : null}
+      {notice ? <p className="mt-1 text-xs text-secondary-label">{notice}</p> : null}
       {lightbox ? <AttachmentLightbox item={lightbox} onClose={() => setLightbox(null)} /> : null}
       <LinkSheet open={sheet === "link"} onAdd={onAddLink} onClose={() => setSheet(null)} />
       {onAddContact ? (
@@ -415,7 +415,7 @@ export function ContactSheet({
       <div className="space-y-2 pb-2">
         {onPickProject && projectContacts.length ? (
           <div data-testid="project-contact-pick">
-            <p className="mb-1 text-xs text-subtle">Из проекта</p>
+            <p className="mb-1 text-xs text-tertiary-label">Из проекта</p>
             <div className="flex flex-wrap gap-2">
               {projectContacts.map((c) => (
                 <button
@@ -425,11 +425,11 @@ export function ContactSheet({
                     onPickProject?.(c.id);
                     onClose();
                   }}
-                  className="inline-flex h-9 max-w-full items-center gap-2 rounded-full border border-line bg-elevated px-3 text-sm text-fg"
+                  className="inline-flex h-9 max-w-full items-center gap-2 rounded-full border border-separator bg-card px-3 text-sm text-label"
                 >
-                  <UserRound className="size-3.5 shrink-0 text-muted" aria-hidden="true" />
+                  <UserRound className="size-3.5 shrink-0 text-secondary-label" aria-hidden="true" />
                   <span className="truncate">{c.name}</span>
-                  {c.role ? <span className="truncate text-xs text-muted">· {c.role}</span> : null}
+                  {c.role ? <span className="truncate text-xs text-secondary-label">· {c.role}</span> : null}
                 </button>
               ))}
             </div>
@@ -488,7 +488,7 @@ export function ContactSheet({
         <input ref={card} type="file" accept=".vcf,text/vcard,text/x-vcard" className="sr-only" aria-label="Карточка контакта" onChange={(event) => void readCard(event.target.files?.[0])} />
         {notice ? <p className="text-xs text-warn">{notice}</p> : null}
         {canSave ? (
-          <p className="flex items-center gap-1 text-xs text-muted">
+          <p className="flex items-center gap-1 text-xs text-secondary-label">
             <Check className="size-3.5" aria-hidden="true" />
             {name.trim() || phone.trim()}
             {name.trim() && phone.trim() ? ` · ${phone.trim()}` : ""}

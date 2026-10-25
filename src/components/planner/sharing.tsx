@@ -43,7 +43,7 @@ function Chip({ on, label, onClick, hint }: { on: boolean; label: string; onClic
       onClick={onClick}
       className={cn(
         "flex h-10 items-center gap-1 rounded-full border px-3 text-sm",
-        on ? "border-accent bg-accent text-accent-fg" : "border-line text-muted hover:text-fg",
+        on ? "border-accent bg-accent text-accent-fg" : "border-separator text-secondary-label hover:text-label",
       )}
     >
       {label}
@@ -66,15 +66,15 @@ export function TaskShareControls({ task }: { task: Task }) {
   const viaList = list && (list.members ?? []).length > 0;
   return (
     <section aria-labelledby="share-title">
-      <p id="share-title" className="flex items-center gap-1 text-sm font-medium text-fg">
+      <p id="share-title" className="flex items-center gap-1 text-sm font-medium text-label">
         <Users className="size-4" aria-hidden="true" /> Совместная
       </p>
-      <p className="mt-1 text-xs text-muted">
+      <p className="mt-1 text-xs text-secondary-label">
         {owner === me ? "Ваша задача." : `Задача ${displayName(owner, profile)} — вы её участник.`} Отметьте, кто ещё её видит и может менять. Изменения и
         «выполнено» видны всем участникам.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
-        {people.length === 0 ? <span className="text-xs text-subtle">Больше профилей нет — их добавляют в .env на сервере.</span> : null}
+        {people.length === 0 ? <span className="text-xs text-tertiary-label">Больше профилей нет — их добавляют в .env на сервере.</span> : null}
         {people.map((user) => {
           const on = members.includes(user.login);
           return (
@@ -89,12 +89,12 @@ export function TaskShareControls({ task }: { task: Task }) {
         })}
       </div>
       {viaList ? (
-        <p className="mt-2 text-xs text-muted">Ещё её видят все, с кем вы делитесь списком «{list!.name}».</p>
+        <p className="mt-2 text-xs text-secondary-label">Ещё её видят все, с кем вы делитесь списком «{list!.name}».</p>
       ) : null}
-      <p className="mt-4 flex items-center gap-1 text-sm font-medium text-fg">
+      <p className="mt-4 flex items-center gap-1 text-sm font-medium text-label">
         <UserCheck className="size-4" aria-hidden="true" /> Назначить
       </p>
-      <p className="mt-1 text-xs text-muted">Кто должен сделать. Человек увидит задачу у себя — в «Общих» и в «Сегодня», если есть дата.</p>
+      <p className="mt-1 text-xs text-secondary-label">Кто должен сделать. Человек увидит задачу у себя — в «Общих» и в «Сегодня», если есть дата.</p>
       <div className="mt-2 flex flex-wrap gap-2">
         <Chip on={!task.assignee} label="Никому" onClick={() => assignTask(task.id, null)} />
         {profile.users.map((user) => (
@@ -121,12 +121,12 @@ export function ListShareBar({ list }: { list: TaskList }) {
   const people = others(profile, [owner]);
   if (!people.length) return null;
   return (
-    <div className="mt-3 rounded-xl border border-line p-3">
-      <p className="flex items-center gap-1 text-sm text-fg">
+    <div className="mt-3 rounded-card border border-separator p-3">
+      <p className="flex items-center gap-1 text-sm text-label">
         <Users className="size-4" aria-hidden="true" />
         {owner === me ? "Поделиться списком" : `Список ${displayName(owner, profile)}`}
       </p>
-      <p className="mt-1 text-xs text-muted">
+      <p className="mt-1 text-xs text-secondary-label">
         {owner === me
           ? "Все задачи списка (и новые тоже) увидят и смогут отмечать выбранные люди. Например, «Покупки» на двоих."
           : "Вы видите этот список, потому что с вами им поделились. «Удалить список» уберёт его только у вас."}
@@ -160,11 +160,11 @@ export function MilestoneShareBar({ item }: { item: Milestone }) {
   if (!people.length) return null;
   return (
     <div className="mt-3">
-      <p className="flex items-center gap-1 text-xs font-medium text-subtle">
+      <p className="flex items-center gap-1 text-xs font-medium text-tertiary-label">
         <Users className="size-3.5" aria-hidden="true" />
         {owner === me ? "Совместная — кто ещё видит дату и списки" : `Дата ${displayName(owner, profile)} — с вами поделились`}
       </p>
-      <p className="mt-1 text-xs text-muted">Без отметок дата видна только вам. Удобно для общего списка подарков.</p>
+      <p className="mt-1 text-xs text-secondary-label">Без отметок дата видна только вам. Удобно для общего списка подарков.</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {people.map((user) => {
           const on = members.includes(user.login);
@@ -194,11 +194,11 @@ export function AssetShareBar({ asset }: { asset: Asset }) {
   if (!people.length) return null;
   return (
     <div className="mt-3">
-      <p className="flex items-center gap-1 text-xs font-medium text-subtle">
+      <p className="flex items-center gap-1 text-xs font-medium text-tertiary-label">
         <Users className="size-3.5" aria-hidden="true" />
         {owner === me ? "Общая карточка — кто ещё видит и ведёт историю" : `Карточка ${displayName(owner, profile)} — с вами поделились`}
       </p>
-      <p className="mt-1 text-xs text-muted">Видят и дополняют карточку, пробег, записи и файлы. Напоминания приходят владельцу.</p>
+      <p className="mt-1 text-xs text-secondary-label">Видят и дополняют карточку, пробег, записи и файлы. Напоминания приходят владельцу.</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {people.map((user) => {
           const on = members.includes(user.login);

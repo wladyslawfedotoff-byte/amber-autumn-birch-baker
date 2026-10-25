@@ -90,14 +90,14 @@ export function CheckCircle({ checked, size = "md", ring }: { checked: boolean; 
 /**
  * Маленькая кнопка-«пилюля» (1.21): «завтра», «Обновить пробег», распознанная
  * дата. tint — акцентная подложка, plain — фон страницы, outline — рамка,
- * off — пунктир и зачёркивание. Высота 28 px, зона нажатия 44 px через .hit.
+ * off — пунктир и зачёркивание, on — выбранный вариант (заливка акцентом). Высота 28 px, зона нажатия 44 px через .hit.
  */
 export function Chip({
   tone = "plain",
   className,
   children,
   ...props
-}: { tone?: "tint" | "plain" | "outline" | "off" } & ButtonHTMLAttributes<HTMLButtonElement>) {
+}: { tone?: "tint" | "plain" | "outline" | "off" | "on" } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
@@ -107,6 +107,8 @@ export function Chip({
         tone === "plain" && "bg-bg text-secondary-label",
         tone === "outline" && "border border-separator bg-surface-2 text-label",
         tone === "off" && "border border-dashed border-separator text-tertiary-label line-through",
+        tone === "on" && "border border-accent bg-accent font-medium text-accent-fg",
+        "disabled:pointer-events-none disabled:opacity-40",
         className,
       )}
       {...props}
@@ -152,6 +154,8 @@ export type ListRowProps = {
   subtitle?: ReactNode;
   value?: ReactNode;
   counter?: number | string | null;
+  /** Раскрывающаяся строка (1.21): aria-expanded и шеврон, повёрнутый вниз. */
+  expanded?: boolean;
   /** Shows a chevron (navigation). Default: when onClick is set and there is no toggle. */
   chevron?: boolean;
   toggle?: { checked: boolean; onChange: (next: boolean) => void };
@@ -177,6 +181,7 @@ export function ListRow({
   value,
   counter,
   chevron,
+  expanded,
   toggle,
   destructive,
   accent,
@@ -200,7 +205,7 @@ export function ListRow({
       <Counter value={counter} />
       {trailing}
       {loading ? <Spinner className="text-tertiary-label" /> : null}
-      {!loading && (chevron ?? (Boolean(onClick) && !toggle)) ? <ChevronRight className="size-[var(--icon-sm)] shrink-0 text-tertiary-label" aria-hidden="true" /> : null}
+      {!loading && (chevron ?? (Boolean(onClick) && !toggle)) ? <ChevronRight className={cn("size-[var(--icon-sm)] shrink-0 text-tertiary-label transition-transform duration-[var(--dur-fast)]", expanded && "rotate-90")} aria-hidden="true" /> : null}
     </>
   );
   if (toggle) {
@@ -228,6 +233,7 @@ export function ListRow({
         <button
           type="button"
           aria-current={active ? "page" : undefined}
+          aria-expanded={expanded}
           aria-busy={loading || undefined}
           disabled={disabled || loading}
           onClick={onClick}

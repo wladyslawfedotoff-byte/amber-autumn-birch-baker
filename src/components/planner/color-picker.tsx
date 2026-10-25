@@ -9,7 +9,7 @@ export function ColorPicker({ value, onChange, bare }: { value: TaskColor | null
       {bare ? (
         <legend className="sr-only">Цвет</legend>
       ) : (
-        <legend className="text-xs font-medium text-subtle">
+        <legend className="text-xs font-medium text-tertiary-label">
           Цвет <span className="font-normal">· {colorLabel(value)}</span>
         </legend>
       )}
@@ -21,7 +21,7 @@ export function ColorPicker({ value, onChange, bare }: { value: TaskColor | null
           aria-label="Без цвета"
           onClick={() => onChange(null)}
           className={cn(
-            "flex size-9 items-center justify-center rounded-full border border-dashed border-line text-xs text-muted",
+            "flex size-9 items-center justify-center rounded-full border border-dashed border-separator text-xs text-secondary-label",
             !value && "ring-2 ring-fg ring-offset-2 ring-offset-bg",
           )}
         >
