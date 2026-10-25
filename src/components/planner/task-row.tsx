@@ -2,9 +2,10 @@ import { kmAssetOf, openMileage } from "@/lib/mileage-prompt";
 import { maintAsset, shortMaintTitle } from "@/lib/maintenance/short-title";
 import type { Asset } from "@/lib/planner-types";
 import { objectCount } from "@/lib/objects/count";
-import { Check, ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Lock, Paperclip, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Lock, Paperclip, Plus } from "lucide-react";
 import { memo, useRef, useState, type PointerEvent, type Ref } from "react";
 import { cn } from "@/lib/cn";
+import { CheckCircle, Chip } from "@/components/ui/kit";
 import { dueLabel, repeatLabel, shiftIso, todayIso } from "@/lib/dates";
 import { parseQuick } from "@/lib/quick-add";
 import { pastedLines } from "@/lib/paste-lines";
@@ -189,7 +190,7 @@ export const TaskRow = memo(function TaskRow({
         event.preventDefault();
         if (!menu) openMenu();
       }}
-      className={cn("task-row flex items-start overflow-hidden bg-elevated", checked && "opacity-75")}
+      className={cn("task-row flex items-start overflow-hidden bg-card", checked && "opacity-75")}
       style={dx > 0 ? { background: "var(--accent)", touchAction: "pan-y" } : dx < 0 ? { background: "var(--warn)", touchAction: "pan-y" } : { ...tint, touchAction: "pan-y" }}
       onPointerDown={onSwipeStart}
       onClickCapture={(event) => {
@@ -209,7 +210,7 @@ export const TaskRow = memo(function TaskRow({
       ) : null}
       <div
         className={cn("flex min-w-0 flex-1 items-start", !dragging && "transition-transform duration-150")}
-        style={dx !== 0 ? { transform: `translateX(${dx}px)`, background: tint.background ?? "var(--elevated)" } : undefined}
+        style={dx !== 0 ? { transform: `translateX(${dx}px)`, background: tint.background ?? "var(--card)" } : undefined}
       >
       <button
         type="button"
@@ -219,14 +220,7 @@ export const TaskRow = memo(function TaskRow({
         onClick={tick}
         className="hit flex h-10 w-10 shrink-0 items-center justify-center"
       >
-        <span
-          className={cn(
-            "flex size-[1.125rem] items-center justify-center rounded-full border-2 transition-[background-color,border-color] duration-150",
-            checked ? "border-accent bg-accent text-accent-fg" : ring(task.priority),
-          )}
-        >
-          {checked ? <Check className="size-3" strokeWidth={3} /> : null}
-        </span>
+        <CheckCircle checked={checked} ring={ring(task.priority)} />
       </button>
       <div className="min-w-0 flex-1 py-2 pr-1">
         <div className="flex items-start">
@@ -289,13 +283,9 @@ export const TaskRow = memo(function TaskRow({
             </span>
           </button>
           {kmAsset && !checked ? (
-            <button
-              type="button"
-              onClick={() => openMileage(kmAsset)}
-              className="mt-1 h-7 shrink-0 rounded-full bg-accent/10 px-3 text-xs font-medium text-accent-ink"
-            >
+            <Chip tone="tint" onClick={() => openMileage(kmAsset)} className="mt-1">
               Обновить пробег
-            </button>
+            </Chip>
           ) : null}
           {progress.total > 0 ? (
             <button
@@ -315,14 +305,13 @@ export const TaskRow = memo(function TaskRow({
             </button>
           ) : null}
           {canPostpone ? (
-            <button
-              type="button"
+            <Chip
               aria-label={`Перенести «${task.title}» на завтра`}
               onClick={() => updateTask(task.id, { due: tomorrow })}
-              className="-my-2 flex h-10 shrink-0 items-center px-1 [@media(pointer:coarse)]:hidden"
+              className="mx-1 h-[1.125rem] px-2 text-[0.6875rem] [@media(pointer:coarse)]:hidden"
             >
-              <span className="rounded-full bg-bg px-2 text-[0.6875rem] leading-[1.125rem] text-muted">завтра</span>
-            </button>
+              завтра
+            </Chip>
           ) : null}
         </div>
         {open && subs.length > 0 ? (
@@ -336,14 +325,7 @@ export const TaskRow = memo(function TaskRow({
                   onClick={() => toggleSubtask(task.id, sub.id)}
                   className="flex h-9 w-full items-center gap-2 text-left text-sm"
                 >
-                  <span
-                    className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded-full border",
-                      sub.done ? "border-accent bg-accent text-accent-fg" : "border-line",
-                    )}
-                  >
-                    {sub.done ? <Check className="size-2.5" strokeWidth={3} /> : null}
-                  </span>
+                  <CheckCircle checked={sub.done} size="sm" ring="border-separator" />
                   <span className={cn("min-w-0 flex-1 truncate", sub.done ? "text-subtle line-through" : "text-fg")}>
                     {sub.title}
                   </span>
@@ -372,7 +354,7 @@ export const TaskRow = memo(function TaskRow({
                     placeholder="Ещё шаг"
                     aria-label={`Добавить подзадачу к «${task.title}»`}
                     enterKeyHint="done"
-                    className="h-10 min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-subtle"
+                    className="h-10 min-w-0 flex-1 bg-transparent text-base text-label outline-none placeholder:text-tertiary-label"
                   />
                 </form>
               </li>
@@ -499,20 +481,17 @@ export function AddTaskForm({
 
 function QuickChip({ label, off, onToggle, what }: { label: string; off: boolean; onToggle: () => void; what: string }) {
   return (
-    <button
-      type="button"
+    <Chip
+      tone={off ? "off" : "outline"}
       aria-pressed={!off}
       onClick={onToggle}
       title={off ? `Вернуть ${what}` : `Сбросить ${what}`}
       aria-label={off ? `Вернуть ${what} ${label}` : `Сбросить ${what} ${label}`}
-      className={cn(
-        "inline-flex h-8 items-center gap-1 rounded-full border px-2 tabular-nums",
-        off ? "border-dashed border-line text-subtle line-through" : "border-line bg-elevated text-fg",
-      )}
+      className="h-8"
     >
       {label}
       <span aria-hidden="true">{off ? "↺" : "×"}</span>
-    </button>
+    </Chip>
   );
 }
 

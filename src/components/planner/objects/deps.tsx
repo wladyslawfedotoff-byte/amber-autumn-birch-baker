@@ -1,5 +1,7 @@
 import { Lock } from "lucide-react";
 import { FieldLabel } from "@/components/ui/hint";
+import { FIELD } from "@/components/ui/kit";
+import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
 import type { Task } from "@/lib/planner-types";
 import { isBlocked, wouldCycle } from "@/lib/task-deps";
@@ -25,7 +27,7 @@ export function DependsBlock({ task }: { task: Task }) {
           aria-label="Ждёт дело"
           value={task.dependsOn ?? ""}
           onChange={(event) => setTaskDependsOn(task.id, event.target.value || null)}
-          className="h-11 min-w-0 flex-1 rounded-md border border-line bg-elevated px-3 text-base text-fg"
+          className={cn(FIELD, "border-separator min-w-0 flex-1")}
         >
           <option value="">Не ждёт</option>
           {options.map((item) => (

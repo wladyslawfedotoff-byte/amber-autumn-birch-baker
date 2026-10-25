@@ -1,6 +1,13 @@
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { Row, RowGroup } from "@/components/ui/rows";
+import {
+  Chip,
+  FIELD,
+  GroupedCard,
+  ListRow,
+  SegmentedControl,
+  SheetHeader,
+} from "@/components/ui/kit";
 import { Hint } from "@/components/ui/hint";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -19,6 +26,27 @@ import { ownerOf } from "@/lib/queries";
 import { displayName, useProfile } from "@/lib/use-capabilities";
 import { isImportant, isUrgent } from "@/lib/planner-types";
 import type { Priority, Repeat } from "@/lib/planner-types";
+
+/** Раскрывающаяся строка карточки: ListRow, под ним редактор (аккордеон). */
+function Disclose({
+  label,
+  value,
+  open,
+  onClick,
+  children,
+}: {
+  label: string;
+  value?: ReactNode;
+  open: boolean;
+  onClick: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <ListRow title={label} value={value || " "} expanded={open} onClick={onClick}>
+      {open && children ? <div className="px-3 pb-3">{children}</div> : null}
+    </ListRow>
+  );
+}
 
 const LEVELS: { value: Priority; label: string }[] = [
   { value: 0, label: "Нет" },
@@ -65,33 +93,49 @@ export function TaskDetail({
   const foreign = Boolean(profile.multiUser && me && owner !== me);
 
   const today = todayIso();
-  const project = projects.find((p) => p.stages.some((stage) => stage.cards.some((card) => card.taskId === task.id)));
-  const timeValue = task.startAt ? `${task.startAt}${task.endAt ? `–${task.endAt}` : ""}` : task.due ? "весь день" : "—";
+  const project = projects.find((p) =>
+    p.stages.some((stage) => stage.cards.some((card) => card.taskId === task.id)),
+  );
+  const timeValue = task.startAt
+    ? `${task.startAt}${task.endAt ? `–${task.endAt}` : ""}`
+    : task.due
+      ? "весь день"
+      : "—";
   const level = LEVELS.find((l) => l.value === task.priority)?.label ?? "Нет";
-  const matrix = [isImportant(task) ? "важно" : "", isUrgent(task) ? "срочно" : ""].filter(Boolean).join(" · ") || "—";
+  const matrix =
+    [isImportant(task) ? "важно" : "", isUrgent(task) ? "срочно" : ""]
+      .filter(Boolean)
+      .join(" · ") || "—";
   const listName = lists.find((l) => l.id === task.listId)?.name ?? "Входящие";
-  const field = "h-11 w-full rounded-md border border-line bg-surface px-3 text-base font-normal text-fg";
+  const field = cn(FIELD, "border-separator");
   const quick = (label: string, due: string | null) => (
-    <button
+    <Chip
       key={label}
-      type="button"
+      tone={(due ?? null) === (task.due ?? null) ? "on" : "outline"}
+      aria-pressed={(due ?? null) === (task.due ?? null)}
       onClick={() => (due ? updateTask(task.id, { due }) : clearTaskDate(task.id))}
-      className={cn("h-9 rounded-full border px-3 text-sm", (due ?? null) === (task.due ?? null) ? "border-accent bg-accent text-accent-fg" : "border-line text-fg")}
+      className="h-8 px-3 text-[0.8125rem]"
     >
       {label}
-    </button>
+    </Chip>
   );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 touch-none lg:touch-auto" onPointerDown={onHeaderPointerDown}>
         <span aria-hidden="true" className="sheet-grabber lg:hidden" />
-        <div className="flex items-center gap-2 px-2 py-1">
-          <p className="px-2 text-sm text-muted">Задача</p>
-          <button type="button" onClick={onClose} className="ml-auto h-11 rounded-full px-3 text-body font-semibold text-accent-ink lg:hidden">
-            Готово
-          </button>
-          <Button className="ml-auto hidden lg:inline-flex" size="icon" variant="ghost" aria-label="Закрыть" onClick={onClose}>
+        <div className="lg:hidden">
+          <SheetHeader title="Задача" onDone={onClose} />
+        </div>
+        <div className="hidden items-center px-2 py-1 lg:flex">
+          <p className="px-2 text-body font-semibold text-label">Задача</p>
+          <Button
+            className="ml-auto"
+            size="icon"
+            variant="ghost"
+            aria-label="Закрыть"
+            onClick={onClose}
+          >
             <X className="size-5" />
           </Button>
         </div>
@@ -104,17 +148,30 @@ export function TaskDetail({
           onBlur={() => {
             if (!task.title.trim()) updateTask(task.id, { title: "Без названия" });
           }}
-          className="w-full bg-transparent text-xl font-semibold tracking-tight text-fg outline-none md:text-2xl"
+          className="w-full bg-transparent text-title font-semibold tracking-tight text-label outline-none md:text-2xl"
         />
 
         <NotesField task={task} />
 
         <SubtasksBlock task={task} />
 
-        <RowGroup>
-          <Row label="Дата" value={task.repeat === "dates" ? (task.due ? `ближайшая: ${dueLabel(task.due, today)}` : "по выбранным датам") : task.due ? dueLabel(task.due, today) : "Нет"} open={open === "date"} onClick={() => toggle("date")}>
+        <GroupedCard className="mt-3">
+          <Disclose
+            label="Дата"
+            value={
+              task.repeat === "dates"
+                ? task.due
+                  ? `ближайшая: ${dueLabel(task.due, today)}`
+                  : "по выбранным датам"
+                : task.due
+                  ? dueLabel(task.due, today)
+                  : "Нет"
+            }
+            open={open === "date"}
+            onClick={() => toggle("date")}
+          >
             {task.repeat === "dates" ? (
-              <p className="text-xs text-muted">Даты выбираются в «Повтор».</p>
+              <p className="text-caption text-secondary-label">Даты выбираются в «Повтор».</p>
             ) : (
               <>
                 <div className="flex flex-wrap gap-2">
@@ -131,13 +188,20 @@ export function TaskDetail({
                   onValue={(due) => (due ? updateTask(task.id, { due }) : clearTaskDate(task.id))}
                   className={cn(field, "mt-2")}
                 />
-                <p className="mt-1 text-xs text-muted">«Без даты» — задача уходит из «Сегодня» и календаря, остаётся в списке.</p>
+                <p className="mt-1 text-caption text-secondary-label">
+                  «Без даты» — задача уходит из «Сегодня» и календаря, остаётся в списке.
+                </p>
               </>
             )}
-          </Row>
-          <Row label="Время" value={timeValue} open={open === "time"} onClick={() => toggle("time")}>
+          </Disclose>
+          <Disclose
+            label="Время"
+            value={timeValue}
+            open={open === "time"}
+            onClick={() => toggle("time")}
+          >
             <div className="grid grid-cols-2 gap-2">
-              <label className="block min-w-0 text-xs text-subtle">
+              <label className="block min-w-0 text-caption text-secondary-label">
                 Начало
                 <PickerInput
                   type="time"
@@ -150,7 +214,7 @@ export function TaskDetail({
                   className={cn(field, "mt-1")}
                 />
               </label>
-              <label className="block min-w-0 text-xs text-subtle">
+              <label className="block min-w-0 text-caption text-secondary-label">
                 Конец
                 <PickerInput
                   type="time"
@@ -165,19 +229,23 @@ export function TaskDetail({
               </label>
             </div>
             <Button
-              variant="soft"
+              variant="secondary"
               size="sm"
-              className="mt-2 h-9"
+              className="mt-2"
               disabled={!task.remindAt && !task.startAt && !task.endAt}
               onClick={() => clearTaskTime(task.id)}
               title="Дата остаётся, время, начало, конец и напоминание убираются"
             >
               Без времени (весь день)
             </Button>
-          </Row>
-          <Row
+          </Disclose>
+          <Disclose
             label="Напомнить"
-            value={task.remindAt ? `${task.remindAt}${normalizeLead(task.remindLead) ? ` · ${leadShort(normalizeLead(task.remindLead))}` : ""}` : "Нет"}
+            value={
+              task.remindAt
+                ? `${task.remindAt}${normalizeLead(task.remindLead) ? ` · ${leadShort(normalizeLead(task.remindLead))}` : ""}`
+                : "Нет"
+            }
             open={open === "remind"}
             onClick={() => toggle("remind")}
           >
@@ -192,26 +260,36 @@ export function TaskDetail({
               }}
               className={field}
             />
-            <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Когда напомнить" data-testid="remind-lead">
+            <div
+              className="mt-2 flex flex-wrap gap-2"
+              role="radiogroup"
+              aria-label="Когда напомнить"
+              data-testid="remind-lead"
+            >
               {REMIND_LEADS.map((lead) => {
                 const on = normalizeLead(task.remindLead) === lead;
                 return (
-                  <button
+                  <Chip
                     key={lead}
-                    type="button"
                     role="radio"
                     aria-checked={on}
                     disabled={!task.remindAt}
+                    tone={on ? "on" : "outline"}
                     onClick={() => updateTask(task.id, { remindLead: lead })}
-                    className={cn("h-8 rounded-full px-3 text-[0.8125rem] disabled:opacity-40", on ? "bg-accent text-accent-fg" : "bg-surface text-fg")}
+                    className="h-8 px-3 text-[0.8125rem]"
                   >
                     {leadShort(lead)}
-                  </button>
+                  </Chip>
                 );
               })}
             </div>
-          </Row>
-          <Row label="Повтор" value={task.repeat ? repeatLabel(task.repeat, task.repeatDates) : "Нет"} open={open === "repeat"} onClick={() => toggle("repeat")}>
+          </Disclose>
+          <Disclose
+            label="Повтор"
+            value={task.repeat ? repeatLabel(task.repeat, task.repeatDates) : "Нет"}
+            open={open === "repeat"}
+            onClick={() => toggle("repeat")}
+          >
             <select
               aria-label="Повтор"
               value={task.repeat ?? ""}
@@ -235,41 +313,39 @@ export function TaskDetail({
             </select>
             {task.repeat === "dates" ? (
               <div className="mt-2">
-                <DateMultiPicker value={task.repeatDates ?? []} onChange={(dates) => setRepeatDates(task.id, dates)} />
+                <DateMultiPicker
+                  value={task.repeatDates ?? []}
+                  onChange={(dates) => setRepeatDates(task.id, dates)}
+                />
               </div>
             ) : task.repeat ? (
-              <p className="mt-1 text-xs text-muted">Галочка ставит следующую дату, а не в архив.</p>
+              <p className="mt-1 text-caption text-secondary-label">
+                Галочка ставит следующую дату, а не в архив.
+              </p>
             ) : null}
-          </Row>
-        </RowGroup>
+          </Disclose>
+        </GroupedCard>
 
-        <RowGroup>
-          <Row label="Приоритет" value={level} open={open === "priority"} onClick={() => toggle("priority")}>
-            <div className="grid grid-cols-4 gap-1">
-              {LEVELS.map((item) => {
-                const active = task.priority === item.value;
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => updateTask(task.id, { priority: item.value })}
-                    className={cn(
-                      "h-10 rounded-md border text-xs font-medium",
-                      active ? "border-current" : "border-line text-muted",
-                      active && item.value === 3 && "text-danger",
-                      active && item.value === 2 && "text-warn",
-                      active && item.value === 1 && "text-accent-ink",
-                      active && item.value === 0 && "text-fg",
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          </Row>
-          <Row label="Список" value={listName} open={open === "list"} onClick={() => toggle("list")}>
+        <GroupedCard className="mt-3">
+          <Disclose
+            label="Приоритет"
+            value={level}
+            open={open === "priority"}
+            onClick={() => toggle("priority")}
+          >
+            <SegmentedControl
+              label="Приоритет"
+              options={LEVELS.map((item) => ({ id: String(item.value), label: item.label, tone: item.value === 3 ? ("danger" as const) : undefined }))}
+              value={String(task.priority)}
+              onChange={(id) => updateTask(task.id, { priority: Number(id) as Priority })}
+            />
+          </Disclose>
+          <Disclose
+            label="Список"
+            value={listName}
+            open={open === "list"}
+            onClick={() => toggle("list")}
+          >
             <select
               aria-label="Список"
               value={task.listId ?? ""}
@@ -283,61 +359,83 @@ export function TaskDetail({
                 </option>
               ))}
             </select>
-          </Row>
-        </RowGroup>
+          </Disclose>
+        </GroupedCard>
 
-        <Row
-          label="Подробнее"
-          value={
-            [
-              task.color && colorLabel(task.color) !== "Нет" ? "цвет" : null,
-              project ? "проект" : null,
-              task.tags.length ? "теги" : null,
-              isImportant(task) || isUrgent(task) ? "матрица" : null,
-              (task.members ?? []).length || task.assignee ? "совместная" : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || ""
-          }
-          open={more}
-          onClick={() => setMore((value) => !value)}
-        >
+        <GroupedCard className="mt-3">
+          <ListRow
+            title="Подробнее"
+            value={
+              [
+                task.color && colorLabel(task.color) !== "Нет" ? "цвет" : null,
+                project ? "проект" : null,
+                task.tags.length ? "теги" : null,
+                isImportant(task) || isUrgent(task) ? "матрица" : null,
+                (task.members ?? []).length || task.assignee ? "совместная" : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || ""
+            }
+            expanded={more}
+            onClick={() => setMore((value) => !value)}
+          />
+        </GroupedCard>
+        {more ? (
           <div className="space-y-4">
-            <RowGroup>
-              <Row label="Матрица" value={matrix} open={open === "matrix"} onClick={() => toggle("matrix")}>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
+            <GroupedCard className="mt-1">
+              <Disclose
+                label="Матрица"
+                value={matrix}
+                open={open === "matrix"}
+                onClick={() => toggle("matrix")}
+              >
+                <div className="flex gap-2">
+                  <Chip
+                    tone={isImportant(task) ? "on" : "outline"}
                     aria-pressed={isImportant(task)}
                     onClick={() => updateTask(task.id, { important: !isImportant(task) })}
-                    className={cn("h-10 rounded-md border text-sm", isImportant(task) ? "border-accent font-medium text-fg" : "border-line text-muted")}
+                    className="h-8 flex-1 justify-center text-body"
                   >
                     Важно
-                  </button>
-                  <button
-                    type="button"
+                  </Chip>
+                  <Chip
+                    tone={isUrgent(task) ? "on" : "outline"}
                     aria-pressed={isUrgent(task)}
                     onClick={() => updateTask(task.id, { urgent: !isUrgent(task) })}
-                    className={cn("h-10 rounded-md border text-sm", isUrgent(task) ? "border-danger font-medium text-danger" : "border-line text-muted")}
+                    className="h-8 flex-1 justify-center text-body"
                   >
                     Срочно
-                  </button>
+                  </Chip>
                 </div>
-              </Row>
-              <Row
+              </Disclose>
+              <Disclose
                 label="Цвет"
                 value={
                   <span className="inline-flex items-center gap-2">
-                    {colorHex(task.color) ? <span className="size-3 rounded-full" style={{ background: colorHex(task.color)! }} /> : null}
+                    {colorHex(task.color) ? (
+                      <span
+                        className="size-3 rounded-full"
+                        style={{ background: colorHex(task.color)! }}
+                      />
+                    ) : null}
                     {colorLabel(task.color)}
                   </span>
                 }
                 open={open === "color"}
                 onClick={() => toggle("color")}
               >
-                <ColorPicker bare value={task.color} onChange={(color) => updateTask(task.id, { color })} />
-              </Row>
-              <Row label="Проект" value={project?.title ?? "—"} open={open === "project"} onClick={() => toggle("project")}>
+                <ColorPicker
+                  bare
+                  value={task.color}
+                  onChange={(color) => updateTask(task.id, { color })}
+                />
+              </Disclose>
+              <Disclose
+                label="Проект"
+                value={project?.title ?? "—"}
+                open={open === "project"}
+                onClick={() => toggle("project")}
+              >
                 <select
                   aria-label="Проект"
                   value={makingProject ? "new" : (project?.id ?? "")}
@@ -367,7 +465,9 @@ export function TaskDetail({
                       event.preventDefault();
                       const title = projectDraft.trim();
                       if (!title) return;
-                      const existing = projects.find((item) => item.title.trim().toLowerCase() === title.toLowerCase());
+                      const existing = projects.find(
+                        (item) => item.title.trim().toLowerCase() === title.toLowerCase(),
+                      );
                       const id = existing?.id ?? addProject(title);
                       sendTaskToProject(task.id, id);
                       setProjectDraft("");
@@ -381,24 +481,33 @@ export function TaskDetail({
                       aria-label="Название проекта"
                       className={cn(field, "flex-1")}
                     />
-                    <button type="submit" className="h-11 shrink-0 rounded-md bg-accent px-3 text-sm text-accent-fg">
+                    <Button type="submit" variant="primary" className="shrink-0">
                       Передать
-                    </button>
+                    </Button>
                   </form>
                 ) : null}
-              </Row>
-              <Row label="Теги" value={task.tags.length ? task.tags.map((t) => `#${t}`).join(" ") : "—"} open={open === "tags"} onClick={() => toggle("tags")}>
+              </Disclose>
+              <Disclose
+                label="Теги"
+                value={task.tags.length ? task.tags.map((t) => `#${t}`).join(" ") : "—"}
+                open={open === "tags"}
+                onClick={() => toggle("tags")}
+              >
                 {task.tags.length ? (
                   <div className="mb-2 flex flex-wrap gap-2">
                     {task.tags.map((item) => (
-                      <button
+                      <Chip
                         key={item}
-                        type="button"
-                        onClick={() => updateTask(task.id, { tags: task.tags.filter((tagName) => tagName !== item) })}
-                        className="h-8 rounded-full border border-line bg-surface px-3 text-xs text-fg"
+                        tone="outline"
+                        onClick={() =>
+                          updateTask(task.id, {
+                            tags: task.tags.filter((tagName) => tagName !== item),
+                          })
+                        }
+                        className="h-8 px-3"
                       >
                         #{item} ×<span className="sr-only"> убрать</span>
-                      </button>
+                      </Chip>
                     ))}
                   </div>
                 ) : null}
@@ -414,45 +523,61 @@ export function TaskDetail({
                     setTag("");
                   }}
                 >
-                  <input value={tag} onChange={(event) => setTag(event.target.value)} placeholder="Добавить тег, например «жду»" aria-label="Добавить тег" className={field} />
+                  <input
+                    value={tag}
+                    onChange={(event) => setTag(event.target.value)}
+                    placeholder="Добавить тег, например «жду»"
+                    aria-label="Добавить тег"
+                    className={field}
+                  />
                 </form>
-              </Row>
-            </RowGroup>
+              </Disclose>
+            </GroupedCard>
 
-            <RowGroup>
+            <GroupedCard className="mt-3">
               {profile.multiUser && me ? (
-                <Row
+                <Disclose
                   label="Совместная"
-                  value={task.assignee ? `назначена: ${displayName(task.assignee, profile)}` : (task.members ?? []).length ? `участников: ${(task.members ?? []).length}` : "только вы"}
+                  value={
+                    task.assignee
+                      ? `назначена: ${displayName(task.assignee, profile)}`
+                      : (task.members ?? []).length
+                        ? `участников: ${(task.members ?? []).length}`
+                        : "только вы"
+                  }
                   open={open === "share"}
                   onClick={() => toggle("share")}
                 >
                   <TaskShareControls task={task} />
-                </Row>
+                </Disclose>
               ) : null}
-              <Row label="Дублировать" open={open === "copy"} onClick={() => toggle("copy")}>
+              <Disclose label="Дублировать" open={open === "copy"} onClick={() => toggle("copy")}>
                 <DuplicateControls task={task} onOpen={onOpen} />
-              </Row>
-            </RowGroup>
+              </Disclose>
+            </GroupedCard>
 
             <TaskObjects task={task} projectContacts={project?.contacts ?? []} />
             <DependsBlock task={task} />
           </div>
-        </Row>
+        ) : null}
 
         <div className="mt-6">
           {foreign ? (
-            <p className="mb-2 text-xs text-muted">
-              Задача {displayName(owner, profile)}. <Hint label="Что значит «Убрать у себя»">Она исчезнет только у вас и останется у владельца.</Hint>
+            <p className="mb-2 text-caption text-secondary-label">
+              Задача {displayName(owner, profile)}.{" "}
+              <Hint label="Что значит «Убрать у себя»">
+                Она исчезнет только у вас и останется у владельца.
+              </Hint>
             </p>
           ) : null}
           {confirm ? (
             <div className="flex gap-2">
-              <Button variant="soft" onClick={() => setConfirm(false)}>
+              <Button variant="secondary" className="flex-1" onClick={() => setConfirm(false)}>
                 Отменить
               </Button>
               <Button
                 variant="destructive"
+                className="flex-1"
                 onClick={() => {
                   deleteTask(task.id);
                   onClose();
@@ -462,9 +587,14 @@ export function TaskDetail({
               </Button>
             </div>
           ) : (
-            <Button variant="ghost" className="text-danger" onClick={() => setConfirm(true)}>
-              {foreign ? "Убрать у себя" : "Удалить задачу"}
-            </Button>
+            <GroupedCard className="mt-0">
+              <ListRow
+                destructive
+                chevron={false}
+                title={foreign ? "Убрать у себя" : "Удалить задачу"}
+                onClick={() => setConfirm(true)}
+              />
+            </GroupedCard>
           )}
         </div>
       </div>

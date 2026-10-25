@@ -40,19 +40,19 @@ export function DateMultiPicker({ value, onChange }: { value: string[]; onChange
   const sorted = [...selected].sort();
   const past = sorted.filter((d) => d < today);
   return (
-    <div className="mt-2 rounded-xl border border-line p-2" data-testid="date-multi-picker">
+    <div className="mt-2 rounded-card border border-separator p-2" data-testid="date-multi-picker">
       <div className="flex items-center">
-        <button type="button" aria-label="Предыдущий месяц" onClick={() => shift(-1)} className="flex size-11 items-center justify-center rounded-md text-muted hover:text-fg">
+        <button type="button" aria-label="Предыдущий месяц" onClick={() => shift(-1)} className="flex size-11 items-center justify-center rounded-md text-secondary-label hover:text-label">
           <ChevronLeft className="size-4" />
         </button>
-        <p className="flex-1 text-center text-sm font-medium text-fg" aria-live="polite">
+        <p className="flex-1 text-center text-sm font-medium text-label" aria-live="polite">
           {formatMonth(new Date(cursor.y, cursor.m, 1))}
         </p>
-        <button type="button" aria-label="Следующий месяц" onClick={() => shift(1)} className="flex size-11 items-center justify-center rounded-md text-muted hover:text-fg">
+        <button type="button" aria-label="Следующий месяц" onClick={() => shift(1)} className="flex size-11 items-center justify-center rounded-md text-secondary-label hover:text-label">
           <ChevronRight className="size-4" />
         </button>
       </div>
-      <div className="grid grid-cols-7 text-center text-[0.6875rem] text-subtle" aria-hidden="true">
+      <div className="grid grid-cols-7 text-center text-[0.6875rem] text-tertiary-label" aria-hidden="true">
         {WEEK.map((d) => (
           <span key={d} className="py-1">
             {d}
@@ -70,7 +70,7 @@ export function DateMultiPicker({ value, onChange }: { value: string[]; onChange
               onClick={() => toggle(iso)}
               className={cn(
                 "flex h-11 items-center justify-center rounded-md text-sm tabular-nums",
-                selected.has(iso) ? "bg-accent font-medium text-accent-fg" : iso < today ? "text-subtle" : "text-fg hover:bg-elevated",
+                selected.has(iso) ? "bg-accent font-medium text-accent-fg" : iso < today ? "text-tertiary-label" : "text-label hover:bg-card",
                 iso === today && !selected.has(iso) ? "ring-1 ring-accent" : "",
               )}
             >
@@ -83,7 +83,7 @@ export function DateMultiPicker({ value, onChange }: { value: string[]; onChange
       </div>
       {sorted.length ? (
         <div className="mt-2">
-          <p className="px-1 text-xs text-muted">
+          <p className="px-1 text-xs text-secondary-label">
             Выбрано: {sorted.length}. Нажмите на дату ещё раз, чтобы убрать.
           </p>
           <div className="mt-1 flex flex-wrap gap-1">
@@ -93,7 +93,7 @@ export function DateMultiPicker({ value, onChange }: { value: string[]; onChange
                 type="button"
                 onClick={() => toggle(iso)}
                 aria-label={`Убрать ${format(parseISO(iso), "d MMMM yyyy", { locale: ru })}`}
-                className={cn("flex h-8 items-center gap-1 rounded-full border border-line px-2 text-xs", iso < today ? "text-subtle" : "text-fg")}
+                className={cn("flex h-8 items-center gap-1 rounded-full border border-separator px-2 text-xs", iso < today ? "text-tertiary-label" : "text-label")}
               >
                 {formatShort(iso)}
                 {iso.slice(0, 4) !== today.slice(0, 4) ? ` ${iso.slice(0, 4)}` : ""}
@@ -102,13 +102,13 @@ export function DateMultiPicker({ value, onChange }: { value: string[]; onChange
             ))}
           </div>
           {past.length ? (
-            <button type="button" onClick={() => onChange(sorted.filter((d) => d >= today))} className="mt-1 h-9 px-1 text-xs text-muted underline">
+            <button type="button" onClick={() => onChange(sorted.filter((d) => d >= today))} className="mt-1 h-9 px-1 text-xs text-secondary-label underline">
               Убрать прошедшие ({past.length})
             </button>
           ) : null}
         </div>
       ) : (
-        <p className="mt-2 px-1 text-xs text-muted">Например: дни сдачи показаний, приёмы у врача, дежурства — любые дни в разных месяцах.</p>
+        <p className="mt-2 px-1 text-xs text-secondary-label">Например: дни сдачи показаний, приёмы у врача, дежурства — любые дни в разных месяцах.</p>
       )}
     </div>
   );

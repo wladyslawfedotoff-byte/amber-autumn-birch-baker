@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Bell, CalendarRange, Car, Fuel, Inbox, LayoutGrid, Moon, ShieldCheck, Sun, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Banner, Counter, EmptyState, GroupedCard, IconBadge, InfoCard, ListRow, SearchField, SegmentedControl, SheetHeader, TextField, Tile, Toggle } from "@/components/ui/kit";
+import { Banner, CheckCircle, Chip, Counter, EmptyState, GroupedCard, IconBadge, InfoCard, ListRow, SearchField, SegmentedControl, SheetHeader, TextField, Tile, Toggle } from "@/components/ui/kit";
 import { COLOR_TOKENS, ICON_COLORS } from "@/lib/design/tokens";
 
 /** Living catalogue of the design tokens and the UI kit (hidden: reachable by URL only). */
@@ -141,6 +141,9 @@ function KitPage() {
           <ListRow icon={LayoutGrid} color="mint" title="Навигация" value="5 вкладок" onClick={() => {}} />
           <ListRow icon={Wrench} color="grey" title="С подзаголовком" subtitle="Замена масла · через 300 км" counter={2} onClick={() => {}} />
           <ListRow icon={Bell} color="red" title="Переключатель" toggle={{ checked: toggle, onChange: setToggle }} />
+          <ListRow title="Раскрывается" value="Нет" expanded={toggle} onClick={() => setToggle(!toggle)}>
+            {toggle ? <p className="px-3 pb-3 text-caption text-secondary-label">Редактор под строкой, как в карточке задачи.</p> : null}
+          </ListRow>
           <ListRow icon={ShieldCheck} color="green" title="Загрузка" loading onClick={() => {}} />
           <ListRow icon={Bell} color="purple" title="Отключена" disabled onClick={() => {}} />
           <ListRow icon={Trash2} title="Удалить" destructive onClick={() => {}} />
@@ -158,12 +161,33 @@ function KitPage() {
             { id: "month", label: "Месяц" },
           ]}
         />
+        <div className="mt-2">
+          <SegmentedControl
+            label="Приоритет"
+            options={[{ id: "0", label: "Нет" }, { id: "1", label: "Низкий" }, { id: "2", label: "Средний" }, { id: "3", label: "Высокий", tone: "danger" }]}
+            value="3"
+            onChange={() => {}}
+          />
+        </div>
         <div className="menu-card mt-2 flex items-center gap-3 rounded-card px-3 py-2">
           <span className="flex-1 text-body">Переключатель</span>
           <Toggle label="Вкл" checked={toggle} onChange={setToggle} />
           <Toggle label="Отключён" checked={false} onChange={() => {}} disabled />
           <Counter value={12} />
           <Counter value={3} tone="danger" />
+        </div>
+        <div className="menu-card mt-2 flex flex-wrap items-center gap-3 rounded-card px-3 py-2" aria-label="Отметки и пилюли">
+          <span className="text-body">Отметка</span>
+          <CheckCircle checked={false} />
+          <CheckCircle checked={false} ring="border-danger" />
+          <CheckCircle checked />
+          <CheckCircle checked={false} size="sm" />
+          <CheckCircle checked size="sm" />
+          <Chip tone="tint">Обновить пробег</Chip>
+          <Chip>завтра</Chip>
+          <Chip tone="outline">25 окт. ×</Chip>
+          <Chip tone="off">10:00 ↺</Chip>
+          <Chip tone="on">Завтра</Chip>
         </div>
         <div className="menu-card mt-2 rounded-card">
           <SheetHeader title="Новая задача" onCancel={() => {}} onDone={() => {}} />

@@ -1,16 +1,17 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Check, Copy, GripVertical, ListChecks, Plus, X } from "lucide-react";
+import { Copy, GripVertical, ListChecks, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/hint";
 import { cn } from "@/lib/cn";
+import { CheckCircle, Chip, FIELD } from "@/components/ui/kit";
 import { dueLabel, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import type { Task } from "@/lib/planner-types";
 import { dropIndex, placeItem } from "@/lib/reorder";
 import { listInNotes, subtaskProgress } from "@/lib/task-tools";
 
-const field =
-  "w-full rounded-md border border-line bg-elevated px-3 text-base font-normal text-fg outline-none placeholder:text-subtle";
+// Общий стиль поля из набора (16 px, рамка-разделитель, кольцо фокуса акцентом).
+const field = cn(FIELD, "border-separator");
 
 /** «Заметка»: free text; a list typed here can be turned into subtasks in one tap. */
 export function NotesField({ task }: { task: Task }) {
@@ -28,10 +29,10 @@ export function NotesField({ task }: { task: Task }) {
         onChange={(event) => updateTask(task.id, { notes: event.target.value })}
         rows={task.notes ? Math.min(10, Math.max(2, task.notes.split("\n").length + 1)) : 2}
         placeholder={"Контекст, ссылки… Список — строки с «- »"}
-        className={cn(field, "mt-1 resize-y py-2 leading-normal")}
+        className={cn(field, "mt-1 h-auto resize-y py-2 leading-normal")}
       />
       {found > 0 ? (
-        <Button variant="soft" size="sm" className="mt-2" onClick={() => notesToSubtasks(task.id)}>
+        <Button variant="secondary" size="sm" className="mt-2" onClick={() => notesToSubtasks(task.id)}>
           <ListChecks className="size-4" aria-hidden="true" />
           Сделать подзадачами ({found})
         </Button>
@@ -117,22 +118,22 @@ export function SubtasksBlock({ task }: { task: Task }) {
           </FieldLabel>
         </div>
         {progress.total ? (
-          <span className="ml-auto text-xs tabular-nums text-muted" data-testid="subtask-progress">
+          <span className="ml-auto text-caption tabular-nums text-secondary-label" data-testid="subtask-progress">
             {progress.done} из {progress.total}
           </span>
         ) : null}
       </div>
       {progress.total ? (
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-elevated" aria-hidden="true">
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-separator" aria-hidden="true">
           <div className="h-full rounded-full bg-accent" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
         </div>
       ) : null}
-      <ul className="mt-1">
+      <ul className={cn("mt-2", subs.length > 0 && "menu-card overflow-hidden rounded-card")}>
         {subs.map((item, index) => (
           <li
             key={item.id}
             data-sub-row={task.id}
-            className={cn("border-b border-line/60 py-1 last:border-0", drag?.id === item.id && "rounded-md bg-elevated shadow-md")}
+            className={cn("relative", drag?.id === item.id && "z-10 bg-card shadow-[var(--shadow-pop)]")}
           >
             <div className="flex items-center gap-1">
               <span
@@ -146,7 +147,7 @@ export function SubtasksBlock({ task }: { task: Task }) {
                   event.preventDefault();
                   moveSubtask(task.id, item.id, event.key === "ArrowUp" ? -1 : 1);
                 }}
-                className="drag-handle flex size-11 shrink-0 cursor-grab touch-none items-center justify-center text-subtle"
+                className="drag-handle flex size-11 shrink-0 cursor-grab touch-none items-center justify-center text-tertiary-label"
               >
                 <GripVertical className="size-5" />
               </span>
@@ -176,58 +177,51 @@ export function SubtasksBlock({ task }: { task: Task }) {
                   setMenuId(item.id);
                 }}
                 style={{ WebkitTouchCallout: "none" }}
-                className="flex h-11 min-w-0 flex-1 items-center gap-3 text-left text-sm"
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left text-body"
               >
-                <span
-                  className={cn(
-                    "flex size-5 shrink-0 items-center justify-center rounded-full border",
-                    item.done ? "border-accent bg-accent text-accent-fg" : "border-line",
-                  )}
-                >
-                  {item.done ? <Check className="size-3" strokeWidth={3} /> : null}
-                </span>
-                <span className={item.done ? "text-subtle line-through" : "text-fg"}>{item.title}</span>
+                <CheckCircle checked={item.done} />
+                <span className={item.done ? "text-tertiary-label line-through" : "text-label"}>{item.title}</span>
               </button>
-              <Button size="icon" variant="ghost" aria-label={`Удалить подзадачу ${item.title}`} onClick={() => deleteSubtask(task.id, item.id)}>
+              <Button size="icon" variant="ghost" className="text-tertiary-label" aria-label={`Удалить подзадачу ${item.title}`} onClick={() => deleteSubtask(task.id, item.id)}>
                 <X className="size-4" />
               </Button>
             </div>
             {menuId === item.id ? (
-              <div role="menu" aria-label={`Порядок «${item.title}»`} className="mb-1 ml-12 flex gap-1">
-                <button
-                  type="button"
+              <div role="menu" aria-label={`Порядок «${item.title}»`} className="mb-2 ml-12 flex gap-2">
+                <Chip
+                  tone="outline"
                   role="menuitem"
                   disabled={index === 0}
                   onClick={() => {
                     moveSubtask(task.id, item.id, -1);
                     setMenuId(null);
                   }}
-                  className="h-9 rounded-lg bg-elevated px-3 text-sm disabled:opacity-40"
+                  className="h-8 px-3 text-[0.8125rem]"
                 >
                   Выше
-                </button>
-                <button
-                  type="button"
+                </Chip>
+                <Chip
+                  tone="outline"
                   role="menuitem"
                   disabled={index === subs.length - 1}
                   onClick={() => {
                     moveSubtask(task.id, item.id, 1);
                     setMenuId(null);
                   }}
-                  className="h-9 rounded-lg bg-elevated px-3 text-sm disabled:opacity-40"
+                  className="h-8 px-3 text-[0.8125rem]"
                 >
                   Ниже
-                </button>
-                <button type="button" onClick={() => setMenuId(null)} className="h-9 px-2 text-sm text-muted">
+                </Chip>
+                <Chip tone="tint" onClick={() => setMenuId(null)} className="h-8 px-3 text-[0.8125rem]">
                   Готово
-                </button>
+                </Chip>
               </div>
             ) : null}
           </li>
         ))}
       </ul>
       <form
-        className="mt-1 flex gap-2"
+        className="mt-2 flex gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           commit();
@@ -249,7 +243,7 @@ export function SubtasksBlock({ task }: { task: Task }) {
           enterKeyHint="done"
           className={cn(field, "h-11 min-w-0 flex-1")}
         />
-        <Button type="submit" variant={draft.trim() ? "primary" : "soft"} size="icon" aria-label="Добавить подзадачу">
+        <Button type="submit" variant={draft.trim() ? "primary" : "secondary"} size="icon" aria-label="Добавить подзадачу">
           <Plus className="size-5" />
         </Button>
       </form>
@@ -271,11 +265,11 @@ export function DuplicateControls({ task, onOpen }: { task: Task; onOpen?: (id: 
   return (
     <section aria-label="Дублировать задачу">
       <div className="flex flex-wrap gap-2">
-        <Button variant="soft" size="sm" onClick={() => copy()}>
+        <Button variant="secondary" size="sm" onClick={() => copy()}>
           <Copy className="size-4" aria-hidden="true" />
           Дублировать
         </Button>
-        <Button variant="soft" size="sm" aria-expanded={picking} onClick={() => setPicking(!picking)}>
+        <Button variant="secondary" size="sm" aria-expanded={picking} onClick={() => setPicking(!picking)}>
           Дублировать на дату…
         </Button>
       </div>
@@ -292,14 +286,14 @@ export function DuplicateControls({ task, onOpen }: { task: Task; onOpen?: (id: 
             value={date}
             onChange={(event) => setDate(event.target.value)}
             aria-label="Дата копии"
-            className={cn(field, "h-11 w-auto")}
+            className={cn(field, "w-auto")}
           />
           <Button type="submit" variant="primary" size="sm" disabled={!date}>
             Создать копию{date ? ` на ${dueLabel(date, today)}` : ""}
           </Button>
         </form>
       ) : null}
-      <p className="mt-1 text-xs text-muted">Копия со всеми полями (без галочек) откроется сразу — например, «Отчёт для бухгалтера».</p>
+      <p className="mt-1 text-caption text-secondary-label">Копия со всеми полями (без галочек) откроется сразу — например, «Отчёт для бухгалтера».</p>
     </section>
   );
 }

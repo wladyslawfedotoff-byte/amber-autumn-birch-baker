@@ -39,6 +39,6 @@ export function colorStyle(value: unknown, tint = 10): { borderLeft?: string; ba
   if (!hex) return {};
   return {
     borderLeft: `4px solid ${hex}`,
-    background: `color-mix(in oklab, ${hex} ${tint}%, var(--elevated))`,
+    background: `color-mix(in oklab, ${hex} ${tint}%, var(--card))`,
   };
 }

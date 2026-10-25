@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Archive, ChevronDown, ChevronRight, GripVertical, Lock, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, GripVertical, Lock, RotateCcw, Trash2 } from "lucide-react";
+import { CAPS, SectionHeader } from "@/components/ui/kit";
 import { TodayStrip, TodaySummary, WeekDays } from "@/components/planner/today-strip";
 import { AddTaskForm, TaskRow } from "@/components/planner/task-row";
 import { RowWindow } from "@/components/planner/row-window";
@@ -69,15 +70,7 @@ export function TaskViews({
   const doneBlock =
     !searching && done.length > 0 && view !== "done" && view !== "archive" ? (
       <section className="mt-4" aria-label="Готово">
-        <button
-          type="button"
-          aria-expanded={!doneFolded}
-          onClick={() => setDoneFolded(!doneFolded)}
-          className="flex h-10 items-center gap-1 rounded-md px-1 text-xs font-semibold uppercase text-subtle hover:text-fg"
-        >
-          {doneFolded ? <ChevronRight className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
-          Готово · <span className="tabular-nums">{done.length}</span>
-        </button>
+        <SectionHeader title={`Готово · ${done.length}`} folded={doneFolded} onFold={() => setDoneFolded(!doneFolded)} />
         {doneFolded ? null : (
           <>
             <RowWindow items={done}>{(task) => (
@@ -308,7 +301,7 @@ function TodayGroups({
     <div>
       {overdue.length > 0 ? (
         <section className="mt-3">
-          <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted">Просрочено</h2>
+          <SectionHeader as="h2" title="Просрочено" />
           <RowWindow items={overdue}>{(task) => (
             <TaskRow
               key={task.id}
@@ -325,7 +318,7 @@ function TodayGroups({
       ) : null}
       {current.length > 0 ? (
         <section className="mt-3">
-          <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-subtle">На сегодня</h2>
+          <SectionHeader as="h2" title="На сегодня" />
           <RowWindow items={[...current].sort((a, b) => (a.startAt ?? a.remindAt ?? "99:99").localeCompare(b.startAt ?? b.remindAt ?? "99:99"))}>
             {(task) => (
             <TaskRow
@@ -369,10 +362,11 @@ function WeekGroups({
     <div>
       {groups.map((group) => (
         <section key={group.day} className="mt-3">
-          <h2 className={cn("px-1 pb-1 text-xs font-semibold uppercase tracking-wide", group.day === today ? "text-accent-ink" : "text-subtle")}>
-            {group.day === today ? "Сегодня · " : group.day === shiftIso(today, 1) ? "Завтра · " : ""}
-            {formatShortDay(group.day, true)}
-          </h2>
+          <SectionHeader
+            as="h2"
+            tone={group.day === today ? "accent" : undefined}
+            title={`${group.day === today ? "Сегодня · " : group.day === shiftIso(today, 1) ? "Завтра · " : ""}${formatShortDay(group.day, true)}`}
+          />
           {group.items.map((task) => (
             <TaskRow
               key={task.id}
@@ -461,20 +455,20 @@ function PriorityBoard({
               key={column.priority}
               data-priority={column.priority}
               className={cn(
-                "flex w-[80vw] max-w-72 shrink-0 snap-start flex-col rounded-xl bg-bg p-2 ring-1",
+                "flex w-[80vw] max-w-72 shrink-0 snap-start flex-col rounded-card bg-surface p-2 ring-1",
                 over === column.priority ? "ring-accent" : "ring-transparent",
               )}
             >
-              <p className="flex h-8 items-center justify-between px-1 text-xs font-semibold uppercase text-subtle">
-                {column.title}
-                <span className="tabular-nums">{items.length}</span>
+              <p className="flex h-8 items-center justify-between px-1">
+                <span className={CAPS}>{column.title}</span>
+                <span className="text-caption text-tertiary-label tabular-nums">{items.length}</span>
               </p>
               <ul className="flex min-h-16 flex-col gap-1">
                 {items.map((task) => (
                   <li key={task.id}>
                     <div
                       className={cn(
-                        "drag-handle rounded-lg bg-elevated px-3 py-2",
+                        "drag-handle rounded-card bg-card px-3 py-2",
                         selectedId === task.id && "ring-1 ring-accent",
                       )}
                       onPointerDown={(event) => begin(event, task)}
@@ -482,8 +476,8 @@ function PriorityBoard({
                       <span className="flex items-start gap-2">
                         <GripVertical className="mt-1 size-3.5 shrink-0 text-subtle" />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-body leading-snug text-fg">{task.title}</span>
-                          <span className="mt-1 block text-caption text-muted">
+                          <span className="block text-body leading-snug text-label">{task.title}</span>
+                          <span className="mt-1 block text-caption text-secondary-label">
                             {task.due ? dueLabel(task.due, today) : "без даты"}
                           </span>
                         </span>

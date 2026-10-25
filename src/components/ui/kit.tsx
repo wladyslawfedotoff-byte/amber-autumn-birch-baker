@@ -4,8 +4,8 @@
  * ring), disabled (40 %), loading (spinner, inert), error / success.
  * Live catalogue: /kit.
  */
-import { useId, type InputHTMLAttributes, type ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Info, Loader2, Search, X, XCircle, type LucideIcon } from "lucide-react";
+import { useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Info, Loader2, Search, X, XCircle, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { icon as iconColor, type IconColor } from "@/lib/design/tokens";
 
@@ -40,14 +40,80 @@ export function Spinner({ className }: { className?: string }) {
 /** Подпись секции капсом — общий стиль для всех экранов. */
 export const CAPS = "text-[0.6875rem] font-semibold tracking-wide text-tertiary-label uppercase";
 
-export function SectionHeader({ title, count, folded, onFold }: { title: string; count?: number; folded?: boolean; onFold?: () => void }) {
-  const label = <span className={CAPS}>{title}</span>;
-  if (!onFold) return <div className="mb-1 px-1">{label}</div>;
+export function SectionHeader({
+  title,
+  count,
+  folded,
+  onFold,
+  tone,
+  as: Tag = "div",
+}: {
+  title: string;
+  count?: number;
+  folded?: boolean;
+  onFold?: () => void;
+  /** accent — сегодняшний день в «Неделе». */
+  tone?: "accent";
+  /** h2 для заголовков разделов в списках задач. */
+  as?: "div" | "h2" | "h3";
+}) {
+  const label = <span className={cn(CAPS, tone === "accent" && "text-accent-ink")}>{title}</span>;
+  if (!onFold) return <Tag className="mb-1 px-1">{label}</Tag>;
   return (
     <button type="button" aria-expanded={!folded} onClick={onFold} className="mb-1 flex min-h-8 w-full items-center gap-1 px-1 text-left">
       {label}
       {folded && count ? <span className="text-caption text-tertiary-label tabular-nums">{count}</span> : null}
       <ChevronDown className={cn("ml-auto size-[var(--icon-sm)] text-tertiary-label transition-transform duration-[var(--dur-fast)]", folded && "-rotate-90")} aria-hidden="true" />
+    </button>
+  );
+}
+
+/**
+ * Круглая отметка задачи (1.21). md — строка задачи (18 px), sm — подзадача и
+ * «Матрица» (16 px). Только вид: кнопку и зону нажатия 44 px даёт родитель.
+ */
+export function CheckCircle({ checked, size = "md", ring }: { checked: boolean; size?: "md" | "sm"; ring?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full transition-[background-color,border-color] duration-[var(--dur-fast)]",
+        size === "md" ? "size-[1.125rem] border-2" : "size-4 border-[1.5px]",
+        checked ? "border-accent bg-accent text-accent-fg" : (ring ?? "border-tertiary-label"),
+      )}
+    >
+      {checked ? <Check className={size === "md" ? "size-3" : "size-2.5"} strokeWidth={3} /> : null}
+    </span>
+  );
+}
+
+/**
+ * Маленькая кнопка-«пилюля» (1.21): «завтра», «Обновить пробег», распознанная
+ * дата. tint — акцентная подложка, plain — фон страницы, outline — рамка,
+ * off — пунктир и зачёркивание, on — выбранный вариант (заливка акцентом). Высота 28 px, зона нажатия 44 px через .hit.
+ */
+export function Chip({
+  tone = "plain",
+  className,
+  children,
+  ...props
+}: { tone?: "tint" | "plain" | "outline" | "off" | "on" } & ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "hit inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-caption tabular-nums transition-colors duration-[var(--dur-fast)] active:brightness-95",
+        tone === "tint" && "bg-accent/10 font-medium text-accent-ink",
+        tone === "plain" && "bg-bg text-secondary-label",
+        tone === "outline" && "border border-separator bg-surface-2 text-label",
+        tone === "off" && "border border-dashed border-separator text-tertiary-label line-through",
+        tone === "on" && "border border-accent bg-accent font-medium text-accent-fg",
+        "disabled:pointer-events-none disabled:opacity-40",
+        className,
+      )}
+      {...props}
+    >
+      {children}
     </button>
   );
 }
@@ -88,6 +154,8 @@ export type ListRowProps = {
   subtitle?: ReactNode;
   value?: ReactNode;
   counter?: number | string | null;
+  /** Раскрывающаяся строка (1.21): aria-expanded и шеврон, повёрнутый вниз. */
+  expanded?: boolean;
   /** Shows a chevron (navigation). Default: when onClick is set and there is no toggle. */
   chevron?: boolean;
   toggle?: { checked: boolean; onChange: (next: boolean) => void };
@@ -113,6 +181,7 @@ export function ListRow({
   value,
   counter,
   chevron,
+  expanded,
   toggle,
   destructive,
   accent,
@@ -136,7 +205,7 @@ export function ListRow({
       <Counter value={counter} />
       {trailing}
       {loading ? <Spinner className="text-tertiary-label" /> : null}
-      {!loading && (chevron ?? (Boolean(onClick) && !toggle)) ? <ChevronRight className="size-[var(--icon-sm)] shrink-0 text-tertiary-label" aria-hidden="true" /> : null}
+      {!loading && (chevron ?? (Boolean(onClick) && !toggle)) ? <ChevronRight className={cn("size-[var(--icon-sm)] shrink-0 text-tertiary-label transition-transform duration-[var(--dur-fast)]", expanded && "rotate-90")} aria-hidden="true" /> : null}
     </>
   );
   if (toggle) {
@@ -164,6 +233,7 @@ export function ListRow({
         <button
           type="button"
           aria-current={active ? "page" : undefined}
+          aria-expanded={expanded}
           aria-busy={loading || undefined}
           disabled={disabled || loading}
           onClick={onClick}
@@ -282,7 +352,8 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
   );
 }
 
-export function SegmentedControl<T extends string>({ options, value, onChange, label }: { options: { id: T; label: string }[]; value: T; onChange: (id: T) => void; label: string }) {
+/** tone: "danger" — выбранный сегмент подписан красным (например, «Высокий» приоритет). */
+export function SegmentedControl<T extends string>({ options, value, onChange, label }: { options: { id: T; label: string; tone?: "danger" }[]; value: T; onChange: (id: T) => void; label: string }) {
   return (
     <div role="radiogroup" aria-label={label} className="grid rounded-md bg-fg/[0.06] p-0.5" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map((option) => (
@@ -294,7 +365,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, l
           onClick={() => onChange(option.id)}
           className={cn(
             "min-h-8 rounded-[calc(var(--r-md)-2px)] text-[0.8125rem] transition-colors duration-[var(--dur-fast)]",
-            option.id === value ? "bg-surface-2 font-semibold text-label shadow-[var(--shadow-1)]" : "text-secondary-label",
+            option.id === value ? cn("bg-surface-2 font-semibold shadow-[var(--shadow-1)]", option.tone === "danger" ? "text-danger" : "text-label") : "text-secondary-label",
           )}
         >
           {option.label}

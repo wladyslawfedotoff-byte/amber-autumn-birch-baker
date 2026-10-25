@@ -49,7 +49,7 @@ export function Thumb({ item }: { item: AttachmentMeta }) {
 
 export function KindIcon({ mime }: { mime: string }) {
   const kind = fileKind(mime);
-  const cls = "size-6 text-muted";
+  const cls = "size-6 text-secondary-label";
   if (kind === "image") return <ImageIcon className={cls} />;
   if (kind === "sheet") return <FileSpreadsheet className={cls} />;
   if (kind === "pdf" || kind === "text") return <FileText className={cls} />;
@@ -68,10 +68,10 @@ function TextPreview({ item }: { item: AttachmentMeta }) {
       gone = true;
     };
   }, [item.id]);
-  if (failed) return <p className="rounded-lg bg-surface px-4 py-3 text-fg">Не удалось открыть файл.</p>;
-  if (text === null) return <div className="size-40 animate-pulse rounded-lg bg-elevated" />;
+  if (failed) return <p className="rounded-lg bg-surface px-4 py-3 text-label">Не удалось открыть файл.</p>;
+  if (text === null) return <div className="size-40 animate-pulse rounded-lg bg-card" />;
   return (
-    <pre className="max-h-[75vh] w-[min(90vw,48rem)] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface p-4 text-left text-sm text-fg" aria-label={item.name}>
+    <pre className="max-h-[75vh] w-[min(90vw,48rem)] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface p-4 text-left text-sm text-label" aria-label={item.name}>
       {text}
     </pre>
   );
@@ -130,26 +130,26 @@ export function AttachmentsBlock({
                 <button
                   type="button"
                   onClick={() => setLightbox(item)}
-                  className="flex aspect-square w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-line bg-elevated"
+                  className="flex aspect-square w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-separator bg-card"
                   aria-label={item.name}
                 >
                   <Thumb item={item} />
                 </button>
                 <div className="mt-1 flex items-start gap-1">
-                  <span className="min-w-0 flex-1 truncate text-[0.65rem] text-muted" title={item.name}>
+                  <span className="min-w-0 flex-1 truncate text-[0.65rem] text-secondary-label" title={item.name}>
                     {pending ? "на телефоне · " : ""}
                     {item.takenAt ? formatTakenAt(item.takenAt) : item.name}
                   </span>
                   <button
                     type="button"
                     aria-label={`Удалить ${item.name}`}
-                    className="shrink-0 text-subtle hover:text-danger"
+                    className="shrink-0 text-tertiary-label hover:text-danger"
                     onClick={() => void deleteFile({ kind, id: parentId }, item.id)}
                   >
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
-                <span className="text-[0.6rem] text-subtle">{sizeLabel(item.size)}</span>
+                <span className="text-[0.6rem] text-tertiary-label">{sizeLabel(item.size)}</span>
               </li>
             );
           })}
@@ -184,7 +184,7 @@ export function AttachmentsBlock({
           Камера
         </Button>
       </div>
-      {notice ? <p className="mt-1 text-xs text-muted">{notice}</p> : null}
+      {notice ? <p className="mt-1 text-xs text-secondary-label">{notice}</p> : null}
 
       {lightbox ? <AttachmentLightbox item={lightbox} onClose={() => setLightbox(null)} /> : null}
     </section>
@@ -209,7 +209,7 @@ export function AttachmentLightbox({ item, onClose }: { item: AttachmentMeta; on
           <LightboxImage item={item} />
         ) : (
           <div className="flex flex-col items-center gap-3">
-            {fileKind(item.mime) === "text" ? <TextPreview item={item} /> : <p className="max-w-[80vw] truncate rounded-lg bg-surface px-4 py-2 text-fg">{item.name}</p>}
+            {fileKind(item.mime) === "text" ? <TextPreview item={item} /> : <p className="max-w-[80vw] truncate rounded-lg bg-surface px-4 py-2 text-label">{item.name}</p>}
             {isPending(item.id) ? (
               <span className="text-sm text-white/80">Ещё не отправлен — откроется после отправки.</span>
             ) : (
@@ -236,7 +236,7 @@ function LightboxImage({ item }: { item: AttachmentMeta }) {
       gone = true;
     };
   }, [item.id]);
-  if (!src) return <div className="size-40 animate-pulse rounded-lg bg-elevated" />;
+  if (!src) return <div className="size-40 animate-pulse rounded-lg bg-card" />;
   return (
     <figure className="flex flex-col items-center gap-2">
       <img src={src} alt={item.name} className="max-h-[78vh] max-w-full rounded-lg object-contain" />
