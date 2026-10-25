@@ -27,6 +27,7 @@ import {
 import { projectProgress } from "@/lib/projects";
 import { summarize } from "@/lib/maintenance/ops";
 import { useShareScope } from "@/lib/use-share-scope";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 /** Smart lists as tiles (in this order). */
 /** Navigation items that are screens of their own (not drawer groups). */
@@ -118,7 +119,8 @@ export function Sidebar({
 
   const prefs: NavPrefs = { tabBar, drawerHidden };
   const shows = (id: NavId) => inDrawer(id, prefs, phone);
-  const overdue = tasks.some((t) => !t.done && t.due != null && t.due < today);
+  const assetsAll = usePlanner((s) => s.assets) ?? [];
+  const overdue = tasks.some((t) => isTaskOverdue(t, assetsAll, today));
 
   const tiles = TILES.filter((id) => (id !== "shared" || share) && shows(id));
   const tools = TOOLS.filter((id) => (id !== "assist" || profile.assistant) && shows(id));
@@ -135,7 +137,6 @@ export function Sidebar({
     return 0;
   }
 
-  const assetsAll = usePlanner((s) => s.assets) ?? [];
   const maintAttention = assetsAll.filter((a) => summarize(a, today).status !== "ok").length;
   const habitLeft = habitsForDay(habits, today).filter((h) => !h.checks.includes(today)).length;
 

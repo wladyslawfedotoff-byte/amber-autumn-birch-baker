@@ -12,6 +12,7 @@ import { usePlanner } from "@/lib/planner-store";
 import { diffLines, dotColor } from "@/lib/assistant/view";
 import type { Task } from "@/lib/planner-types";
 import type { AnswerView, Chip, ProposalItem } from "@/lib/assistant/types";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 function Dot({ color, className }: { color: string; className?: string }) {
   return <span aria-hidden="true" className={cn("size-2.5 shrink-0 rounded-full", className)} style={{ background: color }} />;
@@ -35,7 +36,8 @@ function TaskRow({ task, mode, onOpen }: { task: Task; mode: "overdue" | "day"; 
   const tomorrow = shiftIso(today, 1);
   const list = task.listId ? lists.find((l) => l.id === task.listId)?.name : null;
   const time = task.startAt ? (task.endAt ? `${task.startAt}–${task.endAt}` : task.startAt) : null;
-  const overdue = !task.done && task.due !== null && task.due < today;
+  const assets = usePlanner((s) => s.assets);
+  const overdue = isTaskOverdue(task, assets, today);
   // A day's rows show the time on the left; overdue rows show how late they are.
   const meta = (mode === "overdue" ? [task.due ? dueLabel(task.due, today) : null, time, list] : [list]).filter(Boolean);
   const finished = task.done || ticked;

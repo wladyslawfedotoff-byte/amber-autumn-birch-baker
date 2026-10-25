@@ -46,3 +46,14 @@ export function honestDue(task: Pick<Task, "maint" | "due">, assets: readonly As
   if (task.due <= today) return { text: "пора", tone: "accent" };
   return { text: `с ${shortDate(task.due)}`, tone: "muted" };
 }
+
+/**
+ * One «просрочено» rule for the whole app (1.18): a regular task is late after
+ * its date; an auto task from «Обслуживание» only when its rule / warranty is
+ * really late (by km or by the real deadline), not when its reminder day passed.
+ */
+export function isTaskOverdue(task: Pick<Task, "maint" | "due" | "done">, assets: readonly Asset[] | undefined, today: string): boolean {
+  if (task.done || task.due == null) return false;
+  if (!task.maint) return task.due < today;
+  return honestDue(task, assets ?? [], today).tone === "danger";
+}

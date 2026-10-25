@@ -8,6 +8,7 @@ import { setPopover, useDismiss, usePopoverStore } from "@/lib/popover";
 import { isImportant, isUrgent, type Asset, type Task } from "@/lib/planner-types";
 import { colorHex } from "@/lib/task-colors";
 import { useDoneToast } from "@/lib/done-toast";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 /**
  * Eisenhower matrix: four quadrants on one screen (also on a
@@ -215,7 +216,7 @@ function MatrixRow({
   const assets = usePlanner((s) => s.assets) ?? NO_ASSETS;
   const toggleTask = usePlanner((s) => s.toggleTask);
   const showToast = useDoneToast((s) => s.show);
-  const overdue = task.due != null && task.due < today;
+  const overdue = isTaskOverdue(task, assets, today);
   const dot = colorHex(task.color);
   const timer = useRef<number | null>(null);
   const longPressed = useRef(false);

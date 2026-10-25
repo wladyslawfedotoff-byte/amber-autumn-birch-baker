@@ -18,6 +18,7 @@ import { assistantApi, streamChat } from "@/lib/assistant/client";
 import { cancelOfflineQuestion, queueOfflineQuestion } from "@/lib/offline/assist-queue";
 import { useOnline } from "@/lib/offline/use-online";
 import type { AiWhich, AnswerSource, AssistantStatus, ChatEvent, ChatMessage, Chip, ConversationSummary, Proposal, ProposalItem } from "@/lib/assistant/types";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 const PRIORITY = ["", "низкий", "средний", "высокий"];
 
@@ -629,7 +630,7 @@ export function AssistView({
   const suggestions = useMemo(() => {
     const today = todayIso();
     return suggestChips({
-      overdue: tasks.filter((t) => !t.done && t.due != null && t.due < today).length,
+      overdue: tasks.filter((t) => isTaskOverdue(t, assets, today)).length,
       today: countToday(tasks, today),
       inbox: countInbox(tasks),
       hour: new Date().getHours(),

@@ -3,9 +3,11 @@ import { daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter, occursO
 import { usePlanner } from "@/lib/planner-store";
 import { cn } from "@/lib/cn";
 import { habitChip, habitsForDay } from "@/lib/habit-plan";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 export function TodaySummary() {
   const tasks = usePlanner((s) => s.tasks);
+  const assets = usePlanner((s) => s.assets);
   const habits = usePlanner((s) => s.habits);
   const milestones = usePlanner((s) => s.milestones);
   const today = todayIso();
@@ -16,8 +18,8 @@ export function TodaySummary() {
     })
     .filter((row) => row.days >= 0 && row.days <= 14)
     .sort((a, b) => a.days - b.days);
-  const todayN = tasks.filter((task) => !task.done && task.due === today).length;
-  const overdueN = tasks.filter((task) => !task.done && task.due != null && task.due < today).length;
+  const overdueN = tasks.filter((task) => isTaskOverdue(task, assets, today)).length;
+  const todayN = tasks.filter((task) => !task.done && task.due != null && task.due <= today).length - overdueN;
   const planned = habitsForDay(habits, today);
   const habitLeft = planned.filter((habit) => !habit.checks.includes(today)).length;
   const nextDate = soon[0];

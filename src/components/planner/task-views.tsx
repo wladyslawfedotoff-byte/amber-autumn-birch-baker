@@ -18,6 +18,7 @@ import { archiveOptionLabel, archivedTasks, recentDone, repeatTickedOn } from "@
 import { syncNow } from "@/lib/sync/clock";
 import { ListShareBar } from "@/components/planner/sharing";
 import { useShareScope } from "@/lib/use-share-scope";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 function defaultsFor(view: View, today: string): { listId: string | null; due: string | null } {
   if (view.startsWith("list:")) return { listId: view.slice(5), due: null };
@@ -295,8 +296,10 @@ function TodayGroups({
   selectedId: string | null;
   onOpen: (id: string) => void;
 }) {
-  const overdue = tasks.filter((task) => task.due != null && task.due < today);
-  const current = tasks.filter((task) => task.due === today);
+  // «Обслуживание» tasks whose reminder day passed but whose rule is not late stay in «На сегодня».
+  const assets = usePlanner((s) => s.assets);
+  const overdue = tasks.filter((task) => isTaskOverdue(task, assets, today));
+  const current = tasks.filter((task) => task.due === today || (task.due != null && task.due < today && !isTaskOverdue(task, assets, today)));
   const doneToday = usePlanner((s) => s.tasks.reduce((n, t) => (t.done && t.completedAt && localIso(t.completedAt) === today ? n + 1 : n), 0));
   if (overdue.length === 0 && current.length === 0) {
     return doneToday > 0 ? <AllDone title="Всё сделано" hint="На сегодня дел больше нет. Можно выдохнуть." /> : <AllDone title="День свободен" hint="Ничего не запланировано — хорошая пауза." />;
@@ -330,7 +333,8 @@ function TodayGroups({
               task={task}
               today={today}
               selected={selectedId === task.id}
-              showDue={false}
+              // Auto tasks moved here from «Просрочено» show their real deadline («через 300 км»).
+              showDue={Boolean(task.maint && task.due !== today)}
               showList
               foldSubtasks
               onOpen={onOpen}

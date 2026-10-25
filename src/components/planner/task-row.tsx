@@ -19,6 +19,7 @@ import { useDoneToast } from "@/lib/done-toast";
 import { haptic } from "@/lib/haptics";
 import { honestDue } from "@/lib/maintenance/honest-due";
 import { TaskContextMenu } from "@/components/planner/task-menu";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 function ring(priority: Priority): string {
   if (priority === 3) return "border-danger";
@@ -77,7 +78,7 @@ export const TaskRow = memo(function TaskRow({
   const [open, setOpen] = useSubtasksOpen(task.id, !task.done && !foldSubtasks);
   const [step, setStep] = useState("");
   const preview = notesPreview(task.notes);
-  const overdue = !task.done && task.due != null && task.due < today;
+  const overdue = isTaskOverdue(task, assets, today);
   const tomorrow = shiftIso(today, 1);
   const canPostpone = !task.done && !onDragStart && overdue && !ticked;
   const checked = task.done || ticked;

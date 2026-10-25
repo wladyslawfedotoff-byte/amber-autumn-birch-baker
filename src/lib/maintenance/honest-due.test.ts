@@ -26,3 +26,20 @@ test("really overdue: red", () => {
 test("unknown ref falls back to a calm «пора»", () => {
   assert.deepEqual(honestDue({ maint: "a1/km", due: "2026-10-24" }, [car([])], "2026-10-25"), { text: "пора", tone: "accent" });
 });
+
+import { isTaskOverdue } from "./honest-due.ts";
+
+test("isTaskOverdue: plain tasks by date", () => {
+  assert.equal(isTaskOverdue({ due: "2026-10-24", done: false }, [], "2026-10-25"), true);
+  assert.equal(isTaskOverdue({ due: "2026-10-25", done: false }, [], "2026-10-25"), false);
+  assert.equal(isTaskOverdue({ due: "2026-10-24", done: true }, [], "2026-10-25"), false);
+});
+
+test("isTaskOverdue: maintenance only when the rule is really late", () => {
+  const notYet = [car([{ id: "r1", title: "Масло", everyKm: 10_000, since: "2026-01-01", lastDoneKm: 90_300 }])];
+  assert.equal(isTaskOverdue({ maint: "a1/r1", due: "2026-10-20", done: false }, notYet, "2026-10-25"), false);
+  const late = [car([{ id: "r1", title: "Масло", everyKm: 10_000, since: "2026-01-01", lastDoneKm: 89_600 }])];
+  assert.equal(isTaskOverdue({ maint: "a1/r1", due: "2026-10-20", done: false }, late, "2026-10-25"), true);
+  // mileage prompt whose day passed: calm, not late
+  assert.equal(isTaskOverdue({ maint: "a1/km", due: "2026-10-20", done: false }, notYet, "2026-10-25"), false);
+});
