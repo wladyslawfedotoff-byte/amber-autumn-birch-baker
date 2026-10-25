@@ -557,3 +557,10 @@ nav[aria-label="Основные разделы"] {
   height: 0.5px;
   background: var(--line);
 }
+/* 1.19.1: «+ Новый …» rows: a clear blue tint, ≥ 4.5:1 on the card in both themes. */
+.menu-add {
+  color: #0062cc;
+}
+:root[data-theme="dark"] .menu-add {
+  color: #409cff;
+}

@@ -26,6 +26,7 @@ import { projectProgress } from "@/lib/projects";
 import { summarize } from "@/lib/maintenance/ops";
 import { useShareScope } from "@/lib/use-share-scope";
 import { isTaskOverdue } from "@/lib/maintenance/honest-due";
+import { activeScope } from "@/lib/offline/device-store";
 
 /** Navigation items that are screens of their own (not drawer groups). */
 type ViewNav = Extract<NavId, View>;
@@ -42,16 +43,37 @@ const TILE_META: Record<Tile, { label: string; color: string; icon: typeof Inbox
 };
 /** Everything else that is a screen: one row each in «Разделы». */
 const ROWS: ViewNav[] = ["week", "shared", "calendar", "schedule", "habits", "assist", "focus", "matrix", "dates", "maintenance"];
+/** Folded menu groups, remembered on this device per profile (UI state, not synced). */
+const FOLD_DEFAULT: Record<DrawerTab, boolean> = { lists: false, projects: true, tags: true };
+const foldKey = () => `pora-menu-folded:${activeScope()}`;
+function readFolded(): Record<DrawerTab, boolean> {
+  try {
+    const raw = typeof window === "undefined" ? null : window.localStorage.getItem(foldKey());
+    const saved = raw ? (JSON.parse(raw) as Partial<Record<DrawerTab, unknown>>) : {};
+    const pick = (id: DrawerTab) => (typeof saved[id] === "boolean" ? (saved[id] as boolean) : FOLD_DEFAULT[id]);
+    return { lists: pick("lists"), projects: pick("projects"), tags: pick("tags") };
+  } catch {
+    return { ...FOLD_DEFAULT };
+  }
+}
+function saveFolded(value: Record<DrawerTab, boolean>) {
+  try {
+    window.localStorage.setItem(foldKey(), JSON.stringify(value));
+  } catch {
+    /* private mode / quota: just not remembered */
+  }
+}
+
 /** One colour per section (iOS system colours). */
 const ROW_COLORS: Partial<Record<ViewNav, string>> = {
   week: "#30b0c7",
-  shared: "#5856d6",
+  shared: "#a2845e",
   calendar: "#ff3b30",
   schedule: "#0a84ff",
   habits: "#34c759",
   assist: "#af52de",
   focus: "#ff2d55",
-  matrix: "#5856d6",
+  matrix: "#00c7be",
   dates: "#ff9500",
   maintenance: "#8e8e93",
 };
@@ -136,7 +158,13 @@ export function Sidebar({
   const [adding, setAdding] = useState<DrawerTab | null>(null);
   const [draft, setDraft] = useState("");
   /** Folded groups (projects and tags start folded). */
-  const [folded, setFolded] = useState<Record<DrawerTab, boolean>>({ lists: false, projects: true, tags: true });
+  const [folded, setFoldedState] = useState<Record<DrawerTab, boolean>>(readFolded);
+  const setFolded = (update: (f: Record<DrawerTab, boolean>) => Record<DrawerTab, boolean>) =>
+    setFoldedState((f) => {
+      const next = update(f);
+      saveFolded(next);
+      return next;
+    });
   /** Key of the item whose menu («Закрепить» / «Открепить») is open. */
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
@@ -372,8 +400,8 @@ export function Sidebar({
                   <AddField kind={group.id} draft={draft} setDraft={setDraft} onSubmit={() => submitNew(group.id)} onCancel={() => setAdding(null)} />
                 ) : (
                   <li>
-                    <button type="button" onClick={() => setAdding(group.id)} className={cn(ROW, "text-accent")}>
-                      <Badge color="#8e8e93" icon={Plus} />
+                    <button type="button" onClick={() => setAdding(group.id)} className={cn(ROW, "menu-add font-medium")}>
+                      <Badge color="#0a84ff" icon={Plus} />
                       {group.add}
                     </button>
                   </li>
