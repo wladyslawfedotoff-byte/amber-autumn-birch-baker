@@ -76,16 +76,16 @@ export function PainSheet({ asset, painId, onClose, onOpenTask }: { asset: Asset
 
         <AssetObjects asset={asset} parentId={pain.id} label="Фото, файлы и ссылки заметки" />
 
-        <div className="rounded-xl bg-elevated p-3">
+        <div className="rounded-card bg-card p-3">
           <FieldLabel hint="Пора создаст обычную задачу с напоминанием: на дату, через N дней или когда пробег подойдёт к нужному (как «скоро» у правил). Отметите задачу — заметка станет решённой, и Пора предложит записать работу в историю.">Запланировать</FieldLabel>
           {planned && !changing ? (
             <div className="mt-1">
-              <p className="text-[0.9375rem]">
+              <p className="text-body">
                 {planText(pain)}
                 {task && !task.done ? (
                   <>
                     {" · "}
-                    <button type="button" className="font-medium text-accent underline underline-offset-2" onClick={() => { onClose(); onOpenTask?.(task.id); }}>
+                    <button type="button" className="font-medium text-accent-ink underline underline-offset-2" onClick={() => { onClose(); onOpenTask?.(task.id); }}>
                       открыть задачу
                     </button>
                   </>

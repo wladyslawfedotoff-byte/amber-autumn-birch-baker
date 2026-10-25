@@ -1,3 +1,4 @@
+import { FIELD } from "@/components/ui/kit";
 import { useState, type ReactNode } from "react";
 import { Check, ChevronRight, Pencil, Plus, RefreshCw, XCircle } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
@@ -23,10 +24,10 @@ function dotDate(iso: string): string {
 
 function Card({ title, extra, children, className }: { title?: ReactNode; extra?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cn("mt-3 rounded-2xl bg-elevated p-3 first:mt-0", className)}>
+    <section className={cn("mt-3 rounded-card bg-card p-3 first:mt-0", className)}>
       {title ? (
         <div className="mb-2 flex min-h-6 items-center justify-between gap-2">
-          <h3 className="text-[0.9375rem]">{title}</h3>
+          <h3 className="text-body">{title}</h3>
           {extra}
         </div>
       ) : null}
@@ -54,9 +55,9 @@ function Pill({ on, onClick, children, label, role = "radio" }: { on: boolean; o
 function ValueRow({ label, value, onClick, hint }: { label: string; value: string; onClick: () => void; hint?: ReactNode }) {
   return (
     <div className="flex min-h-12 items-center">
-      <span className="text-[0.9375rem]">{label}</span>
+      <span className="text-body">{label}</span>
       {hint}
-      <button type="button" onClick={onClick} aria-label={`${label}: ${value}`} className="flex h-12 min-w-0 flex-1 items-center justify-end gap-1 pl-3 text-[0.9375rem] text-muted">
+      <button type="button" onClick={onClick} aria-label={`${label}: ${value}`} className="flex h-12 min-w-0 flex-1 items-center justify-end gap-1 pl-3 text-body text-muted">
         <span className="truncate">{value}</span>
         <ChevronRight className="size-4 shrink-0 text-subtle" />
       </button>
@@ -81,7 +82,7 @@ function NumberField({ label, value, onValue, min, max, placeholder }: { label: 
           const n = Math.round(Number(raw));
           if (Number.isFinite(n)) onValue(Math.min(max, Math.max(min, n)));
         }}
-        className="mt-1 h-11 w-full rounded-xl bg-elevated px-3 text-base text-fg outline-none placeholder:text-subtle"
+        className={cn(FIELD, "border-separator mt-1")}
       />
     </label>
   );
@@ -206,7 +207,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
           </div>
           {daily ? (
             <>
-              <p className="mt-3 mb-2 text-[0.9375rem]">По каким дням</p>
+              <p className="mt-3 mb-2 text-body">По каким дням</p>
               <div role="group" aria-label="Дни недели" className="grid grid-cols-4 gap-2">
                 {WEEKDAY_SHORT.map((label, index) => (
                   <Pill key={label} role="checkbox" on={freq.kind === "daily" || freq.days.includes(index + 1)} onClick={() => setFreq(toggleWeekday(freq, index + 1))}>
@@ -218,7 +219,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
           ) : null}
           {freq.kind === "weekly" ? (
             <>
-              <p className="mt-3 mb-2 text-[0.9375rem]">Сколько раз в неделю</p>
+              <p className="mt-3 mb-2 text-body">Сколько раз в неделю</p>
               <div role="radiogroup" aria-label="Раз в неделю" className="grid grid-cols-6 gap-2">
                 {[1, 2, 3, 4, 5, 6].map((n) => (
                   <Pill key={n} on={freq.times === n} onClick={() => setFreq({ kind: "weekly", times: n })}>
@@ -230,7 +231,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
           ) : null}
           {freq.kind === "interval" ? (
             <>
-              <p className="mt-3 mb-2 text-[0.9375rem]">Раз в сколько дней</p>
+              <p className="mt-3 mb-2 text-body">Раз в сколько дней</p>
               <div role="radiogroup" aria-label="Раз в N дней" className="grid grid-cols-4 gap-2">
                 {[2, 3, 4, 5, 7, 10, 14, 30].map((n) => (
                   <Pill key={n} on={freq.every === n} onClick={() => setFreq({ kind: "interval", every: n })}>
@@ -275,14 +276,14 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
               ))}
             </div>
           ) : null}
-          <button type="button" onClick={() => setPicker({ time: null })} className="mt-1 flex h-9 items-center gap-1 text-[0.875rem] text-accent">
+          <button type="button" onClick={() => setPicker({ time: null })} className="mt-1 flex h-9 items-center gap-1 text-[0.875rem] text-accent-ink">
             <Plus className="size-4" /> Добавить
           </button>
         </Card>
 
         <Card className="py-1">
           <label className="flex min-h-11 cursor-pointer items-center gap-2">
-            <span className="min-w-0 flex-1 text-[0.9375rem]">Показывать дневник при отметке</span>
+            <span className="min-w-0 flex-1 text-body">Показывать дневник при отметке</span>
             <Hint label="Про дневник">Когда день выполнен, сразу откроется отметка: настроение и заметка.</Hint>
             <input type="checkbox" role="switch" checked={draft.journal} onChange={(event) => set({ journal: event.target.checked })} className="ios-switch shrink-0" />
           </label>
@@ -291,7 +292,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
         <Card
           title="Мотивация"
           extra={
-            <button type="button" aria-label="Другая фраза" onClick={() => set({ why: randomQuote(draft.why) })} className="-mr-2 flex size-9 items-center justify-center text-accent">
+            <button type="button" aria-label="Другая фраза" onClick={() => set({ why: randomQuote(draft.why) })} className="-mr-2 flex size-9 items-center justify-center text-accent-ink">
               <RefreshCw className="size-4" />
             </button>
           }
@@ -322,7 +323,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
                 onClose();
                 onRemoved?.();
               }}
-              className="h-11 px-4 text-[0.9375rem] text-fg"
+              className="h-11 px-4 text-body text-fg"
             >
               {habit.archived ? "Вернуть из архива" : "Убрать в архив"}
             </button>
@@ -345,7 +346,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
                 </button>
               </div>
             ) : (
-              <button type="button" onClick={() => setConfirm(true)} className="h-11 px-4 text-[0.9375rem] text-danger">
+              <button type="button" onClick={() => setConfirm(true)} className="h-11 px-4 text-body text-danger">
                 Удалить привычку
               </button>
             )}
@@ -363,7 +364,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
             onValue={(value) => set({ startDate: value || null })}
             aria-label="Дата начала"
             clearLabel="Убрать дату начала"
-            className="h-11 w-full rounded-xl bg-elevated px-3 text-base"
+            className="h-11 w-full rounded-card bg-card px-3 text-base"
           />
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Pill on={draft.startDate === today} onClick={() => set({ startDate: today })}>
@@ -430,7 +431,7 @@ function IconPicker({ draft, set, onClose }: { draft: HabitDraft; set: (patch: P
           </button>
         ))}
       </div>
-      <p className="mt-4 mb-2 text-[0.9375rem]">Цвет</p>
+      <p className="mt-4 mb-2 text-body">Цвет</p>
       <div className="grid grid-cols-6 justify-items-center gap-3">
         {TASK_COLORS.map((c) => (
           <button
@@ -471,7 +472,7 @@ function GoalPicker({ draft, set, onClose }: { draft: HabitDraft; set: (patch: P
               maxLength={20}
               placeholder="стаканов"
               onChange={(event) => set({ unit: event.target.value })}
-              className="mt-1 h-11 w-full rounded-xl bg-elevated px-3 text-base text-fg outline-none placeholder:text-subtle"
+              className={cn(FIELD, "border-separator mt-1")}
             />
           </label>
           <NumberField label="За нажатие" value={draft.step} min={1} max={10000} onValue={(n) => set({ step: n ?? 1 })} />
@@ -499,7 +500,7 @@ function ReminderPicker({ time, onClose, onSave, onRemove }: { time: string | nu
         },
       }}
     >
-      <PickerInput type="time" step={60} value={value} onValue={setValue} aria-label="Время напоминания" className="h-11 w-full rounded-xl bg-elevated px-3 text-base" />
+      <PickerInput type="time" step={60} value={value} onValue={setValue} aria-label="Время напоминания" className="h-11 w-full rounded-card bg-card px-3 text-base" />
       {time ? (
         <button
           type="button"
@@ -507,7 +508,7 @@ function ReminderPicker({ time, onClose, onSave, onRemove }: { time: string | nu
             onRemove();
             onClose();
           }}
-          className="mt-3 h-11 w-full rounded-xl bg-elevated text-[0.9375rem] text-danger"
+          className="mt-3 h-11 w-full rounded-card bg-card text-body text-danger"
         >
           Убрать напоминание
         </button>

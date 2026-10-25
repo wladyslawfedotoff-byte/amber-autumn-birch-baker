@@ -486,7 +486,7 @@ export function PlannerApp() {
                 aria-label={board ? "Показать списком" : "Показать доской"}
                 title={board ? "Списком" : "Доской"}
                 onClick={() => setBoard(!board)}
-                className={board ? "text-accent" : undefined}
+                className={board ? "text-accent-ink" : undefined}
               >
                 {board ? <List className="size-5" /> : <Columns3 className="size-5" />}
               </Button>
@@ -512,7 +512,7 @@ export function PlannerApp() {
                 placeholder="Поиск"
                 aria-label="Поиск задач"
                 autoFocus
-                className="h-10 w-full rounded-xl bg-elevated pr-11 pl-10 text-base outline-none placeholder:text-subtle"
+                className="h-10 w-full rounded-card bg-card pr-11 pl-10 text-base outline-none placeholder:text-subtle"
                 suppressHydrationWarning
               />
               <button
@@ -713,7 +713,7 @@ export function PlannerApp() {
                 type="button"
                 aria-current={active ? "page" : undefined}
                 onClick={() => openView(id)}
-                className={cn("flex h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 text-[0.6875rem]", active ? "text-accent" : "text-subtle")}
+                className={cn("flex h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 text-[0.6875rem]", active ? "text-accent-ink" : "text-subtle")}
               >
                 <Icon className="size-[1.375rem]" strokeWidth={active ? 2 : 1.75} />
                 <span className="max-w-full truncate px-1">{label}</span>

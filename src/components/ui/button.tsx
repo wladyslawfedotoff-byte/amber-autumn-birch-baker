@@ -1,19 +1,27 @@
 import type { ButtonHTMLAttributes } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
+/**
+ * Buttons (1.20 kit). primary = filled accent, secondary = outline,
+ * plain = text only, destructive = filled danger. «soft» / «ghost» are the
+ * older names of secondary / plain. All are ≥ 44 px tall.
+ */
 const buttonVariants = cva(
-  "press inline-flex items-center justify-center gap-2 rounded-md font-medium disabled:pointer-events-none disabled:opacity-40",
+  "press inline-flex items-center justify-center gap-2 rounded-md font-medium transition-[opacity,background-color,filter] duration-[var(--dur-fast)] disabled:pointer-events-none disabled:opacity-40 aria-busy:pointer-events-none",
   {
     variants: {
       variant: {
-        primary: "bg-accent text-accent-fg hover:opacity-90",
-        soft: "border border-line bg-elevated text-fg hover:bg-surface",
-        ghost: "bg-transparent text-fg hover:bg-elevated",
-        destructive: "bg-danger text-on-danger hover:opacity-90",
+        primary: "bg-accent text-accent-fg font-semibold active:brightness-90 disabled:bg-line disabled:text-muted disabled:opacity-100",
+        secondary: "border border-accent/60 bg-transparent text-accent-ink active:bg-accent/10",
+        plain: "bg-transparent text-accent-ink active:bg-accent/10",
+        destructive: "bg-danger text-on-danger active:brightness-90",
+        soft: "border border-line bg-elevated text-fg active:bg-surface",
+        ghost: "bg-transparent text-fg active:bg-elevated",
       },
       size: {
-        md: "h-11 px-4 text-sm",
+        md: "h-11 px-4 text-body",
         sm: "h-11 px-3 text-sm",
         icon: "size-11",
       },
@@ -22,10 +30,13 @@ const buttonVariants = cva(
   },
 );
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants>;
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants> & { loading?: boolean };
 
-export function Button({ className, variant, size, type = "button", ...props }: ButtonProps) {
+export function Button({ className, variant, size, type = "button", loading, children, ...props }: ButtonProps) {
   return (
-    <button type={type} className={cn(buttonVariants({ variant, size }), className)} {...props} />
+    <button type={type} aria-busy={loading || undefined} className={cn(buttonVariants({ variant, size }), className)} {...props}>
+      {loading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+      {children}
+    </button>
   );
 }

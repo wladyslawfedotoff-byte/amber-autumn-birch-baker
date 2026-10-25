@@ -58,7 +58,7 @@ export function TechBlock({ asset }: { asset: Asset }) {
   return (
     <>
       {hasFacts ? (
-        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-xl bg-elevated p-3 text-[0.9375rem]" aria-label="Покупка и гарантия">
+        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-card bg-card p-3 text-body" aria-label="Покупка и гарантия">
           {asset.boughtAt ? (
             <>
               <dt className="text-muted">Куплено</dt>
@@ -92,7 +92,7 @@ export function TechBlock({ asset }: { asset: Asset }) {
           <FieldLabel hint="Для компьютера и другой сборной техники: у каждой детали своя дата покупки, цена, гарантия и чек. Простой технике (пылесос, монитор) компоненты не нужны — достаточно самой карточки." className="flex-1">
             Компоненты
           </FieldLabel>
-          <button type="button" onClick={() => setSheet("new")} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent">
+          <button type="button" onClick={() => setSheet("new")} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent-ink">
             <Plus className="size-3.5" aria-hidden="true" />
             Компонент
           </button>
@@ -105,9 +105,9 @@ export function TechBlock({ asset }: { asset: Asset }) {
                 const files = [asset.attachments, asset.links, asset.contacts].reduce((n, list) => n + (list ?? []).filter((a) => a.entryId === p.id).length, 0);
                 return (
                   <li key={p.id}>
-                    <button type="button" onClick={() => setSheet(p)} className="flex w-full items-center gap-2 rounded-xl bg-elevated px-3 py-2 text-left">
+                    <button type="button" onClick={() => setSheet(p)} className="flex w-full items-center gap-2 rounded-card bg-card px-3 py-2 text-left">
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[0.9375rem] font-semibold">{p.name}</span>
+                        <span className="block truncate text-body font-semibold">{p.name}</span>
                         <span className="block truncate text-xs text-subtle">
                           {[p.boughtAt ? day(p.boughtAt) : null, p.price ? money(p.price) : null].filter(Boolean).join(" · ") || "без даты и цены"}
                           {files ? (
@@ -214,7 +214,7 @@ export function PartSheet({ asset, part, onClose }: { asset: Asset; part: TechPa
             <input value={serial} onChange={(e) => setSerial(e.target.value)} aria-label="Серийный номер" maxLength={80} className={field} />
           </label>
         ) : (
-          <button type="button" onClick={() => setMore(true)} className="h-9 px-1 text-[0.8125rem] text-accent">
+          <button type="button" onClick={() => setMore(true)} className="h-9 px-1 text-[0.8125rem] text-accent-ink">
             Ещё: серийный номер
           </button>
         )}

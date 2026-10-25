@@ -10,8 +10,8 @@ export function HintButton({ open, onToggle, label = "Подсказка", class
       aria-label={label}
       onClick={onToggle}
       className={cn(
-        "-my-2 inline-flex size-8 shrink-0 items-center justify-center rounded-full align-middle",
-        open ? "text-accent" : "text-subtle",
+        "hit -my-2 inline-flex size-8 shrink-0 items-center justify-center rounded-full align-middle",
+        open ? "text-accent-ink" : "text-subtle",
         className,
       )}
     >
@@ -21,11 +21,12 @@ export function HintButton({ open, onToggle, label = "Подсказка", class
 }
 
 /** Field label with an optional «?» hint underneath. */
-export function FieldLabel({ children, hint, className }: { children: ReactNode; hint?: ReactNode; className?: string }) {
+/** Label above a field; `caps` = a section header (same style as the kit SectionHeader). */
+export function FieldLabel({ children, hint, className, caps }: { children: ReactNode; hint?: ReactNode; className?: string; caps?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={className}>
-      <p className="flex items-center gap-1 text-xs font-medium text-subtle">
+      <p className={caps ? "flex items-center gap-1 text-[0.6875rem] font-semibold tracking-wide text-tertiary-label uppercase" : "flex items-center gap-1 text-xs font-medium text-subtle"}>
         {children}
         {hint ? <HintButton open={open} onToggle={() => setOpen(!open)} /> : null}
       </p>
@@ -50,7 +51,7 @@ export function InlineHint({ label, children, className }: { label: string; chil
   const [open, setOpen] = useState(false);
   return (
     <div className={cn("text-xs text-subtle", className)}>
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={cn("inline-flex h-8 items-center gap-2 px-1", open && "text-accent")}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={cn("inline-flex h-8 items-center gap-2 px-1", open && "text-accent-ink")}>
         <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full border border-current text-[0.625rem] font-semibold leading-none">
           ?
         </span>

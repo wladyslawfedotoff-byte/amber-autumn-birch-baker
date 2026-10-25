@@ -12,11 +12,11 @@ export function AssistantNoticeList({ notices, onOpen }: { notices: AssistantNot
   return (
     <>
       <p className="px-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-subtle">Помощник</p>
-      <ul className="mt-1 mb-2 rounded-xl bg-elevated px-2">
+      <ul className="mt-1 mb-2 rounded-card bg-card px-2">
         {notices.map((n) => (
           <li key={n.id} className="border-b border-line last:border-b-0">
             <button type="button" onClick={() => onOpen(n)} className="flex w-full items-center gap-2 py-2 text-left">
-              <Sparkles className="size-4 shrink-0 text-accent" aria-hidden="true" />
+              <Sparkles className="size-4 shrink-0 text-accent-ink" aria-hidden="true" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-fg">{n.text}</span>
                 <span className="block truncate text-xs text-subtle">

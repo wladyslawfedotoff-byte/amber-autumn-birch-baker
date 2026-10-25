@@ -111,7 +111,7 @@ export function ReminderPanel({
       {hits.length === 0 ? (
         <p className="px-1 py-3 text-sm text-muted">Пока тихо. Время ставится в задаче, привычке или дате.</p>
       ) : (
-        <ul className="mt-1 max-h-80 overflow-y-auto rounded-xl bg-elevated px-2">
+        <ul className="mt-1 max-h-80 overflow-y-auto rounded-card bg-card px-2">
           {due.map((hit) => (
             <ReminderRow key={hit.key} hit={hit} onOpen={onOpen} onAck={onAck} />
           ))}
@@ -199,21 +199,21 @@ export function ReminderBanner({
     <div className="relative z-10 shrink-0 bg-surface px-3 pb-2 md:px-8" role="status">
       <div className="card-lift flex h-9 items-center gap-1 rounded-full bg-elevated pr-1 pl-3 text-sm">
         <Bell className="size-3.5 shrink-0 text-danger" aria-hidden="true" />
-        <button type="button" onClick={() => onOpen(hit)} className="flex h-9 min-w-0 flex-1 items-center gap-2 text-left">
+        <button type="button" onClick={() => onOpen(hit)} className="hit flex h-9 min-w-0 flex-1 items-center gap-2 text-left">
           <span className="shrink-0 text-xs tabular-nums text-danger">{hit.time}</span>
           <span className="truncate text-fg">{hit.title}</span>
         </button>
         {extra > 0 ? (
-          <button type="button" onClick={onMore} className="h-9 shrink-0 px-2 text-xs text-muted" aria-label={`Ещё напоминаний: ${extra}`}>
+          <button type="button" onClick={onMore} className="hit h-9 shrink-0 px-2 text-xs text-muted" aria-label={`Ещё напоминаний: ${extra}`}>
             +{extra}
           </button>
         ) : null}
         {kmAsset && onMileage ? (
-          <button type="button" onClick={() => onMileage(kmAsset)} className="h-9 shrink-0 px-2 text-xs font-medium text-accent">
+          <button type="button" onClick={() => onMileage(kmAsset)} className="hit h-9 shrink-0 px-2 text-xs font-medium text-accent-ink">
             Обновить пробег
           </button>
         ) : (
-          <button type="button" onClick={() => onAck(hit)} className="h-9 shrink-0 px-2 text-xs font-medium text-accent">
+          <button type="button" onClick={() => onAck(hit)} className="hit h-9 shrink-0 px-2 text-xs font-medium text-accent-ink">
             Понятно
           </button>
         )}
@@ -222,7 +222,7 @@ export function ReminderBanner({
           onClick={onHide}
           aria-label="Скрыть полоску напоминаний"
           title="Скрыть — список останется под колокольчиком"
-          className="flex size-9 shrink-0 items-center justify-center rounded-full text-subtle"
+          className="hit flex size-9 shrink-0 items-center justify-center rounded-full text-subtle"
         >
           <X className="size-4" />
         </button>

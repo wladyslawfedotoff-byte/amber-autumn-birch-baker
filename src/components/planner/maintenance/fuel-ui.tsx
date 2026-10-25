@@ -45,7 +45,7 @@ export function SpendLegend({ spend }: { spend: { fuel: number; service: number;
 
 function Tile({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <div className="min-w-0 flex-1 rounded-xl bg-elevated px-3 py-2">
+    <div className="min-w-0 flex-1 rounded-card bg-card px-3 py-2">
       <p className="truncate text-[0.6875rem] text-muted">{label}</p>
       <p className="text-[1.0625rem] leading-tight font-bold tabular-nums">
         {value}
@@ -88,7 +88,7 @@ export function FuelBlock({ asset }: { asset: Asset }) {
         <FieldLabel hint="Расход считается между двумя полными баками с пробегом: сколько литров ушло на пройденные километры. Неполная заправка не обрывает отрезок — её литры просто прибавляются. Пробег и сумму можно не указывать: тогда заправка попадёт только в расходы." className="flex-1">
           Заправки
         </FieldLabel>
-        <button type="button" onClick={() => setSheet("new")} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent">
+        <button type="button" onClick={() => setSheet("new")} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent-ink">
           <Plus className="size-3.5" aria-hidden="true" />
           Заправка
         </button>
@@ -118,9 +118,9 @@ export function FuelBlock({ asset }: { asset: Asset }) {
           <ul className="mt-2 space-y-2">
             {shown.map((f) => (
               <li key={f.id}>
-                <button type="button" onClick={() => setSheet(f)} className="flex w-full items-center gap-2 rounded-xl bg-elevated px-3 py-2 text-left">
+                <button type="button" onClick={() => setSheet(f)} className="flex w-full items-center gap-2 rounded-card bg-card px-3 py-2 text-left">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[0.9375rem] font-semibold tabular-nums">
+                    <span className="block truncate text-body font-semibold tabular-nums">
                       {liters(f.liters)} л{f.sum > 0 ? <span className="ml-2 font-normal text-muted">{money(f.sum)}</span> : null}
                     </span>
                     <span className="block truncate text-xs text-subtle">{fillLine(f)}</span>
@@ -131,7 +131,7 @@ export function FuelBlock({ asset }: { asset: Asset }) {
             ))}
           </ul>
           {fills.length > 3 ? (
-            <button type="button" onClick={() => setAll(!all)} className="mt-1 h-9 px-1 text-[0.8125rem] text-accent">
+            <button type="button" onClick={() => setAll(!all)} className="mt-1 h-9 px-1 text-[0.8125rem] text-accent-ink">
               {all ? "Свернуть" : `Все заправки (${fills.length})`}
             </button>
           ) : null}
@@ -188,7 +188,7 @@ export function FuelSheet({ asset, fill, onClose }: { asset: Asset; fill: FuelFi
           </label>
         </div>
         {price !== null ? <p className="px-1 text-xs text-muted">≈ {rub1(price)} за литр</p> : null}
-        <label className="flex min-h-11 items-center gap-3 rounded-xl bg-elevated px-3 text-[0.9375rem]">
+        <label className="flex min-h-11 items-center gap-3 rounded-card bg-card px-3 text-body">
           <span className="flex-1">
             Полный бак
             <span className="block text-xs text-subtle">снимите галочку, если долили не до отсечки</span>
@@ -233,7 +233,7 @@ export function OwnershipBlock({ asset }: { asset: Asset }) {
   const own = ownership(asset, year);
   if (own.total <= 0) return null;
   return (
-    <section className="mt-4 rounded-xl bg-elevated px-4 py-3" aria-label="Всего на машину">
+    <section className="mt-4 rounded-card bg-card px-4 py-3" aria-label="Всего на машину">
       <div className="flex items-center gap-2">
         <FieldLabel hint="Топливо + обслуживание + страховка и налоги за год. ₽ на км — всё это, делённое на пройденные за год километры по обновлениям пробега." className="flex-1">
           Всего на машину

@@ -25,7 +25,7 @@ function inline(nodes: Inline[]): ReactNode[] {
         );
       case "link":
         return (
-          <a key={i} href={node.href} target="_blank" rel="noopener noreferrer nofollow" className="text-accent underline underline-offset-2">
+          <a key={i} href={node.href} target="_blank" rel="noopener noreferrer nofollow" className="text-accent-ink underline underline-offset-2">
             {inline(node.children)}
           </a>
         );
@@ -37,7 +37,7 @@ function inline(nodes: Inline[]): ReactNode[] {
 export function AssistMarkdown({ text, className }: { text: string; className?: string }) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
   return (
-    <div className={cn("space-y-2 text-[0.9375rem] break-words", className)}>
+    <div className={cn("space-y-2 text-body break-words", className)}>
       {blocks.map((block, i) => {
         switch (block.type) {
           case "p":

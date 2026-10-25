@@ -44,7 +44,7 @@ export function TodaySummary() {
           {flagged.map((row) => (
             <li key={row.item.id} className="truncate text-sm">
               <span aria-hidden="true">{iconOf(row.item)} </span>
-              {row.item.title} — <span className={row.days === 0 ? "font-medium text-accent" : "text-muted"}>{daysLeftLabel(row.days)}</span>
+              {row.item.title} — <span className={row.days === 0 ? "font-medium text-accent-ink" : "text-muted"}>{daysLeftLabel(row.days)}</span>
               {row.age ? <span className="text-muted">, {row.age}</span> : null}
             </li>
           ))}

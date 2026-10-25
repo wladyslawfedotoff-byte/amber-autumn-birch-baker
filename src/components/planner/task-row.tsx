@@ -217,7 +217,7 @@ export const TaskRow = memo(function TaskRow({
         aria-pressed={checked}
         title={ticked ? "Отменить отметку — задача вернётся на прежнюю дату" : task.done ? "Вернуть в работу" : "Выполнить"}
         onClick={tick}
-        className="flex h-10 w-10 shrink-0 items-center justify-center"
+        className="hit flex h-10 w-10 shrink-0 items-center justify-center"
       >
         <span
           className={cn(
@@ -237,19 +237,19 @@ export const TaskRow = memo(function TaskRow({
           >
             <span
               className={cn(
-                "block text-pretty text-[0.9375rem] leading-snug",
+                "block text-pretty text-body leading-snug",
                 checked ? "text-subtle line-through decoration-subtle" : "text-fg",
               )}
             >
               {task.maint ? shortMaintTitle(task, assets) : task.title}
             </span>
             {preview ? (
-              <span className="mt-1 flex items-center gap-1 text-[0.75rem] text-muted">
+              <span className="mt-1 flex items-center gap-1 text-caption text-muted">
                 <NotebookText className="size-3 shrink-0" aria-hidden="true" />
                 <span className="min-w-0 truncate">{preview}</span>
               </span>
             ) : null}
-            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] leading-4 text-muted empty:hidden">
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption leading-4 text-muted empty:hidden">
               {ticked ? <span className="text-ok">отмечено · дальше {task.due ? dueLabel(task.due, today) : "—"}</span> : null}
               {showDue && task.due && !ticked ? (
                 task.maint && !checked ? (
@@ -292,7 +292,7 @@ export const TaskRow = memo(function TaskRow({
             <button
               type="button"
               onClick={() => openMileage(kmAsset)}
-              className="mt-1 h-7 shrink-0 rounded-full bg-accent/10 px-3 text-xs font-medium text-accent"
+              className="mt-1 h-7 shrink-0 rounded-full bg-accent/10 px-3 text-xs font-medium text-accent-ink"
             >
               Обновить пробег
             </button>
@@ -305,8 +305,8 @@ export const TaskRow = memo(function TaskRow({
               title={open ? "Свернуть подзадачи" : "Показать подзадачи"}
               onClick={() => setOpen(!open)}
               className={cn(
-                "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-2 text-[0.75rem] tabular-nums",
-                progress.done === progress.total ? "text-accent" : "text-muted",
+                "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-2 text-caption tabular-nums",
+                progress.done === progress.total ? "text-accent-ink" : "text-muted",
               )}
             >
               <ListChecks className="size-3.5" aria-hidden="true" />
@@ -384,7 +384,7 @@ export const TaskRow = memo(function TaskRow({
         <button
           type="button"
           aria-label={`Перенести ${task.title}`}
-          className="drag-handle flex size-10 shrink-0 items-center justify-center text-subtle"
+          className="hit drag-handle flex size-10 shrink-0 items-center justify-center text-subtle"
           onPointerDown={onDragStart}
         >
           <GripVertical className="size-4" />
@@ -422,7 +422,7 @@ export function AddTaskForm({
   return (
     <div className={className}>
       <form
-        className="card-lift flex items-center gap-2 rounded-2xl bg-elevated pr-1 pl-3"
+        className="card-lift flex items-center gap-2 rounded-card bg-card pr-1 pl-3"
         onSubmit={(event) => {
           event.preventDefault();
           const title = value.trim();
@@ -519,5 +519,5 @@ function QuickChip({ label, off, onToggle, what }: { label: string; off: boolean
 
 function MaintDue({ task, assets, today }: { task: Task; assets: Asset[]; today: string }) {
   const due = honestDue(task, assets, today);
-  return <span className={due.tone === "danger" ? "text-danger" : due.tone === "accent" ? "text-accent" : undefined}>{due.text}</span>;
+  return <span className={due.tone === "danger" ? "text-danger" : due.tone === "accent" ? "text-accent-ink" : undefined}>{due.text}</span>;
 }

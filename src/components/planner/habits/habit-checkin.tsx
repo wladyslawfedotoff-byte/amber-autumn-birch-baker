@@ -35,7 +35,7 @@ export function CheckinSheet({ habit, day, onClose }: { habit: Habit; day: strin
         className="size-5 shrink-0"
         style={{ accentColor: hex }}
       />
-      <span className="shrink-0 text-[0.9375rem]">{label}</span>
+      <span className="shrink-0 text-body">{label}</span>
       {extra}
     </label>
   );
@@ -48,7 +48,7 @@ export function CheckinSheet({ habit, day, onClose }: { habit: Habit; day: strin
         save();
       }}
     >
-      <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+      <div className="menu-card overflow-hidden rounded-card">
         {radio(
           "done",
           "Выполнено",
@@ -109,7 +109,7 @@ export function CheckinSheet({ habit, day, onClose }: { habit: Habit; day: strin
         aria-label="Заметка"
         placeholder="Как прошло? Пара слов для себя"
         onChange={(event) => setDraft({ ...draft, note: event.target.value })}
-        className="mt-4 w-full resize-none rounded-xl bg-elevated p-3 text-base outline-none placeholder:text-subtle"
+        className="mt-4 w-full resize-none rounded-card bg-card p-3 text-base outline-none placeholder:text-subtle"
       />
     </form>
     </Sheet>

@@ -46,7 +46,7 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
   const menuH = page === "projects" ? Math.min(320, 52 + projects.length * 44) : 290;
   const previewTop = Math.max(12, Math.min(rect.top, vh - menuH - rect.height - 24));
   const below = previewTop + rect.height + 8 + menuH < vh;
-  const item = "flex h-11 w-full items-center gap-3 px-4 text-left text-[0.9375rem] text-fg active:bg-fg/10";
+  const item = "flex h-11 w-full items-center gap-3 px-4 text-left text-body text-fg active:bg-fg/10";
 
   return createPortal(
     <div
@@ -63,12 +63,12 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
       <button type="button" aria-label="Закрыть меню задачи" className="scrim scrim-menu absolute inset-0" onClick={onClose} />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute flex items-start gap-3 rounded-xl bg-elevated px-3 py-2 shadow-[0_12px_32px_rgb(0_0_0/0.25)]"
+        className="pointer-events-none absolute flex items-start gap-3 rounded-card bg-card px-3 py-2 shadow-[0_12px_32px_rgb(0_0_0/0.25)]"
         style={{ top: previewTop, left: rect.left, width: rect.width, animation: "ctx-in 160ms var(--ease)" }}
       >
         <span className={cn("mt-1 size-[1.125rem] shrink-0 rounded-full border-2", PRIORITIES[task.priority]?.ring)} />
         <span className="min-w-0">
-          <span className="block text-[0.9375rem] leading-snug text-fg">{task.title}</span>
+          <span className="block text-body leading-snug text-fg">{task.title}</span>
           {task.due ? <span className="text-xs text-muted">{dueLabel(task.due, today)}</span> : null}
         </span>
       </div>
@@ -140,7 +140,7 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
           </>
         ) : (
           <>
-            <button type="button" className={cn(item, "text-accent")} onClick={() => setPage("main")}>
+            <button type="button" className={cn(item, "text-accent-ink")} onClick={() => setPage("main")}>
               <ChevronLeft className="-ml-1 size-5" />
               <span className="flex-1">В проект</span>
             </button>

@@ -369,7 +369,7 @@ function WeekGroups({
     <div>
       {groups.map((group) => (
         <section key={group.day} className="mt-3">
-          <h2 className={cn("px-1 pb-1 text-xs font-semibold uppercase tracking-wide", group.day === today ? "text-accent" : "text-subtle")}>
+          <h2 className={cn("px-1 pb-1 text-xs font-semibold uppercase tracking-wide", group.day === today ? "text-accent-ink" : "text-subtle")}>
             {group.day === today ? "Сегодня · " : group.day === shiftIso(today, 1) ? "Завтра · " : ""}
             {formatShortDay(group.day, true)}
           </h2>
@@ -482,8 +482,8 @@ function PriorityBoard({
                       <span className="flex items-start gap-2">
                         <GripVertical className="mt-1 size-3.5 shrink-0 text-subtle" />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[0.9375rem] leading-snug text-fg">{task.title}</span>
-                          <span className="mt-1 block text-[0.75rem] text-muted">
+                          <span className="block text-body leading-snug text-fg">{task.title}</span>
+                          <span className="mt-1 block text-caption text-muted">
                             {task.due ? dueLabel(task.due, today) : "без даты"}
                           </span>
                         </span>

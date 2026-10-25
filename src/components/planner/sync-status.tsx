@@ -56,7 +56,7 @@ export function SyncPill() {
             aria-expanded={hint}
             aria-label="Что это значит"
             onClick={() => setHint((open) => !open)}
-            className={cn("flex size-6 items-center justify-center rounded-full", hint ? "text-accent" : "text-subtle")}
+            className={cn("flex size-6 items-center justify-center rounded-full", hint ? "text-accent-ink" : "text-subtle")}
           >
             <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full border border-current text-[0.625rem] leading-none font-semibold">
               ?
@@ -64,7 +64,7 @@ export function SyncPill() {
           </button>
         </div>
         {hint ? (
-          <p className="mt-1 max-w-[17rem] rounded-xl bg-elevated px-3 py-2 text-center text-xs leading-snug text-muted shadow-sm">
+          <p className="mt-1 max-w-[17rem] rounded-card bg-card px-3 py-2 text-center text-xs leading-snug text-muted shadow-sm">
             Всё, что вы делаете без сети, сохраняется на этом устройстве и само уйдёт на сервер, когда связь появится. Фото и файлы тоже ждут отправки. Помощник работает только при подключении.
           </p>
         ) : null}
@@ -85,7 +85,7 @@ export function SyncPill() {
     );
   } else if (update) {
     pill = (
-      <button type="button" onClick={applyUpdate} className="flex h-7 items-center gap-2 rounded-full bg-elevated px-3 text-xs text-accent shadow-sm">
+      <button type="button" onClick={applyUpdate} className="flex h-7 items-center gap-2 rounded-full bg-elevated px-3 text-xs text-accent-ink shadow-sm">
         <RefreshCw className="size-3.5" aria-hidden="true" />
         Новая версия · Обновить
       </button>

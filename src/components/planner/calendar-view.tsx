@@ -1,3 +1,4 @@
+import { CAPS } from "@/components/ui/kit";
 import { maintAsset, shortMaintTitle } from "@/lib/maintenance/short-title";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
@@ -261,7 +262,7 @@ export function CalendarView({
               setCursor(new Date());
               setDay(today);
             }}
-            className="h-11 shrink-0 rounded-full px-3 text-sm text-accent"
+            className="h-11 shrink-0 rounded-full px-3 text-sm text-accent-ink"
           >
             Сегодня
           </button>
@@ -288,7 +289,7 @@ export function CalendarView({
         {menu ? (
           <>
             <button type="button" aria-label="Закрыть меню вида" tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setMenu(false)} />
-            <div ref={menuRef} className="card-lift absolute top-full right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl bg-elevated shadow-lg" role="menu" aria-label="Вид календаря">
+            <div ref={menuRef} className="card-lift absolute top-full right-0 z-20 mt-1 w-56 overflow-hidden rounded-card bg-card shadow-lg" role="menu" aria-label="Вид календаря">
               {CALENDAR_MODES.map((item) => (
                 <button
                   key={item.id}
@@ -299,10 +300,10 @@ export function CalendarView({
                     setMode(item.id);
                     setMenu(false);
                   }}
-                  className="flex h-11 w-full items-center gap-3 px-3 text-left text-[0.9375rem]"
+                  className="flex h-11 w-full items-center gap-3 px-3 text-left text-body"
                 >
                   <span className="min-w-0 flex-1">{item.label}</span>
-                  {mode === item.id ? <Check className="size-4 text-accent" /> : null}
+                  {mode === item.id ? <Check className="size-4 text-accent-ink" /> : null}
                 </button>
               ))}
               <div className="border-t border-line">
@@ -510,8 +511,8 @@ function MonthGrid({
                     >
                       <span
                         className={cn(
-                          "flex size-7 items-center justify-center rounded-full text-[0.9375rem] tabular-nums",
-                          selected ? "bg-accent font-semibold text-accent-fg" : isToday ? "font-semibold text-accent" : inMonth ? "text-fg" : "text-subtle/70",
+                          "flex size-7 items-center justify-center rounded-full text-body tabular-nums",
+                          selected ? "bg-accent font-semibold text-accent-fg" : isToday ? "font-semibold text-accent-ink" : inMonth ? "text-fg" : "text-subtle",
                         )}
                       >
                         {date.getDate()}
@@ -583,11 +584,11 @@ function DayRows({
     return empty ? <p className="px-1 py-4 text-sm text-muted">{empty}</p> : null;
   }
   return (
-    <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+    <ul className="menu-card overflow-hidden rounded-card">
       {special.map((item) => {
         const age = ageLabel(item, iso, today);
         return (
-          <li key={item.id} className="flex min-h-11 items-center gap-3 px-3 text-[0.9375rem]">
+          <li key={item.id} className="flex min-h-11 items-center gap-3 px-3 text-body">
             <span className="w-5 shrink-0 text-center" aria-hidden="true">
               {iconOf(item)}
             </span>
@@ -619,16 +620,16 @@ function DayRows({
               </span>
             </button>
             <button type="button" onClick={() => onOpen(task.id)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 pr-1 text-left">
-              <span className={cn("min-w-0 flex-1 truncate text-[0.9375rem]", task.done ? "text-subtle line-through" : "text-fg")}>
+              <span className={cn("min-w-0 flex-1 truncate text-body", task.done ? "text-subtle line-through" : "text-fg")}>
                 {task.maint ? shortMaintTitle(task, assets) : task.title}
                 {task.maint ? <span className="block truncate text-xs text-muted">🔧 {maintAsset(task, assets)?.name ?? "Обслуживание"}</span> : null}
               </span>
-              {time ? <span className={cn("shrink-0 text-xs tabular-nums", task.done ? "text-subtle" : "text-accent")}>{time}</span> : null}
+              {time ? <span className={cn("shrink-0 text-xs tabular-nums", task.done ? "text-subtle" : "text-accent-ink")}>{time}</span> : null}
             </button>
             <button
               type="button"
               aria-label={`Перенести ${task.title}`}
-              className="drag-handle flex h-11 w-8 shrink-0 items-center justify-center text-subtle/70"
+              className="drag-handle flex h-11 w-8 shrink-0 items-center justify-center text-subtle"
               onPointerDown={(event) => onDrag(event, task)}
             >
               <GripVertical className="size-3.5" />
@@ -668,7 +669,7 @@ function ListAgenda({
     <div className="mt-2 flex flex-col gap-3">
       {filled.map((iso) => (
         <section key={iso} data-day={iso} className={cn("rounded-xl", drag?.active && drag.over === iso && "ring-2 ring-accent")}>
-          <h3 className="mb-1 px-1 text-xs font-semibold text-muted uppercase">
+          <h3 className={cn("mb-1 px-1", CAPS)}>
             {iso === today ? "Сегодня · " : iso === shiftIso(today, 1) ? "Завтра · " : ""}
             {formatLong(iso)}
           </h3>
@@ -754,11 +755,11 @@ function TimeGrid({
               onClick={() => onPick(iso)}
               className={cn("flex h-12 flex-col items-center justify-center rounded-lg", over && "bg-accent/20")}
             >
-              <span className={cn("text-[0.6875rem]", isToday ? "text-accent" : "text-subtle")}>{letterOf(iso)}</span>
+              <span className={cn("text-[0.6875rem]", isToday ? "text-accent-ink" : "text-subtle")}>{letterOf(iso)}</span>
               <span
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-full text-[0.9375rem] tabular-nums",
-                  selected ? "bg-accent font-semibold text-accent-fg" : isToday ? "font-semibold text-accent" : "text-fg",
+                  "flex size-7 items-center justify-center rounded-full text-body tabular-nums",
+                  selected ? "bg-accent font-semibold text-accent-fg" : isToday ? "font-semibold text-accent-ink" : "text-fg",
                 )}
               >
                 {dateOf(iso).getDate()}

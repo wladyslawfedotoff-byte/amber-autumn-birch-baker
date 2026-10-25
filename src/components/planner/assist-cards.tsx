@@ -48,7 +48,7 @@ function TaskRow({ task, mode, onOpen }: { task: Task; mode: "overdue" | "day"; 
       ) : null}
       <Dot color={dotColor(task)} />
       <button type="button" onClick={() => onOpen(task.id)} className="min-w-0 flex-1 py-1 text-left">
-        <span className={cn("block truncate text-[0.9375rem]", finished && "text-muted line-through")}>{task.title}</span>
+        <span className={cn("block truncate text-body", finished && "text-muted line-through")}>{task.title}</span>
         {meta.length || movedFrom ? (
           <span className={cn("block truncate text-xs", overdue ? "text-danger" : "text-muted")}>
             {movedFrom ? `перенесено на ${dueLabel(task.due ?? tomorrow, today)}` : meta.join(" · ")}
@@ -115,8 +115,8 @@ export function AnswerViewCard({ view, onOpen }: { view: AnswerView; onOpen: (id
   if (view.kind === "free") {
     return (
       <div className="mt-1" data-answer-view="free">
-        <p className="text-[0.9375rem]">{view.title}</p>
-        <ul className="mt-2 overflow-hidden rounded-2xl bg-elevated">
+        <p className="text-body">{view.title}</p>
+        <ul className="mt-2 overflow-hidden rounded-card bg-card">
           {view.days.map((d) => (
             <li key={d.date} className="flex items-start gap-3 border-b border-line/60 px-3 py-2 last:border-0">
               <span className="w-24 shrink-0 pt-1 text-[0.8125rem] font-medium">{d.label}</span>
@@ -141,8 +141,8 @@ export function AnswerViewCard({ view, onOpen }: { view: AnswerView; onOpen: (id
   const rows = view.ids.map((id) => byId.get(id)).filter((t): t is Task => Boolean(t));
   return (
     <div className="mt-1" data-answer-view={view.mode}>
-      <p className="text-[0.9375rem]">{view.title}</p>
-      <ul className="mt-2 divide-y divide-line/60 overflow-hidden rounded-2xl bg-elevated">
+      <p className="text-body">{view.title}</p>
+      <ul className="mt-2 divide-y divide-line/60 overflow-hidden rounded-card bg-card">
         {rows.map((t) => (
           <TaskRow key={t.id} task={t} mode={view.mode} onOpen={onOpen} />
         ))}
@@ -203,7 +203,7 @@ export function PlanTimeline({ items, pending, onRemove }: { items: Update[]; pe
                 <Dot color={dotColor(task)} className="relative mt-[0.6rem] ring-2 ring-elevated" />
               </span>
               <span className="min-w-0 flex-1 py-2">
-                <span className="line-clamp-2 block text-[0.9375rem] leading-snug">{item.taskTitle}</span>
+                <span className="line-clamp-2 block text-body leading-snug">{item.taskTitle}</span>
                 {before && before !== item.start ? <span className="block text-xs text-muted">было {before}</span> : null}
               </span>
               {pending ? (
@@ -232,7 +232,7 @@ export function ChipRow({ chips, disabled, onChip }: { chips: Chip[]; disabled: 
           onClick={() => onChip(chip)}
           className={cn(
             "flex h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-[0.8125rem] whitespace-nowrap disabled:opacity-40",
-            chip.proposal ? "border-accent/30 bg-accent/10 text-accent" : "border-line bg-surface text-fg",
+            chip.proposal ? "border-accent/30 bg-accent/10 text-accent-ink" : "border-line bg-surface text-fg",
           )}
         >
           {chip.proposal ? <Sparkles className="size-3.5" aria-hidden="true" /> : null}

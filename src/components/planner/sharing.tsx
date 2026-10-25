@@ -27,7 +27,7 @@ export function ShareBadges({ task }: { task: Task }) {
   }
   if (!parts.length) return null;
   return (
-    <span className="inline-flex items-center gap-1 text-accent">
+    <span className="inline-flex items-center gap-1 text-accent-ink">
       <Users className="size-3" aria-hidden="true" />
       {parts.join(" · ")}
     </span>

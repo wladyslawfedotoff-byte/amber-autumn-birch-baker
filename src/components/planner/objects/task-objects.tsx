@@ -200,7 +200,7 @@ export function ObjectStrip({
       ) : null}
       <input ref={input} type="file" accept={ACCEPT} multiple className="sr-only" aria-label="Добавить файл" onChange={(event) => void pick(event.target.files)} />
       <div className={cn("flex items-center rounded-lg border border-dashed border-line text-sm text-muted", any && "mt-2")} data-testid="object-add">
-        <Plus className="ml-3 size-4 shrink-0 text-accent" aria-hidden="true" />
+        <Plus className="ml-3 size-4 shrink-0 text-accent-ink" aria-hidden="true" />
         <button type="button" className="h-10 px-2" onClick={() => input.current?.click()}>
           Файл
         </button>
@@ -355,7 +355,7 @@ export function LinkSheet({ open, onAdd, onClose }: { open: boolean; onAdd: (hre
         {url && !href ? <p className="text-xs text-warn">Нужен адрес http:// или https://</p> : null}
         <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Название (необязательно)" aria-label="Название ссылки" className={field} />
         {suggested && suggested !== title ? (
-          <button type="button" onClick={() => setTitle(suggested)} className="flex w-full items-center gap-2 truncate text-left text-xs text-accent" data-testid="title-suggestion">
+          <button type="button" onClick={() => setTitle(suggested)} className="flex w-full items-center gap-2 truncate text-left text-xs text-accent-ink" data-testid="title-suggestion">
             <Link2 className="size-3.5 shrink-0" aria-hidden="true" />
             <span className="truncate">{suggested}</span>
           </button>
@@ -477,7 +477,7 @@ export function ContactSheet({
           </button>
         </form>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => card.current?.click()} className="inline-flex h-9 items-center gap-2 rounded-full px-1 text-sm text-accent">
+          <button type="button" onClick={() => card.current?.click()} className="inline-flex h-9 items-center gap-2 rounded-full px-1 text-sm text-accent-ink">
             <Paperclip className="size-4" aria-hidden="true" />
             Из карточки .vcf
           </button>

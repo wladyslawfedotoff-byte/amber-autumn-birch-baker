@@ -1,3 +1,5 @@
+import { THEME_COLOR } from "./design/tokens.ts";
+
 /**
  * App icon files (public/icons, public/favicon.*). The version query makes
  * browsers and the iOS home screen pick up a new icon after an update.
@@ -14,7 +16,7 @@ export const MANIFEST_URL = v("/manifest.webmanifest");
 export const APPLE_TOUCH_ICONS = [180, 167, 152, 120].map((size) => ({ size, href: v(`/icons/apple-touch-icon-${size}.png`) }));
 
 /** Splash / install background and the browser bar of the installed app. */
-export const ICON_BACKGROUND = "#f6f4ef";
+export const ICON_BACKGROUND = THEME_COLOR.light;
 
 /** iPhone screens (points × scale) that get a launch image: [width, height, scale]. */
 export const SPLASH_SIZES: readonly (readonly [number, number, number])[] = [
