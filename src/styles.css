@@ -544,3 +544,16 @@ nav[aria-label="Основные разделы"] {
 :root[data-theme="dark"] .menu-card {
   background: var(--elevated);
 }
+/* 1.19.1: hairlines between menu rows start after the 28 px badge. */
+.menu-card > li + li {
+  position: relative;
+}
+.menu-card > li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 3.25rem;
+  height: 0.5px;
+  background: var(--line);
+}
