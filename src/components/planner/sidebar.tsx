@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { AlertCircle, CalendarCheck, ChevronDown, ChevronRight, Columns3, Hash, Inbox, List, ListChecks, Pin, PinOff, Plus, Search, Settings, Users } from "lucide-react";
+import { AlertCircle, CalendarCheck, Sunrise, ChevronDown, ChevronRight, Columns3, Hash, Inbox, List, ListChecks, Pin, PinOff, Plus, Search, Settings, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NAV_ICONS } from "@/components/planner/tab-icons";
 import { cn } from "@/lib/cn";
@@ -31,16 +31,17 @@ import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 type ViewNav = Extract<NavId, View>;
 
 /** Smart-list tiles (2×2). «Просрочено» is not a screen: it opens «Сегодня», where overdue tasks sit on top. */
-type Tile = "today" | "inbox" | "checklist" | "overdue";
-const TILES: Tile[] = ["today", "inbox", "checklist", "overdue"];
+type Tile = "today" | "inbox" | "tomorrow" | "checklist" | "overdue";
+const TILES: Tile[] = ["today", "inbox", "tomorrow", "checklist", "overdue"];
 const TILE_META: Record<Tile, { label: string; color: string; icon: typeof Inbox }> = {
   today: { label: "Сегодня", color: "#0a84ff", icon: CalendarCheck },
   inbox: { label: "Входящие", color: "#5e5ce6", icon: Inbox },
+  tomorrow: { label: "Завтра", color: "#ff9f0a", icon: Sunrise },
   checklist: { label: "Все", color: "#636366", icon: ListChecks },
   overdue: { label: "Просрочено", color: "#ff3b30", icon: AlertCircle },
 };
 /** Everything else that is a screen: one row each in «Разделы». */
-const ROWS: ViewNav[] = ["tomorrow", "week", "shared", "calendar", "schedule", "habits", "assist", "focus", "matrix", "dates", "maintenance"];
+const ROWS: ViewNav[] = ["week", "shared", "calendar", "schedule", "habits", "assist", "focus", "matrix", "dates", "maintenance"];
 /** List circles, by position (lists have no colour of their own). */
 const LIST_COLORS = ["#ff9500", "#34c759", "#0a84ff", "#af52de", "#ff2d55", "#5ac8fa", "#a2845e"];
 
@@ -141,12 +142,12 @@ export function Sidebar({
   function tileCount(id: Tile): number {
     if (id === "today") return countToday(tasks, today);
     if (id === "inbox") return countInbox(tasks);
+    if (id === "tomorrow") return countTomorrow(tasks, today);
     if (id === "checklist") return countOpen(tasks);
     return overdueCount;
   }
 
   function rowCount(id: ViewNav): number {
-    if (id === "tomorrow") return countTomorrow(tasks, today);
     if (id === "week") return countWeek(tasks, today);
     if (id === "shared" && share) return scopeTasks(tasks, "shared", today, share).length;
     if (id === "habits") return habitLeft;
@@ -242,15 +243,14 @@ export function Sidebar({
 
         {!searching && tiles.length > 0 ? (
           <ul className={cn("mt-3 grid gap-2", tiles.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
-            {tiles.map((id, index) => {
+            {tiles.map((id) => {
               const meta = TILE_META[id];
               const Icon = meta.icon;
               const target: View = id === "overdue" ? "today" : id;
               const active = id !== "overdue" && view === id;
               const n = tileCount(id);
               return (
-                // An odd last tile spans the row, so 3 tiles never leave a hole.
-                <li key={id} className={cn(tiles.length % 2 === 1 && index === tiles.length - 1 && "col-span-2")}>
+                                <li key={id}>
                   <button
                     type="button"
                     aria-current={active ? "page" : undefined}
