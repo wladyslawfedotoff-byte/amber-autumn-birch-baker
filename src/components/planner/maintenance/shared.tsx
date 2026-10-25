@@ -5,7 +5,7 @@ import type { Asset, AssetKind } from "@/lib/planner-types";
 import { warrantyBadge, warrantyText, type WarrantyState, type WarrantyStatus } from "@/lib/maintenance/warranty";
 import type { MaintRule, RuleState, Status } from "@/lib/maintenance/rules";
 
-export const field = "h-11 w-full rounded-xl bg-elevated px-3 text-base outline-none placeholder:text-subtle";
+export const field = "h-11 w-full rounded-card bg-card px-3 text-base outline-none placeholder:text-subtle";
 export const smallLabel = "mb-1 px-1 text-xs font-medium text-subtle";
 
 export const KIND_ICON: Record<AssetKind, typeof Car> = { car: Car, device: Plug, consumable: Droplets, other: Wrench };
@@ -65,7 +65,7 @@ export function subtitle(asset: Asset): string {
 /** Two or three choices on one row (like the kind chips, but one line). */
 export function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: { id: T; label: string }[]; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex rounded-xl bg-elevated p-1">
+    <div role="radiogroup" aria-label={label} className="flex rounded-card bg-card p-1">
       {options.map((o) => (
         <button key={o.id} type="button" role="radio" aria-checked={value === o.id} onClick={() => onChange(o.id)} className={cn("h-9 min-w-0 flex-1 rounded-[0.6rem] px-2 text-[0.8125rem] font-medium", value === o.id ? "bg-surface text-fg shadow-sm" : "text-muted")}>
           {o.label}

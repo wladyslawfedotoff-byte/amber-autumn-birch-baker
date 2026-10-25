@@ -1,3 +1,5 @@
+import { icon } from "@/lib/design/tokens";
+import { GroupedCard, ListRow } from "@/components/ui/kit";
 import { APP_NAME, APP_VERSION } from "@/lib/site";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
@@ -64,16 +66,16 @@ function ArchiveSection({ onView }: { onView?: (view: View) => void }) {
   const [help, setHelp] = useState(false);
   return (
     <section aria-label="Готово и архив" className="text-sm">
-      <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+      <div className="divide-y divide-line overflow-hidden rounded-card bg-card">
         <button type="button" disabled={!onView} onClick={() => onView?.("done")} className="flex min-h-11 w-full items-center gap-3 px-3 text-left">
           <CheckCheck className="size-[1.125rem] shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
-          <span className="min-w-0 flex-1 text-[0.9375rem]">Выполненные</span>
+          <span className="min-w-0 flex-1 text-body">Выполненные</span>
           <span className="text-muted tabular-nums">{done}</span>
           <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
         </button>
         <button type="button" disabled={!onView} onClick={() => onView?.("archive")} className="flex min-h-11 w-full items-center gap-3 px-3 text-left">
           <Archive className="size-[1.125rem] shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
-          <span className="min-w-0 flex-1 text-[0.9375rem]">Архив</span>
+          <span className="min-w-0 flex-1 text-body">Архив</span>
           <span className="text-muted tabular-nums">{archived}</span>
           <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
         </button>
@@ -169,7 +171,7 @@ function ProfileSection() {
             setDone(false);
             setError("");
           }}
-          className="h-11 rounded-xl bg-elevated px-4 text-sm text-fg"
+          className="h-11 rounded-card bg-card px-4 text-sm text-fg"
         >
           Сменить пароль
         </button>
@@ -180,7 +182,7 @@ function ProfileSection() {
       {done ? <p className="mt-2 text-sm text-ok" role="status">Пароль изменён. Остальные ваши устройства вышли — там войдите с новым паролем.</p> : null}
       {open ? (
         <form
-          className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm"
+          className="card-lift mt-3 rounded-card bg-card p-4 text-sm"
           onSubmit={(event) => {
             event.preventDefault();
             if (!canSave) return;
@@ -252,7 +254,7 @@ function ConnectionSection() {
       <p className="text-sm text-muted">
         Задачи хранятся на вашем сервере и на этом устройстве. {APP_NAME} · версия {APP_VERSION}
       </p>
-      <div className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm">
+      <div className="card-lift mt-3 rounded-card bg-card p-4 text-sm">
         <div className="flex items-center gap-2">
           <span
             aria-hidden
@@ -301,7 +303,7 @@ function ConnectionSection() {
         </button>
       </div>
       {confirmAll ? (
-        <div role="alertdialog" aria-labelledby="logout-all-title" className="card-lift mt-3 rounded-xl bg-elevated p-4 text-sm">
+        <div role="alertdialog" aria-labelledby="logout-all-title" className="card-lift mt-3 rounded-card bg-card p-4 text-sm">
           <p id="logout-all-title" className="font-medium">
             Выйти на всех устройствах?
           </p>
@@ -407,40 +409,13 @@ const SHEET_TITLES: Record<SheetId, string> = {
 };
 
 /** Settings row: coloured icon, label, value, «›». */
-function NavRow({
-  id,
-  icon: Icon,
-  color,
-  label,
-  value,
-  onOpen,
-}: {
-  id: SheetId;
-  icon: typeof Info;
-  color: string;
-  label: string;
-  value?: string;
-  onOpen: (id: SheetId) => void;
-}) {
-  return (
-    <button type="button" data-row={id} onClick={() => onOpen(id)} className="flex min-h-12 w-full items-center gap-3 px-3 text-left">
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg text-white" style={{ background: color }} aria-hidden="true">
-        <Icon className="size-4" strokeWidth={2} />
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[0.9375rem] text-fg">{label}</span>
-      {value ? <span className="max-w-[62%] shrink-0 truncate text-sm text-muted">{value}</span> : null}
-      <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
-    </button>
-  );
+/** A top-level settings row: icon badge, label, value, chevron (kit ListRow). */
+function NavRow({ id, icon, color, label, value, onOpen }: { id: SheetId; icon: typeof Info; color: string; label: string; value?: string; onOpen: (id: SheetId) => void }) {
+  return <ListRow icon={icon} color={color} title={label} value={value} onClick={() => onOpen(id)} buttonProps={{ "data-row": id }} />;
 }
 
 function Group({ children, title }: { children: ReactNode; title?: string }) {
-  return (
-    <div className="mt-4">
-      {title ? <p className="mb-1 px-3 text-xs font-medium text-subtle uppercase">{title}</p> : null}
-      <div className="card-lift divide-y divide-line overflow-hidden rounded-2xl bg-elevated">{children}</div>
-    </div>
-  );
+  return <GroupedCard title={title}>{children}</GroupedCard>;
 }
 
 function LookSection() {
@@ -451,7 +426,7 @@ function LookSection() {
   return (
     <div>
       <p className="text-xs font-medium text-subtle">Тема</p>
-      <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-elevated p-1" role="radiogroup" aria-label="Тема">
+      <div className="mt-2 grid grid-cols-2 gap-1 rounded-card bg-card p-1" role="radiogroup" aria-label="Тема">
         {(["light", "dark"] as const).map((mode) => (
           <button
             key={mode}
@@ -560,7 +535,7 @@ function NavigationSection() {
       <p className={heading}>
         Нижняя панель · {tabs.length} из {MAX_TABS}
       </p>
-      <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+      <ul className="divide-y divide-line overflow-hidden rounded-card bg-card">
         {shown.map((id, index) => {
           const Icon = TAB_ICONS[id];
           const name = label(id);
@@ -578,7 +553,7 @@ function NavigationSection() {
                 <MinusCircle className="size-5" />
               </button>
               <Icon className="size-5 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{name}</span>
+              <span className="min-w-0 flex-1 truncate text-body">{name}</span>
               {/* Keyboard / screen-reader fallback for the drag handle. */}
               <button type="button" aria-label={`${name}: левее`} disabled={index === 0} onClick={() => setTabs(moveTab(tabs, id, -1))} className="sr-only focus:not-sr-only">
                 <ArrowUp className="size-4" />
@@ -616,7 +591,7 @@ function NavigationSection() {
                   aria-label={`Добавить «${item.label}» на панель`}
                   disabled={full}
                   onClick={() => move(item.id, "bottom")}
-                  className="card-lift flex h-10 w-full min-w-0 items-center gap-2 rounded-xl bg-elevated px-3 text-left text-[0.875rem] disabled:opacity-40"
+                  className="card-lift flex h-10 w-full min-w-0 items-center gap-2 rounded-card bg-card px-3 text-left text-[0.875rem] disabled:opacity-40"
                 >
                   <Plus className="size-4 shrink-0 text-accent" aria-hidden="true" />
                   <span className="min-w-0 truncate">{item.label}</span>
@@ -629,7 +604,7 @@ function NavigationSection() {
       ) : null}
 
       <p className={heading}>Боковое меню</p>
-      <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+      <ul className="divide-y divide-line overflow-hidden rounded-card bg-card">
         {menu.map((item) => {
           const Icon = NAV_ICONS[item.id];
           const on = placementOf(item.id, prefs) === "menu";
@@ -637,7 +612,7 @@ function NavigationSection() {
             <li key={item.id}>
               <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3">
                 <Icon className="size-[1.125rem] shrink-0 text-subtle" strokeWidth={1.75} aria-hidden="true" />
-                <span className={cn("min-w-0 flex-1 truncate text-[0.9375rem]", on ? "text-fg" : "text-muted")}>{item.label}</span>
+                <span className={cn("min-w-0 flex-1 truncate text-body", on ? "text-fg" : "text-muted")}>{item.label}</span>
                 <input
                   type="checkbox"
                   role="switch"
@@ -705,7 +680,7 @@ function NotifySection() {
 
   return (
     <div className="text-sm" data-testid="notify-settings">
-      <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+      <div className="divide-y divide-line overflow-hidden rounded-card bg-card">
         <div className="flex min-h-11 items-center gap-3 px-3">
           <span className="min-w-0 flex-1">Напоминания на этом устройстве</span>
           <span className={cn("text-sm", state?.kind === "on" ? "text-ok" : state?.kind === "denied" ? "text-danger" : "text-muted")}>{label}</span>
@@ -722,7 +697,7 @@ function NotifySection() {
           >
             Проверить
           </button>
-          <button type="button" disabled={busy} onClick={() => void run(async () => (await disablePush(), null))} className="h-11 flex-1 rounded-xl bg-elevated text-sm text-danger disabled:opacity-50">
+          <button type="button" disabled={busy} onClick={() => void run(async () => (await disablePush(), null))} className="h-11 flex-1 rounded-card bg-card text-sm text-danger disabled:opacity-50">
             Выключить
           </button>
         </div>
@@ -785,8 +760,8 @@ function DateTimeSection() {
   const setMode = usePlanner((s) => s.setCalendarMode);
   const field = "h-9 w-24 rounded-lg bg-surface px-2 text-right tabular-nums outline-none";
   return (
-    <div className="text-[0.9375rem]">
-      <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+    <div className="text-body">
+      <div className="divide-y divide-line overflow-hidden rounded-card bg-card">
         <label className="flex min-h-11 items-center gap-3 px-3">
           <span className="min-w-0 flex-1">Рабочий день с</span>
           <input type="time" value={workStart} onChange={(event) => setWorkHours(event.target.value || "09:00", workEnd)} className={field} />
@@ -797,7 +772,7 @@ function DateTimeSection() {
         </label>
       </div>
       <p className="mt-1 px-1 text-xs text-muted">Подсвечивается в «Расписании». Общая настройка для всех ваших устройств.</p>
-      <div className="mt-4 divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+      <div className="mt-4 divide-y divide-line overflow-hidden rounded-card bg-card">
         <SwitchRow label="Номера недель" hint="В календаре: «41» слева от строки месяца" checked={weekNumbers} onChange={setWeekNumbers} />
         <label className="flex min-h-11 items-center gap-3 px-3">
           <span className="min-w-0 flex-1">Календарь открывать как</span>
@@ -851,7 +826,7 @@ export function SettingsView({ onView }: { onView?: (view: View) => void }) {
         type="button"
         data-row="profile"
         onClick={() => setOpen("profile")}
-        className="card-lift flex w-full items-center gap-3 rounded-2xl bg-elevated px-3 py-3 text-left"
+        className="press menu-card flex w-full items-center gap-3 rounded-card px-3 py-3 text-left"
       >
         <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-lg font-semibold text-accent-fg" aria-hidden="true">
           {(profile.name || profile.login || "?").slice(0, 1).toUpperCase()}
@@ -864,29 +839,29 @@ export function SettingsView({ onView }: { onView?: (view: View) => void }) {
       </button>
 
       <Group>
-        <NavRow id="look" icon={Palette} color="#8b5cf6" label="Вид" value={`${theme === "dark" ? "Тёмная" : "Светлая"} · ${accentName}`} onOpen={setOpen} />
-        <NavRow id="tabs" icon={PanelBottom} color="#3b82f6" label="Навигация" value={`${tabs.length} ${tabs.length < 5 ? "вкладки" : "вкладок"}`} onOpen={setOpen} />
-        <NavRow id="notify" icon={Bell} color="#ef4444" label="Уведомления" onOpen={setOpen} />
-        <NavRow id="datetime" icon={CalendarClock} color="#f59e0b" label="Дата и время" onOpen={setOpen} />
+        <NavRow id="look" icon={Palette} color={icon("purple")} label="Вид" value={`${theme === "dark" ? "Тёмная" : "Светлая"} · ${accentName}`} onOpen={setOpen} />
+        <NavRow id="tabs" icon={PanelBottom} color={icon("blue")} label="Навигация" value={`${tabs.length} ${tabs.length < 5 ? "вкладки" : "вкладок"}`} onOpen={setOpen} />
+        <NavRow id="notify" icon={Bell} color={icon("red")} label="Уведомления" onOpen={setOpen} />
+        <NavRow id="datetime" icon={CalendarClock} color={icon("orange")} label="Дата и время" onOpen={setOpen} />
       </Group>
 
       <Group>
-        <NavRow id="connection" icon={Cloud} color="#10b981" label="Подключение" value={phaseLabel(status).text} onOpen={setOpen} />
+        <NavRow id="connection" icon={Cloud} color={icon("green")} label="Подключение" value={phaseLabel(status).text} onOpen={setOpen} />
         <NavRow
           id="archive"
           icon={Archive}
-          color="#a16207"
+          color={icon("brown")}
           label="Архив"
           value={`Выполненные ${doneCounts.done} · Архив ${doneCounts.archived}`}
           onOpen={setOpen}
         />
-        <NavRow id="backup" icon={HardDriveDownload} color="#14b8a6" label="Резервная копия" onOpen={setOpen} />
-        <NavRow id="quickadd" icon={Smartphone} color="#6366f1" label="Быстрое добавление" value={devicesLabel(quick.devices)} onOpen={setOpen} />
-        {profile.assistant ? <NavRow id="assistant" icon={Sparkles} color="#0ea5e9" label="Помощник" onOpen={setOpen} /> : null}
+        <NavRow id="backup" icon={HardDriveDownload} color={icon("teal")} label="Резервная копия" onOpen={setOpen} />
+        <NavRow id="quickadd" icon={Smartphone} color={icon("indigo")} label="Быстрое добавление" value={devicesLabel(quick.devices)} onOpen={setOpen} />
+        {profile.assistant ? <NavRow id="assistant" icon={Sparkles} color={icon("mint")} label="Помощник" onOpen={setOpen} /> : null}
       </Group>
 
       <Group>
-        <NavRow id="about" icon={Info} color="#6b7280" label="О приложении" value={APP_VERSION} onOpen={setOpen} />
+        <NavRow id="about" icon={Info} color={icon("grey")} label="О приложении" value={APP_VERSION} onOpen={setOpen} />
       </Group>
 
       <Sheet open={open !== null} title={open ? SHEET_TITLES[open] : ""} onClose={close}>

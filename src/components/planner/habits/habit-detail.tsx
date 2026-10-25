@@ -1,3 +1,4 @@
+import { icon } from "@/lib/design/tokens";
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Archive, ArchiveRestore, BarChart3, CalendarCheck, Check, ChevronLeft, ChevronRight, Flame, MoreHorizontal, Pencil, Percent, Timer, Trash2, Trophy } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -45,7 +46,7 @@ export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBa
         <button type="button" aria-label="К привычкам" onClick={onBack} className="flex size-10 items-center justify-center rounded-full text-muted">
           <ChevronLeft className="size-5" />
         </button>
-        <p className="min-w-0 flex-1 truncate text-center text-[0.9375rem] font-semibold">{habit.name}</p>
+        <p className="min-w-0 flex-1 truncate text-center text-body font-semibold">{habit.name}</p>
         <div ref={menuBoxRef} className="relative">
           <button
             type="button"
@@ -117,7 +118,7 @@ export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBa
       <Hero habit={habit} today={today} hex={hex} onCompleted={() => setJournalDay(true)} />
 
       {challenge ? (
-        <div className="mt-3 rounded-2xl bg-elevated p-3">
+        <div className="mt-3 rounded-card bg-card p-3">
           <p className="flex items-center gap-2 text-[0.8125rem]">
             <Trophy className="size-4" style={{ color: hex }} aria-hidden="true" />
             <span className="flex-1">Цель: {pluralN(challenge.target, DAYS)}</span>
@@ -137,7 +138,7 @@ export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBa
           <button type="button" aria-label="Прошлый месяц" onClick={() => setMonth(shiftMonth(month, -1))} className="flex size-9 items-center justify-center rounded-full text-muted">
             <ChevronLeft className="size-4" />
           </button>
-          <p className="flex-1 text-center text-[0.9375rem] font-semibold">
+          <p className="flex-1 text-center text-body font-semibold">
             {MONTHS[monthIndex]} {month.slice(0, 4) !== today.slice(0, 4) ? month.slice(0, 4) : ""}
           </p>
           <button
@@ -185,15 +186,15 @@ export function HabitDetail({ habit, onBack, onOpenFocus }: { habit: Habit; onBa
 
       <Card title="Статистика">
         <div className="grid grid-cols-2 gap-2">
-          <Tile icon={<CalendarCheck className="size-3.5" />} color="#4fa57e" label="Отметок за месяц" value={stats.monthChecks} unit={plural(stats.monthChecks, DAYS)} />
-          <Tile icon={<Check className="size-3.5" />} color="#3a8fc4" label="Всего отметок" value={stats.totalChecks} unit={plural(stats.totalChecks, DAYS)} />
-          <Tile icon={<Percent className="size-3.5" />} color="#dcae3a" label="Выполнено за месяц" value={stats.percent} unit="%" />
-          <Tile icon={<Flame className="size-3.5" />} color="#e07a3c" label="Текущая серия" value={stats.current} unit={plural(stats.current, streakUnit)} />
-          <Tile icon={<Trophy className="size-3.5" />} color="#8a4fa3" label="Лучшая серия" value={stats.best} unit={plural(stats.best, streakUnit)} />
+          <Tile icon={<CalendarCheck className="size-3.5" />} color={icon("mint")} label="Отметок за месяц" value={stats.monthChecks} unit={plural(stats.monthChecks, DAYS)} />
+          <Tile icon={<Check className="size-3.5" />} color={icon("blue")} label="Всего отметок" value={stats.totalChecks} unit={plural(stats.totalChecks, DAYS)} />
+          <Tile icon={<Percent className="size-3.5" />} color={icon("orange")} label="Выполнено за месяц" value={stats.percent} unit="%" />
+          <Tile icon={<Flame className="size-3.5" />} color={icon("red")} label="Текущая серия" value={stats.current} unit={plural(stats.current, streakUnit)} />
+          <Tile icon={<Trophy className="size-3.5" />} color={icon("purple")} label="Лучшая серия" value={stats.best} unit={plural(stats.best, streakUnit)} />
           {goal > 1 ? (
             <>
-              <Tile icon={<BarChart3 className="size-3.5" />} color="#8a90c9" label="Объём за месяц" value={stats.monthVolume} unit={unitWord} />
-              <Tile icon={<BarChart3 className="size-3.5" />} color="#4a5aa8" label="Общий объём" value={stats.totalVolume} unit={unitWord} />
+              <Tile icon={<BarChart3 className="size-3.5" />} color={icon("indigo")} label="Объём за месяц" value={stats.monthVolume} unit={unitWord} />
+              <Tile icon={<BarChart3 className="size-3.5" />} color={icon("teal")} label="Общий объём" value={stats.totalVolume} unit={unitWord} />
             </>
           ) : null}
         </div>
@@ -236,7 +237,7 @@ function entryMark(habit: Habit, day: string): ReactNode {
 
 function MenuItem({ icon, children, onClick, danger }: { icon: ReactNode; children: ReactNode; onClick: () => void; danger?: boolean }) {
   return (
-    <button type="button" role="menuitem" onClick={onClick} className={cn("flex h-11 w-full items-center gap-3 px-4 text-left text-[0.9375rem] hover:bg-elevated", danger ? "text-danger" : "text-fg")}>
+    <button type="button" role="menuitem" onClick={onClick} className={cn("flex h-11 w-full items-center gap-3 px-4 text-left text-body hover:bg-elevated", danger ? "text-danger" : "text-fg")}>
       <span className={danger ? "text-danger" : "text-fg"}>{icon}</span>
       {children}
     </button>
@@ -245,8 +246,8 @@ function MenuItem({ icon, children, onClick, danger }: { icon: ReactNode; childr
 
 function Card({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <section className="mt-3 rounded-2xl bg-elevated p-3">
-      {title ? <h3 className="mb-2 text-[0.9375rem] font-semibold">{title}</h3> : null}
+    <section className="mt-3 rounded-card bg-card p-3">
+      {title ? <h3 className="mb-2 text-body font-semibold">{title}</h3> : null}
       {children}
     </section>
   );

@@ -64,7 +64,7 @@ export function SyncPill() {
           </button>
         </div>
         {hint ? (
-          <p className="mt-1 max-w-[17rem] rounded-xl bg-elevated px-3 py-2 text-center text-xs leading-snug text-muted shadow-sm">
+          <p className="mt-1 max-w-[17rem] rounded-card bg-card px-3 py-2 text-center text-xs leading-snug text-muted shadow-sm">
             Всё, что вы делаете без сети, сохраняется на этом устройстве и само уйдёт на сервер, когда связь появится. Фото и файлы тоже ждут отправки. Помощник работает только при подключении.
           </p>
         ) : null}

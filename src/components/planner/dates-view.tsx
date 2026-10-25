@@ -1,3 +1,4 @@
+import { icon } from "@/lib/design/tokens";
 import { useState } from "react";
 import { Check, ChevronLeft, ExternalLink, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ function safeLink(value: string | null | undefined): string | null {
 }
 
 function tint(color: string | null | undefined, kind: MilestoneKind): string {
-  return colorHex(color) ?? colorHex(kindMeta(kind).color) ?? "#888";
+  return colorHex(color) ?? colorHex(kindMeta(kind).color) ?? icon("grey");
 }
 
 function IconCircle({ item, size = "md" }: { item: Pick<Milestone, "icon" | "kind" | "color">; size?: "md" | "lg" }) {
@@ -218,10 +219,10 @@ function DateCard({ row, onOpen }: { row: Upcoming; onOpen: () => void }) {
   const items = item.items ?? [];
   const left = items.filter((i) => !i.done).length;
   return (
-    <button type="button" onClick={onOpen} className="card-lift flex min-h-16 w-full items-center gap-3 rounded-2xl bg-elevated px-3 py-2 text-left">
+    <button type="button" onClick={onOpen} className="card-lift flex min-h-16 w-full items-center gap-3 rounded-card bg-card px-3 py-2 text-left">
       <IconCircle item={item} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[0.9375rem] font-medium">
+        <span className="block truncate text-body font-medium">
           {item.title}
           {age ? <span className="font-normal text-muted"> {age}</span> : null}
           {(item.members ?? []).length > 0 ? <Users className="ml-1 inline size-3.5 text-accent" aria-label="совместная" /> : null}
@@ -251,7 +252,7 @@ function MilestoneDetails({ row, today, onBack, onEdit }: { row: Upcoming; today
         </Button>
       </div>
 
-      <section className="card-lift mt-1 flex flex-col items-center rounded-2xl bg-elevated px-4 py-5 text-center">
+      <section className="card-lift mt-1 flex flex-col items-center rounded-card bg-card px-4 py-5 text-center">
         <IconCircle item={item} size="lg" />
         <h2 className="mt-2 text-lg font-semibold">{item.title}</h2>
         <p className="text-xs text-subtle">{meta.label}</p>
@@ -425,7 +426,7 @@ function MilestoneEditor({
 
       <RowGroup>
         <div className="flex min-h-11 items-center gap-3 px-3">
-          <span className="shrink-0 text-[0.9375rem]">{meta.dateLabel}</span>
+          <span className="shrink-0 text-body">{meta.dateLabel}</span>
           <PickerInput
             type="date"
             value={d.date}
@@ -585,7 +586,7 @@ function ItemSection({ item, kind, label, hint }: { item: Milestone; kind: Miles
       <h3 className="mb-1 px-1 text-xs font-medium text-subtle">
         {label} {rows.length ? <span className="tabular-nums">· {rows.filter((row) => row.done).length}/{rows.length}</span> : null}
       </h3>
-      <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+      <div className="divide-y divide-line overflow-hidden rounded-card bg-card">
         {rows.map((row) => {
           const href = safeLink(row.link);
           const editingRow = editId === row.id;
@@ -607,7 +608,7 @@ function ItemSection({ item, kind, label, hint }: { item: Milestone; kind: Miles
                   type="button"
                   aria-expanded={shop ? editingRow : undefined}
                   onClick={() => shop && setEditId(editingRow ? null : row.id)}
-                  className={cn("min-w-0 flex-1 truncate text-left text-[0.9375rem]", row.done ? "text-subtle line-through" : "text-fg")}
+                  className={cn("min-w-0 flex-1 truncate text-left text-body", row.done ? "text-subtle line-through" : "text-fg")}
                 >
                   {row.title}
                 </button>

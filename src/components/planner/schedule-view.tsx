@@ -273,7 +273,7 @@ export function ScheduleView({
           <ChevronLeft className="size-5" />
         </button>
         <div className="min-w-0 flex-1 text-center leading-tight">
-          <p className="truncate text-[0.9375rem] font-semibold">{day === today ? `Сегодня, ${formatShortDay(day)}` : formatShortDay(day, true)}</p>
+          <p className="truncate text-body font-semibold">{day === today ? `Сегодня, ${formatShortDay(day)}` : formatShortDay(day, true)}</p>
           <p className={cn("text-[0.6875rem]", clashes.length > 0 ? "text-danger" : "text-subtle")}>
             {clashes.length > 0 ? `Накладка: ${clashes.length}` : day !== today ? (
               <button type="button" className="text-accent" onClick={() => setDay(today)}>
@@ -319,7 +319,7 @@ export function ScheduleView({
       ) : null}
 
       {untimed.length > 0 ? (
-        <section className="mt-1 overflow-hidden rounded-xl bg-elevated" aria-label="Без времени">
+        <section className="mt-1 overflow-hidden rounded-card bg-card" aria-label="Без времени">
           <button type="button" aria-expanded={trayOpen} onClick={() => setTrayOpen(!trayOpen)} className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs font-medium text-muted">
             <ChevronDown className={cn("size-3.5 transition-transform", !trayOpen && "-rotate-90")} aria-hidden="true" />
             Без времени · {untimed.length}
@@ -419,7 +419,7 @@ export function ScheduleView({
       {running.length > 0 ? (
         <div className="mt-2">
           <p className="px-1 text-xs font-medium text-subtle">Проекты в этот день</p>
-          <div className="mt-1 divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+          <div className="mt-1 divide-y divide-line overflow-hidden rounded-card bg-card">
             {running.map((project) => (
               <button key={project.id} type="button" onClick={() => onOpenProjects(project.id)} className="flex h-10 w-full items-center px-3 text-left text-sm text-fg">
                 {project.title}
@@ -476,9 +476,9 @@ function SlotSheet({ slot, day, onClose }: { slot: { start: number; end: number 
           placeholder="Например: созвон с командой"
           aria-label="Задача на это время"
           enterKeyHint="done"
-          className="h-11 w-full rounded-xl bg-elevated px-3 text-base outline-none placeholder:text-subtle"
+          className="h-11 w-full rounded-card bg-card px-3 text-base outline-none placeholder:text-subtle"
         />
-        <div className="mt-3 divide-y divide-line overflow-hidden rounded-xl bg-elevated text-[0.9375rem]">
+        <div className="mt-3 divide-y divide-line overflow-hidden rounded-card bg-card text-body">
           <label className="flex min-h-11 items-center gap-3 px-3">
             <span className="flex-1">Начало</span>
             <input type="time" aria-label="Начало" value={from} onChange={(event) => setFrom(event.target.value)} className="h-9 w-24 rounded-lg bg-surface px-2 text-right tabular-nums outline-none" />

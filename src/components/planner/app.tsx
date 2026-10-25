@@ -512,7 +512,7 @@ export function PlannerApp() {
                 placeholder="Поиск"
                 aria-label="Поиск задач"
                 autoFocus
-                className="h-10 w-full rounded-xl bg-elevated pr-11 pl-10 text-base outline-none placeholder:text-subtle"
+                className="h-10 w-full rounded-card bg-card pr-11 pl-10 text-base outline-none placeholder:text-subtle"
                 suppressHydrationWarning
               />
               <button

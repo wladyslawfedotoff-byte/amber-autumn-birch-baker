@@ -47,7 +47,7 @@ function ProviderRow({ provider, index, check }: { provider: ProviderStatus; ind
         <Icon className="size-4" aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 text-[0.9375rem]">
+        <p className="flex items-center gap-2 text-body">
           <span className="truncate">
             {index + 1}. {provider.kind === "local" ? "Компьютер дома" : provider.name}
           </span>
@@ -98,13 +98,13 @@ export function AssistantSection() {
 
   return (
     <div className="text-sm">
-      <div className="flex min-h-11 items-center gap-3 rounded-2xl bg-elevated px-3 text-[0.9375rem]">
+      <div className="flex min-h-11 items-center gap-3 rounded-card bg-card px-3 text-body">
         <span className="flex-1">Режим</span>
         <span className="text-muted">{MODE[status.mode]}</span>
       </div>
 
       <p className="mt-4 mb-2 px-1 text-xs text-muted">{status.providers.length > 1 ? "Модели спрашиваются по порядку: если одна занята или выдала ошибку, отвечает следующая." : "Модель"}</p>
-      <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-elevated" aria-label="Модели помощника">
+      <ul className="divide-y divide-line overflow-hidden rounded-card bg-card" aria-label="Модели помощника">
         {status.providers.map((p, i) => (
           <ProviderRow key={p.name} provider={p} index={i} check={results[p.name]} />
         ))}
@@ -130,7 +130,7 @@ export function AssistantSection() {
       </div>
 
       {(hasLocal && hasCloud) || hasPaid ? (
-        <div className="mt-3 divide-y divide-line overflow-hidden rounded-2xl bg-elevated">
+        <div className="mt-3 divide-y divide-line overflow-hidden rounded-card bg-card">
           {hasLocal && hasCloud ? (
             <SwitchRow
               label="Разрешить облако, когда ПК выключен"

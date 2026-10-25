@@ -2,12 +2,12 @@ import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-/** iOS-settings-like group of rows. */
+/** Grouped inset card of rows (same family as the kit GroupedCard; div-based for editors). */
 export function RowGroup({ children, className, title }: { children: ReactNode; className?: string; title?: string }) {
   return (
     <div className={cn("mt-3", className)}>
-      {title ? <p className="mb-1 px-1 text-xs font-medium text-subtle">{title}</p> : null}
-      <div className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">{children}</div>
+      {title ? <p className="mb-1 px-1 text-[0.6875rem] font-semibold tracking-wide text-tertiary-label uppercase">{title}</p> : null}
+      <div className="row-card menu-card overflow-hidden rounded-card">{children}</div>
     </div>
   );
 }
@@ -39,12 +39,12 @@ export function Row({
         type="button"
         aria-expanded={children !== undefined ? Boolean(open) : undefined}
         onClick={onClick}
-        className={cn("flex min-h-11 w-full items-center gap-3 px-3 text-left text-[0.9375rem]", danger ? "text-danger" : "text-fg")}
+        className={cn("flex min-h-11 w-full items-center gap-3 px-3 text-left text-body", danger ? "text-danger" : "text-fg")}
       >
         {icon ? <span className="flex size-5 shrink-0 items-center justify-center text-subtle">{icon}</span> : null}
         <span className="shrink-0">{label}</span>
-        <span className="min-w-0 flex-1 truncate text-right text-sm text-muted">{value}</span>
-        {onClick ? <ChevronRight className={cn("size-4 shrink-0 text-subtle transition-transform", open && "rotate-90")} aria-hidden="true" /> : null}
+        <span className="min-w-0 flex-1 truncate text-right text-body text-secondary-label">{value}</span>
+        {onClick ? <ChevronRight className={cn("size-4 shrink-0 text-tertiary-label transition-transform", open && "rotate-90")} aria-hidden="true" /> : null}
       </button>
       {open && children ? <div className="px-3 pb-3">{children}</div> : null}
     </div>
@@ -54,7 +54,7 @@ export function Row({
 /** Row with a switch on the right. */
 export function SwitchRow({ label, checked, onChange, hint }: { label: ReactNode; checked: boolean; onChange: (next: boolean) => void; hint?: ReactNode }) {
   return (
-    <label className="flex min-h-11 w-full cursor-pointer items-center gap-3 px-3 text-[0.9375rem]">
+    <label className="flex min-h-11 w-full cursor-pointer items-center gap-3 px-3 text-body">
       <span className="min-w-0 flex-1">
         {label}
         {hint ? <span className="block text-xs text-muted">{hint}</span> : null}

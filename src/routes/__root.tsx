@@ -1,3 +1,4 @@
+import { THEME_COLOR } from "@/lib/design/tokens";
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { APPLE_TOUCH_ICONS, FAVICON_ICO, FAVICON_SVG, MANIFEST_URL, STARTUP_IMAGES } from "@/lib/app-icons";
 import { APP_DESCRIPTION, APP_NAME, APP_TITLE } from "@/lib/site";
@@ -17,8 +18,8 @@ export const Route = createRootRoute({
         name: "description",
         content: APP_DESCRIPTION,
       },
-      { name: "theme-color", content: "#f6f4ef", media: "(prefers-color-scheme: light)" },
-      { name: "theme-color", content: "#000000", media: "(prefers-color-scheme: dark)" },
+      { name: "theme-color", content: THEME_COLOR.light, media: "(prefers-color-scheme: light)" },
+      { name: "theme-color", content: THEME_COLOR.dark, media: "(prefers-color-scheme: dark)" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { property: "og:type", content: "website" },
       { property: "og:title", content: APP_TITLE },

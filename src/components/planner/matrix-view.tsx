@@ -1,3 +1,4 @@
+import { QUADRANT_COLORS } from "@/lib/design/tokens";
 import { shortMaintTitle } from "@/lib/maintenance/short-title";
 import { useEffect, useRef, useState, type FormEvent, type RefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { Check, Maximize2, Minimize2, MoveRight, Plus } from "lucide-react";
@@ -19,10 +20,10 @@ import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 type Quad = { id: number; title: string; short: string; hint: string; example: string; important: boolean; urgent: boolean; color: string };
 
 const QUADS: Quad[] = [
-  { id: 0, title: "Срочно и важно", short: "Сделать сейчас", hint: "Горит и важно — делайте первым.", example: "Например: оплатить счёт до вечера", important: true, urgent: true, color: "#d50000" },
-  { id: 1, title: "Важно, не срочно", short: "Запланировать", hint: "Важно для целей — дайте этому время.", example: "Например: план тренировок", important: true, urgent: false, color: "#f6a609" },
-  { id: 2, title: "Срочно, не важно", short: "Быстро / поручить", hint: "Отвлекает, но горит — сделать быстро или поручить.", example: "Например: ответить на письмо", important: false, urgent: true, color: "#039be5" },
-  { id: 3, title: "Не срочно, не важно", short: "Потом", hint: "Можно отложить или отказаться.", example: "Например: разобрать фото", important: false, urgent: false, color: "#33b679" },
+  { id: 0, title: "Срочно и важно", short: "Сделать сейчас", hint: "Горит и важно — делайте первым.", example: "Например: оплатить счёт до вечера", important: true, urgent: true, color: QUADRANT_COLORS[0] },
+  { id: 1, title: "Важно, не срочно", short: "Запланировать", hint: "Важно для целей — дайте этому время.", example: "Например: план тренировок", important: true, urgent: false, color: QUADRANT_COLORS[1] },
+  { id: 2, title: "Срочно, не важно", short: "Быстро / поручить", hint: "Отвлекает, но горит — сделать быстро или поручить.", example: "Например: ответить на письмо", important: false, urgent: true, color: QUADRANT_COLORS[2] },
+  { id: 3, title: "Не срочно, не важно", short: "Потом", hint: "Можно отложить или отказаться.", example: "Например: разобрать фото", important: false, urgent: false, color: QUADRANT_COLORS[3] },
 ];
 
 function quadOf(task: Task): number {
@@ -347,7 +348,7 @@ function MoveMenu({
         ref={boxRef}
         role="menu"
         aria-label={`Переместить «${menu.title}»`}
-        className="fixed inset-x-3 bottom-20 z-50 rounded-2xl bg-elevated p-2 shadow-lg sm:inset-x-auto sm:bottom-auto sm:w-64"
+        className="fixed inset-x-3 bottom-20 z-50 rounded-card bg-card p-2 shadow-lg sm:inset-x-auto sm:bottom-auto sm:w-64"
         style={typeof window !== "undefined" && window.innerWidth >= 640 ? { left: Math.min(menu.x, window.innerWidth - 270), top: Math.min(menu.y, window.innerHeight - 260) } : undefined}
       >
         <p className="truncate px-2 py-1 text-xs text-muted">«{menu.title}»</p>

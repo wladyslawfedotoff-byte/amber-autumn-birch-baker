@@ -269,7 +269,7 @@ export function MileageSheet({ assetId, onClose }: { assetId: string; onClose: (
       {asset.readings?.length ? (
         <div className="mt-4">
           <FieldLabel hint="Прежние показания можно поправить, если ошиблись: «км в месяц» и текущий пробег пересчитаются.">Прежние показания</FieldLabel>
-          <ul className="mt-1 divide-y divide-line rounded-xl bg-elevated">
+          <ul className="mt-1 divide-y divide-line rounded-card bg-card">
             {[...asset.readings].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 12).map((r) =>
               fixing === r.id ? (
                 <li key={r.id} className="flex items-center gap-2 px-3 py-2">
@@ -278,7 +278,7 @@ export function MileageSheet({ assetId, onClose }: { assetId: string; onClose: (
                   <Button variant="primary" disabled={cleanNumber(fixValue) === undefined} onClick={() => { if (fixReading(asset.id, r.id, fixValue)) setFixing(null); }}>Ок</Button>
                 </li>
               ) : (
-                <li key={r.id} className="flex items-center gap-2 px-3 text-[0.9375rem]">
+                <li key={r.id} className="flex items-center gap-2 px-3 text-body">
                   <span className="w-20 shrink-0 text-xs text-muted">{formatShortDay(r.date)} {r.date.slice(0, 4)}</span>
                   <span className="flex-1 tabular-nums">{groupKm(r.km)} км</span>
                   <button type="button" className="h-10 px-1 text-[0.8125rem] text-accent" onClick={() => { setFixing(r.id); setFixValue(String(r.km)); }}>Изменить</button>
@@ -354,12 +354,12 @@ export function RuleSheet({
           {car ? <Num label="Каждые" value={everyKm} onChange={setEveryKm} placeholder="10 000" suffix="км" /> : null}
           <Num label={car ? "или каждые" : "Каждые"} value={everyMonths} onChange={setEveryMonths} placeholder="12" suffix="мес." />
         </div>
-        <label className="flex min-h-11 items-center gap-3 rounded-xl bg-elevated px-3 text-[0.9375rem]">
+        <label className="flex min-h-11 items-center gap-3 rounded-card bg-card px-3 text-body">
           <span className="flex-1">В конкретную дату</span>
           <input type="checkbox" role="switch" checked={fixed} onChange={(e) => setFixed(e.target.checked)} className="ios-switch shrink-0" aria-label="В конкретную дату" />
         </label>
         {fixed ? (
-          <div className="rounded-xl bg-elevated p-3">
+          <div className="rounded-card bg-card p-3">
             <div className="flex gap-2">
               <label className="block min-w-0 flex-[2]">
                 <span className={smallLabel}>Месяц</span>
@@ -379,7 +379,7 @@ export function RuleSheet({
         ) : null}
         {car ? (
           <>
-            <label className="flex min-h-11 items-center gap-3 rounded-xl bg-elevated px-3 text-[0.9375rem]">
+            <label className="flex min-h-11 items-center gap-3 rounded-card bg-card px-3 text-body">
               <span className="flex-1">
                 Страховка или налог
                 <span className="block text-xs text-subtle">считается отдельно от обслуживания</span>
@@ -486,14 +486,14 @@ export function ServiceSheet({ assetId, preset, editing, onClose }: { assetId: s
         <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка" aria-label="Заметка" rows={2} maxLength={1000} className={cn(field, "h-auto py-2")} />
         <AssetObjects asset={asset} parentId={id} label="Чеки, файлы и ссылки записи" />
         {asset.rules.length ? (
-          <div className="rounded-xl bg-elevated px-3 py-2">
+          <div className="rounded-card bg-card px-3 py-2">
             <FieldLabel hint="Отмеченные правила начнут отсчёт от этой записи: срок «следующего раза» сдвинется, а напоминание по ним закроется.">Отсчитывать заново</FieldLabel>
             <ul className="mt-1">
               {asset.rules.map((r) => {
                 const on = guess.includes(r.id);
                 return (
                   <li key={r.id}>
-                    <label className="flex min-h-11 items-center gap-3 py-1 text-[0.9375rem]">
+                    <label className="flex min-h-11 items-center gap-3 py-1 text-body">
                       <input type="checkbox" checked={on} onChange={() => setPicked(on ? guess.filter((x) => x !== r.id) : [...guess, r.id])} className="size-5 shrink-0 accent-[var(--accent)]" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{r.title}</span>
@@ -525,7 +525,7 @@ export function EntrySheet({ assetId, entry, onClose, onEdit }: { assetId: strin
   };
   return (
     <Sheet open title={entry.title} onClose={onClose} action={{ label: "Изменить", onClick: onEdit }}>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-xl bg-elevated p-3 text-[0.9375rem]">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-card bg-card p-3 text-body">
         <dt className="text-muted">Дата</dt>
         <dd>{formatShortDay(entry.date)} {entry.date.slice(0, 4)}</dd>
         {entry.km != null ? (<><dt className="text-muted">Пробег</dt><dd>{groupKm(entry.km)} км</dd></>) : null}

@@ -21,11 +21,12 @@ export function HintButton({ open, onToggle, label = "Подсказка", class
 }
 
 /** Field label with an optional «?» hint underneath. */
-export function FieldLabel({ children, hint, className }: { children: ReactNode; hint?: ReactNode; className?: string }) {
+/** Label above a field; `caps` = a section header (same style as the kit SectionHeader). */
+export function FieldLabel({ children, hint, className, caps }: { children: ReactNode; hint?: ReactNode; className?: string; caps?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={className}>
-      <p className="flex items-center gap-1 text-xs font-medium text-subtle">
+      <p className={caps ? "flex items-center gap-1 text-[0.6875rem] font-semibold tracking-wide text-tertiary-label uppercase" : "flex items-center gap-1 text-xs font-medium text-subtle"}>
         {children}
         {hint ? <HintButton open={open} onToggle={() => setOpen(!open)} /> : null}
       </p>

@@ -1,3 +1,4 @@
+import { TASK_COLOR_HEX } from "./design/tokens.ts";
 /**
  * Task colours: our own palette of 10 colours. Stored on the task as `color` (an id
  * from this palette, null = no colour) and synced per field like any other
@@ -6,16 +7,16 @@
  * the text keeps the theme's own (readable) colour.
  */
 export const TASK_COLORS = [
-  { id: "tomato", label: "Красный", hex: "#c8483f" },
-  { id: "tangerine", label: "Оранжевый", hex: "#e07a3c" },
-  { id: "banana", label: "Жёлтый", hex: "#dcae3a" },
-  { id: "basil", label: "Зелёный", hex: "#2f7d4f" },
-  { id: "sage", label: "Мятный", hex: "#4fa57e" },
-  { id: "peacock", label: "Голубой", hex: "#3a8fc4" },
-  { id: "blueberry", label: "Синий", hex: "#4a5aa8" },
-  { id: "lavender", label: "Сиреневый", hex: "#8a90c9" },
-  { id: "grape", label: "Фиолетовый", hex: "#8a4fa3" },
-  { id: "graphite", label: "Серый", hex: "#6b6763" },
+  { id: "tomato", label: "Красный", hex: TASK_COLOR_HEX.tomato },
+  { id: "tangerine", label: "Оранжевый", hex: TASK_COLOR_HEX.tangerine },
+  { id: "banana", label: "Жёлтый", hex: TASK_COLOR_HEX.banana },
+  { id: "basil", label: "Зелёный", hex: TASK_COLOR_HEX.basil },
+  { id: "sage", label: "Мятный", hex: TASK_COLOR_HEX.sage },
+  { id: "peacock", label: "Голубой", hex: TASK_COLOR_HEX.peacock },
+  { id: "blueberry", label: "Синий", hex: TASK_COLOR_HEX.blueberry },
+  { id: "lavender", label: "Сиреневый", hex: TASK_COLOR_HEX.lavender },
+  { id: "grape", label: "Фиолетовый", hex: TASK_COLOR_HEX.grape },
+  { id: "graphite", label: "Серый", hex: TASK_COLOR_HEX.graphite },
 ] as const;
 
 export type TaskColor = (typeof TASK_COLORS)[number]["id"];

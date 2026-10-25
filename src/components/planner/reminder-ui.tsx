@@ -111,7 +111,7 @@ export function ReminderPanel({
       {hits.length === 0 ? (
         <p className="px-1 py-3 text-sm text-muted">Пока тихо. Время ставится в задаче, привычке или дате.</p>
       ) : (
-        <ul className="mt-1 max-h-80 overflow-y-auto rounded-xl bg-elevated px-2">
+        <ul className="mt-1 max-h-80 overflow-y-auto rounded-card bg-card px-2">
           {due.map((hit) => (
             <ReminderRow key={hit.key} hit={hit} onOpen={onOpen} onAck={onAck} />
           ))}

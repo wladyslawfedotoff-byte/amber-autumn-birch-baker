@@ -237,19 +237,19 @@ export const TaskRow = memo(function TaskRow({
           >
             <span
               className={cn(
-                "block text-pretty text-[0.9375rem] leading-snug",
+                "block text-pretty text-body leading-snug",
                 checked ? "text-subtle line-through decoration-subtle" : "text-fg",
               )}
             >
               {task.maint ? shortMaintTitle(task, assets) : task.title}
             </span>
             {preview ? (
-              <span className="mt-1 flex items-center gap-1 text-[0.75rem] text-muted">
+              <span className="mt-1 flex items-center gap-1 text-caption text-muted">
                 <NotebookText className="size-3 shrink-0" aria-hidden="true" />
                 <span className="min-w-0 truncate">{preview}</span>
               </span>
             ) : null}
-            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] leading-4 text-muted empty:hidden">
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption leading-4 text-muted empty:hidden">
               {ticked ? <span className="text-ok">отмечено · дальше {task.due ? dueLabel(task.due, today) : "—"}</span> : null}
               {showDue && task.due && !ticked ? (
                 task.maint && !checked ? (
@@ -305,7 +305,7 @@ export const TaskRow = memo(function TaskRow({
               title={open ? "Свернуть подзадачи" : "Показать подзадачи"}
               onClick={() => setOpen(!open)}
               className={cn(
-                "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-2 text-[0.75rem] tabular-nums",
+                "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-2 text-caption tabular-nums",
                 progress.done === progress.total ? "text-accent" : "text-muted",
               )}
             >
@@ -422,7 +422,7 @@ export function AddTaskForm({
   return (
     <div className={className}>
       <form
-        className="card-lift flex items-center gap-2 rounded-2xl bg-elevated pr-1 pl-3"
+        className="card-lift flex items-center gap-2 rounded-card bg-card pr-1 pl-3"
         onSubmit={(event) => {
           event.preventDefault();
           const title = value.trim();

@@ -16,9 +16,9 @@ function Rows({ title, rows, hint }: { title: string; rows: WarrantyRow[]; hint?
       </FieldLabel>
       <ul className="space-y-2">
         {rows.map((r) => (
-          <li key={`${r.assetId}-${r.subject.id}`} className="flex items-center gap-2 rounded-xl bg-elevated px-3 py-2">
+          <li key={`${r.assetId}-${r.subject.id}`} className="flex items-center gap-2 rounded-card bg-card px-3 py-2">
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[0.9375rem] font-semibold">{r.subject.part ? r.subject.part.name : r.assetName}</span>
+              <span className="block truncate text-body font-semibold">{r.subject.part ? r.subject.part.name : r.assetName}</span>
               <span className="block truncate text-xs text-subtle">{[r.subject.part ? r.assetName : null, r.state.until ? `до ${day(r.state.until)}` : null].filter(Boolean).join(" · ")}</span>
             </span>
             <WarrBadge state={r.state} short />
@@ -32,13 +32,13 @@ function Rows({ title, rows, hint }: { title: string; rows: WarrantyRow[]; hint?
 /** Tech only: warranties, money put in, age. Cars, fuel and mileage never show up here. */
 export function TechStats({ assets }: { assets: Asset[] }) {
   const s = techSummary(assets, todayIso());
-  if (!assets.length) return <p className="rounded-xl bg-elevated px-3 py-3 text-[0.8125rem] text-muted">Добавьте технику — здесь появятся гарантии, вложенные деньги и возраст. Например: «Домашний ПК», компонент «Видеокарта, 58 900 ₽, гарантия 36 мес.».</p>;
+  if (!assets.length) return <p className="rounded-card bg-card px-3 py-3 text-[0.8125rem] text-muted">Добавьте технику — здесь появятся гарантии, вложенные деньги и возраст. Например: «Домашний ПК», компонент «Видеокарта, 58 900 ₽, гарантия 36 мес.».</p>;
   const maxYear = Math.max(1, ...s.byYear.map(([, v]) => v));
   const service = Object.entries(spendByYear(assets.flatMap((a) => a.log))).sort((a, b) => (a[0] < b[0] ? 1 : -1));
   const sorted = [...s.items].sort((a, b) => b.invested - a.invested).filter((i) => i.invested > 0 || i.age);
   return (
     <>
-      {s.soon.length || s.active.length || s.expired.length ? null : <p className="rounded-xl bg-elevated px-3 py-3 text-[0.8125rem] text-muted">Гарантий пока нет. Укажите срок в карточке или в компоненте — здесь будет обзор: что скоро закончится, что действует.</p>}
+      {s.soon.length || s.active.length || s.expired.length ? null : <p className="rounded-card bg-card px-3 py-3 text-[0.8125rem] text-muted">Гарантий пока нет. Укажите срок в карточке или в компоненте — здесь будет обзор: что скоро закончится, что действует.</p>}
       <Rows title="Скоро закончатся" rows={s.soon} />
       <Rows title="Действует" rows={s.active} />
       <Rows title="Закончилась" rows={s.expired} />
@@ -47,7 +47,7 @@ export function TechStats({ assets }: { assets: Asset[] }) {
           Вложено в технику
         </FieldLabel>
         {s.invested > 0 ? (
-          <div className="rounded-xl bg-elevated px-4 py-3">
+          <div className="rounded-card bg-card px-4 py-3">
             <p className="text-[1.5rem] leading-tight font-bold tabular-nums">{money(s.invested)}</p>
             <ul className="mt-2 space-y-2">
               {s.byYear.map(([y, v]) => (
@@ -62,7 +62,7 @@ export function TechStats({ assets }: { assets: Asset[] }) {
             </ul>
           </div>
         ) : (
-          <p className="rounded-xl bg-elevated px-3 py-3 text-[0.8125rem] text-muted">Укажите цену и дату покупки — появятся суммы по годам.</p>
+          <p className="rounded-card bg-card px-3 py-3 text-[0.8125rem] text-muted">Укажите цену и дату покупки — появятся суммы по годам.</p>
         )}
       </section>
       {sorted.length ? (
@@ -72,12 +72,12 @@ export function TechStats({ assets }: { assets: Asset[] }) {
           </FieldLabel>
           <ul className="space-y-2">
             {sorted.map((i) => (
-              <li key={i.asset.id} className="flex items-center gap-2 rounded-xl bg-elevated px-3 py-2">
+              <li key={i.asset.id} className="flex items-center gap-2 rounded-card bg-card px-3 py-2">
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[0.9375rem] font-semibold">{i.asset.name}</span>
+                  <span className="block truncate text-body font-semibold">{i.asset.name}</span>
                   <span className="block truncate text-xs text-subtle">{[i.age, i.perYear ? `≈ ${money(Math.round(i.perYear))} в год` : null].filter(Boolean).join(" · ") || "без даты покупки"}</span>
                 </span>
-                {i.invested > 0 ? <span className="shrink-0 text-[0.9375rem] font-semibold tabular-nums">{money(i.invested)}</span> : null}
+                {i.invested > 0 ? <span className="shrink-0 text-body font-semibold tabular-nums">{money(i.invested)}</span> : null}
               </li>
             ))}
           </ul>

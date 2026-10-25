@@ -109,12 +109,12 @@ export function QuickAddSection({ onChange }: { onChange?: () => void }) {
       </div>
 
       {devices?.length ? (
-        <ul className="card-lift mt-3 divide-y divide-line overflow-hidden rounded-2xl bg-elevated">
+        <ul className="card-lift mt-3 divide-y divide-line overflow-hidden rounded-card bg-card">
           {devices.map((d) => (
             <li key={d.id} className="flex min-h-12 items-center gap-3 px-3">
               <Smartphone className="size-4 shrink-0 text-muted" aria-hidden="true" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[0.9375rem]">{d.name}</span>
+                <span className="block truncate text-body">{d.name}</span>
                 <span className="block truncate text-xs text-subtle">{usedLabel(d.lastUsedAt)}</span>
               </span>
               <button type="button" onClick={() => void revoke(d.id)} className="h-9 px-2 text-sm text-danger">
@@ -132,7 +132,7 @@ export function QuickAddSection({ onChange }: { onChange?: () => void }) {
         <div className="mt-3 rounded-2xl border border-accent/40 bg-accent/5 p-3">
           <p className="text-xs text-muted">Ключ показывается один раз — сразу вставьте его в команду.</p>
           <p className="mt-1 font-mono text-sm break-all select-all">{fresh}</p>
-          <button type="button" onClick={() => copy(fresh, "Ключ скопирован.")} className="mt-2 flex h-9 items-center gap-2 rounded-xl bg-elevated px-3 text-sm">
+          <button type="button" onClick={() => copy(fresh, "Ключ скопирован.")} className="mt-2 flex h-9 items-center gap-2 rounded-card bg-card px-3 text-sm">
             <Copy className="size-4" aria-hidden="true" /> Скопировать ключ
           </button>
         </div>
