@@ -102,7 +102,7 @@ function AgendaDays({
             <ChevronLeft className="size-5" />
           </button>
           <div className="min-w-0 flex-1 text-center leading-tight">
-            <p className="truncate text-[0.9375rem] font-semibold">{formatRange(days[0]!, days[days.length - 1]!)}</p>
+            <p className="truncate text-body font-semibold">{formatRange(days[0]!, days[days.length - 1]!)}</p>
             {start !== today ? (
               <button type="button" className="text-[0.6875rem] text-accent" onClick={() => setStart(today)}>
                 к сегодня
@@ -145,7 +145,7 @@ function AgendaDays({
               {special.map((item) => {
                 const age = ageLabel(item, day, today);
                 return (
-                  <p key={item.id} className="mb-1 flex h-9 items-center gap-2 rounded-xl bg-elevated px-3 text-sm">
+                  <p key={item.id} className="mb-1 flex h-9 items-center gap-2 rounded-card bg-card px-3 text-sm">
                     <span aria-hidden="true">{iconOf(item)}</span>
                     <span className="min-w-0 flex-1 truncate">{item.title}</span>
                     {age ? <span className="text-xs text-muted">{age}</span> : null}

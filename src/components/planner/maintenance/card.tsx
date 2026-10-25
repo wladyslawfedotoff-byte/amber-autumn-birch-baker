@@ -1,3 +1,6 @@
+import { ListRow } from "@/components/ui/kit";
+import type { IconColor } from "@/lib/design/tokens";
+import { Fuel, Wallet, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Check, Paperclip, Pencil, Plus, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,17 +54,17 @@ function Section({ title, hint, action, fold, children }: { title: string; hint?
   return (
     <section className="mt-4">
       <div className="flex items-center">
-        {fold ? (
-          <button type="button" onClick={toggle} aria-expanded={open} aria-label={`${title}: ${open ? "свернуть" : "развернуть"}`} className="-my-2 -ml-1 flex h-11 items-center pl-1 text-subtle">
-            <ChevronDown className={cn("size-4 transition-transform", !open && "-rotate-90")} aria-hidden="true" />
-          </button>
-        ) : null}
-        <FieldLabel hint={hint} className="flex-1">
+        <FieldLabel hint={hint} caps className="flex-1 px-1">
           {title}
           {fold && !open && fold.summary ? <span className="ml-2 font-normal normal-case text-subtle">· {fold.summary}</span> : null}
         </FieldLabel>
+        {fold ? (
+          <button type="button" onClick={toggle} aria-expanded={open} aria-label={`${title}: ${open ? "свернуть" : "развернуть"}`} className="-my-2 flex size-11 items-center justify-center text-tertiary-label">
+            <ChevronDown className={cn("size-4 transition-transform duration-[var(--dur-fast)]", !open && "-rotate-90")} aria-hidden="true" />
+          </button>
+        ) : null}
         {action ? (
-          <button type="button" onClick={() => { if (!open) toggle(); action.onClick(); }} className="-my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium text-accent">
+          <button type="button" onClick={() => { if (!open) toggle(); action.onClick(); }} className="menu-add -my-2 flex h-11 items-center gap-1 px-1 text-[0.8125rem] font-medium">
             <Plus className="size-3.5" aria-hidden="true" />
             {action.label}
           </button>
@@ -73,15 +76,13 @@ function Section({ title, hint, action, fold, children }: { title: string; hint?
 }
 
 /** A block with its own heading (fuel, ownership): folded to one row, opened in place. */
-function FoldBlock({ id, title, summary, children }: { id: string; title: string; summary: string; children: React.ReactNode }) {
+function FoldBlock({ id, title, summary, icon, color, children }: { id: string; title: string; summary: string; icon: LucideIcon; color: IconColor; children: React.ReactNode }) {
   const [open, toggle] = useFold(id, false);
   if (!open)
     return (
-      <button type="button" onClick={toggle} aria-expanded={false} className="mt-3 flex h-11 w-full items-center gap-1 rounded-xl bg-elevated px-3 text-left text-[0.8125rem]">
-        <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
-        <span className="font-medium text-fg">{title}</span>
-        <span className="ml-auto truncate text-muted tabular-nums">{summary}</span>
-      </button>
+      <ul className="menu-card mt-3 overflow-hidden rounded-card">
+        <ListRow icon={icon} color={color} title={title} value={summary} onClick={toggle} />
+      </ul>
     );
   return (
     <div>
@@ -99,20 +100,20 @@ function CarSummary({ asset, lead, onMileage }: { asset: Asset; lead: { title: s
   const service = spendByYear(asset.log)[year] ?? 0;
   const fuel = (asset.fuel ?? []).filter((f) => f.date.startsWith(year)).reduce((n, f) => n + (f.sum ?? 0), 0);
   return (
-    <section aria-label="Сводка" className="mt-3 grid grid-cols-3 divide-x divide-line/60 rounded-xl bg-elevated" data-testid="car-summary">
+    <section aria-label="Сводка" className="mt-3 grid grid-cols-3 divide-x divide-line/60 rounded-card bg-card" data-testid="car-summary">
       <button type="button" onClick={onMileage} className="min-w-0 px-3 py-2 text-left">
         <span className="block text-[0.6875rem] text-muted">Пробег</span>
-        <span className="block truncate text-[0.9375rem] font-semibold tabular-nums">{asset.km != null ? `${groupKm(asset.km)} км` : "указать"}</span>
+        <span className="block truncate text-body font-semibold tabular-nums">{asset.km != null ? `${groupKm(asset.km)} км` : "указать"}</span>
         <span className="block truncate text-[0.6875rem] text-subtle">{asset.kmAt ? formatShortDay(asset.kmAt) : "—"}</span>
       </button>
       <div className="min-w-0 px-3 py-2">
         <span className="block text-[0.6875rem] text-muted">Ближайшее</span>
-        <span className="block truncate text-[0.9375rem] font-semibold">{lead ? lead.title : "—"}</span>
+        <span className="block truncate text-body font-semibold">{lead ? lead.title : "—"}</span>
         <span className={cn("block truncate text-[0.6875rem]", lead?.status === "overdue" ? "text-danger" : lead?.status === "soon" ? "text-warn" : "text-subtle")}>{lead ? lead.text : "всё сделано"}</span>
       </div>
       <div className="min-w-0 px-3 py-2">
         <span className="block text-[0.6875rem] text-muted">Расходы {year}</span>
-        <span className="block truncate text-[0.9375rem] font-semibold tabular-nums">{money(service + fuel)}</span>
+        <span className="block truncate text-body font-semibold tabular-nums">{money(service + fuel)}</span>
         <span className="block truncate text-[0.6875rem] text-subtle">топливо {money(fuel)}</span>
       </div>
     </section>
@@ -194,7 +195,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
       ) : null}
 
       {car ? (
-        <FoldBlock id={`${asset.id}:fuel`} title="Заправки" summary={(asset.fuel ?? []).length ? `${(asset.fuel ?? []).length} · последняя ${formatShortDay([...(asset.fuel ?? [])].sort((a, b) => (a.date < b.date ? 1 : -1))[0]!.date)}` : "пока нет"}>
+        <FoldBlock id={`${asset.id}:fuel`} icon={Fuel} color="orange" title="Заправки" summary={(asset.fuel ?? []).length ? `${(asset.fuel ?? []).length} · последняя ${formatShortDay([...(asset.fuel ?? [])].sort((a, b) => (a.date < b.date ? 1 : -1))[0]!.date)}` : "пока нет"}>
           <FuelBlock asset={asset} />
         </FoldBlock>
       ) : (
@@ -212,9 +213,9 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
               const progress = progressOf(r, state);
               return (
                 <li key={r.id}>
-                  <button type="button" onClick={() => setRule(r)} className="w-full rounded-xl bg-elevated px-3 py-2 text-left">
+                  <button type="button" onClick={() => setRule(r)} className="w-full rounded-card bg-card px-3 py-2 text-left">
                     <span className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold">{r.title}</span>
+                      <span className="min-w-0 flex-1 truncate text-body font-semibold">{r.title}</span>
                       {state.finished ? <Badge status="ok">сделано</Badge> : <Badge status={state.status}>{stateText(r, state)}</Badge>}
                     </span>
                     <span className="mt-1 block text-xs text-subtle">{ruleLine(r)}</span>
@@ -242,9 +243,9 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
             <ul className="space-y-2">
               {insRules.map(({ rule: r, state }) => (
                 <li key={r.id}>
-                  <button type="button" onClick={() => setRule(r)} className="w-full rounded-xl bg-elevated px-3 py-2 text-left">
+                  <button type="button" onClick={() => setRule(r)} className="w-full rounded-card bg-card px-3 py-2 text-left">
                     <span className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold">{r.title}</span>
+                      <span className="min-w-0 flex-1 truncate text-body font-semibold">{r.title}</span>
                       {r.cost ? <span className="text-[0.8125rem] text-muted tabular-nums">{money(r.cost)}</span> : null}
                       {state.finished ? <Badge status="ok">сделано</Badge> : <Badge status={state.status}>{stateText(r, state)}</Badge>}
                     </span>
@@ -279,7 +280,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
             {open.map((p) => (
               <li key={p.id} className="flex items-start gap-2 rounded-lg border-l-[3px] border-warn bg-elevated py-2 pr-2 pl-3">
                 <TriangleAlert className="mt-1 size-4 shrink-0 text-warn" aria-hidden="true" />
-                <button type="button" onClick={() => setPainSheet(p.id)} aria-label={`Изменить: ${p.text}`} className="min-w-0 flex-1 text-left text-[0.9375rem]">
+                <button type="button" onClick={() => setPainSheet(p.id)} aria-label={`Изменить: ${p.text}`} className="min-w-0 flex-1 text-left text-body">
                   <span className="block break-words">{p.text}</span>
                   {p.todo ? <span className="block text-[0.8125rem] break-words text-muted">Сделать: {p.todo}</span> : null}
                   <span className="block text-xs text-subtle">
@@ -334,9 +335,9 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
               const files = [asset.attachments, asset.links, asset.contacts].reduce((n, list) => n + (list ?? []).filter((a) => a.entryId === e.id).length, 0);
               return (
                 <li key={e.id}>
-                  <button type="button" onClick={() => setEntry(e.id)} className="flex w-full items-center gap-2 rounded-xl bg-elevated px-3 py-2 text-left">
+                  <button type="button" onClick={() => setEntry(e.id)} className="flex w-full items-center gap-2 rounded-card bg-card px-3 py-2 text-left">
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[0.9375rem] font-semibold">{e.title}</span>
+                      <span className="block truncate text-body font-semibold">{e.title}</span>
                       <span className="block truncate text-xs text-subtle">
                         {[`${formatShortDay(e.date)}${e.date.slice(0, 4) !== String(new Date().getFullYear()) ? ` ${e.date.slice(0, 4)}` : ""}`, e.km != null ? `${groupKm(e.km)} км` : null, e.place ? `«${e.place}»` : null].filter(Boolean).join(" · ")}
                         {files ? (
@@ -347,7 +348,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
                         ) : null}
                       </span>
                     </span>
-                    {e.cost ? <span className="shrink-0 text-[0.9375rem] font-semibold tabular-nums">{money(e.cost)}</span> : null}
+                    {e.cost ? <span className="shrink-0 text-body font-semibold tabular-nums">{money(e.cost)}</span> : null}
                     <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden="true" />
                   </button>
                 </li>
@@ -365,7 +366,7 @@ export function AssetCardView({ asset, onBack, onStats, onOpenTask, startService
       </Section>
 
       {car ? (
-        <FoldBlock id={`${asset.id}:own`} title="Владение" summary={`расходы по годам${spend.length ? ` · ${spend[0]![0]}: ${money(spend[0]![1])}` : ""}`}>
+        <FoldBlock id={`${asset.id}:own`} icon={Wallet} color="green" title="Владение" summary={`расходы по годам${spend.length ? ` · ${spend[0]![0]}: ${money(spend[0]![1])}` : ""}`}>
           <OwnershipBlock asset={asset} />
         </FoldBlock>
       ) : null}

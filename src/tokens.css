@@ -1,0 +1,141 @@
+/*
+ * Design tokens (1.20): the only place with raw colour values in CSS.
+ * TS mirror: src/lib/design/tokens.ts. Check: node scripts/check-raw-colors.mjs
+ */
+:root {
+  --bg: #e8e4db;
+  --surface: #f6f4ef;
+  --elevated: #fffcf7;
+  --fg: #1c1d1a;
+  --muted: #5c5f59;
+  --subtle: #62655e;
+  --line: #ddd8ce;
+  --accent: #243e4a;
+  --accent-fg: #f4f2eb;
+  --danger: #8d3b3b;
+  --on-danger: #f7f3ee;
+  --warn: #8a5a2a;
+  --ok: #2c6b4a;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-border:
+    0 0 0 1px color-mix(in oklab, var(--fg) 8%, transparent),
+    0 1px 2px -1px color-mix(in oklab, var(--fg) 6%, transparent);
+
+  /* Semantic aliases (iOS naming). */
+  --surface-2: var(--elevated);
+  --card: var(--elevated);
+  --separator: var(--line);
+  --label: var(--fg);
+  --secondary-label: var(--muted);
+  --tertiary-label: var(--subtle);
+  --success: var(--ok);
+  --warning: var(--warn);
+  --info: #2a5f9e;
+  --link: #0062cc;
+  --scrim: rgb(0 0 0 / 0.22);
+  --knob: #ffffff;
+  --on-badge: #ffffff;
+  /* Icon palette: solid badges with a white glyph. */
+  --icon-blue: #0a84ff;
+  --icon-orange: #ff9500;
+  --icon-green: #34c759;
+  --icon-red: #ff3b30;
+  --icon-purple: #af52de;
+  --icon-teal: #30b0c7;
+  --icon-indigo: #5856d6;
+  --icon-pink: #ff2d55;
+  --icon-grey: #8e8e93;
+  --icon-mint: #00c7be;
+  --icon-brown: #a2845e;
+  /* Spacing: 4/8 grid. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  /* Radii. */
+  --r-sm: 0.375rem;
+  --r-md: 0.625rem;
+  --r-lg: 0.75rem;
+  --r-card: 0.75rem;
+  --r-sheet: 1rem;
+  --r-badge: 25%;
+  /* Elevation. */
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.25);
+  --shadow-sheet: 0 -8px 30px rgb(0 0 0 / 0.18);
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.22);
+  /* Type scale (rem, so iOS text size scales it): 12 / 15 / 20 / 34. */
+  --fs-caption: 0.75rem;
+  --fs-body: 0.9375rem;
+  --fs-title: 1.25rem;
+  --fs-large: 2.125rem;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  /* Motion. */
+  --dur-fast: 150ms;
+  --dur-base: 250ms;
+  --dur-slow: 400ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* Icons and tap targets. */
+  --icon-sm: 1rem;
+  --icon-md: 1.125rem;
+  --icon-lg: 1.25rem;
+  --badge: 1.75rem;
+  --badge-lg: 2rem;
+  --icon-stroke: 1.75;
+  --row-h: 2.75rem;
+  --tap: 2.75rem;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  /* 1.18: true black for OLED, raised surfaces a step lighter (iOS grouped style). */
+  --bg: #000000;
+  --surface: #000000;
+  --elevated: #1c1c1e;
+  --fg: #f3f1ea;
+  --muted: #c2c4bc;
+  --subtle: #9a9d95;
+  --line: #38383a;
+  --accent: #d7e0da;
+  --accent-fg: #141614;
+  --danger: #e7b0b0;
+  --on-danger: #2a1414;
+  --warn: #e2c39a;
+  --ok: #a9d2bc;
+  --shadow-border: 0 0 0 1px color-mix(in oklab, var(--fg) 14%, transparent);
+
+  --card: var(--elevated);
+  --info: #9cc1f0;
+  --link: #409cff;
+  --scrim: rgb(0 0 0 / 0.5);
+  color-scheme: dark;
+}
+
+:root[data-accent="blue"] { --accent: #34609f; --accent-fg: #f4f7fb; }
+:root[data-accent="teal"] { --accent: #1f6f73; --accent-fg: #f2f7f7; }
+:root[data-accent="green"] { --accent: #2f6b4f; --accent-fg: #f3f7f4; }
+:root[data-accent="orange"] { --accent: #95511f; --accent-fg: #fbf6f1; }
+:root[data-accent="red"] { --accent: #8d3b3b; --accent-fg: #fbf4f4; }
+:root[data-accent="purple"] { --accent: #5c4d8a; --accent-fg: #f6f4fb; }
+:root[data-accent="pink"] { --accent: #8d4d68; --accent-fg: #fbf4f7; }
+
+:root[data-theme="dark"][data-accent="blue"] { --accent: #9eb6e0; --accent-fg: #12151c; }
+:root[data-theme="dark"][data-accent="teal"] { --accent: #9fd4d4; --accent-fg: #101616; }
+:root[data-theme="dark"][data-accent="green"] { --accent: #a9d2bc; --accent-fg: #121614; }
+:root[data-theme="dark"][data-accent="orange"] { --accent: #e2c09a; --accent-fg: #1a1410; }
+:root[data-theme="dark"][data-accent="red"] { --accent: #e7b0b0; --accent-fg: #1a1010; }
+:root[data-theme="dark"][data-accent="purple"] { --accent: #c9bfe0; --accent-fg: #141218; }
+:root[data-theme="dark"][data-accent="pink"] { --accent: #e7b8cb; --accent-fg: #1a1014; }
+
+.swatch-ink { background: #243e4a; }
+.swatch-blue { background: #34609f; }
+.swatch-teal { background: #1f6f73; }
+.swatch-green { background: #2f6b4f; }
+.swatch-orange { background: #95511f; }
+.swatch-red { background: #8d3b3b; }
+.swatch-purple { background: #5c4d8a; }
+.swatch-pink { background: #8d4d68; }

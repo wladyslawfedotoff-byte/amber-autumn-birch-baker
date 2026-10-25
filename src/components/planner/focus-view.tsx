@@ -92,7 +92,7 @@ export function FocusView() {
       </p>
       {focus.note ? <p className="mt-2 text-center text-sm text-fg">{focus.note}</p> : null}
 
-      <label className="mt-6 flex min-h-11 w-full items-center gap-3 rounded-xl bg-elevated pl-3 text-[0.9375rem]">
+      <label className="mt-6 flex min-h-11 w-full items-center gap-3 rounded-card bg-card pl-3 text-body">
         <span className="shrink-0">Задача</span>
         <select
           value={focus.taskId ?? ""}
@@ -109,7 +109,7 @@ export function FocusView() {
         </select>
       </label>
       {habit ? (
-        <div className="mt-2 flex min-h-11 w-full items-center gap-3 rounded-xl bg-elevated pl-3 text-[0.9375rem]">
+        <div className="mt-2 flex min-h-11 w-full items-center gap-3 rounded-card bg-card pl-3 text-body">
           <span className="shrink-0">Привычка</span>
           <span className="min-w-0 flex-1 truncate text-right text-muted">
             {habit.icon ? `${habit.icon} ` : ""}

@@ -94,10 +94,10 @@ function ConsentScreen({ status, provider, onAccept, onCancel }: { status: Assis
           </ConsentLine>
         ) : null}
       </ul>
-      <button type="button" onClick={onAccept} className="mt-6 h-11 rounded-full bg-accent text-[0.9375rem] font-medium text-accent-fg">
+      <button type="button" onClick={onAccept} className="mt-6 h-11 rounded-full bg-accent text-body font-medium text-accent-fg">
         Понятно, начать
       </button>
-      <button type="button" onClick={onCancel} className="mt-1 h-11 text-[0.9375rem] text-muted">
+      <button type="button" onClick={onCancel} className="mt-1 h-11 text-body text-muted">
         Не сейчас
       </button>
     </div>
@@ -106,7 +106,7 @@ function ConsentScreen({ status, provider, onAccept, onCancel }: { status: Assis
 
 function ConsentLine({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <li className="rounded-2xl bg-elevated p-3">
+    <li className="rounded-card bg-card p-3">
       <p className="font-medium">{title}</p>
       <p className="mt-1 text-muted">{children}</p>
     </li>
@@ -192,8 +192,8 @@ function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; on
   const timeline = proposal.kind === "plan" && updates.length === items.length && items.length > 0;
   const remove = (key: string) => setItems(items.filter((it) => it.key !== key));
   return (
-    <div className="mt-2 overflow-hidden rounded-2xl bg-elevated" data-proposal={proposal.id}>
-      <p className="flex items-center gap-2 px-3 pt-2 pb-1 text-[0.9375rem] font-semibold">
+    <div className="mt-2 overflow-hidden rounded-card bg-card" data-proposal={proposal.id}>
+      <p className="flex items-center gap-2 px-3 pt-2 pb-1 text-body font-semibold">
         <Sparkles className="size-4 text-accent" aria-hidden="true" />
         <span className="flex-1">{pending ? proposal.title.replace(/\d+/, String(items.length)) : proposal.title.replace(/\?$/, "")}</span>
       </p>
@@ -209,10 +209,10 @@ function ProposalCard({ proposal, onApply, onDismiss }: { proposal: Proposal; on
                   rows={Math.min(3, Math.max(1, Math.ceil(itemTitle(item).length / 34)))}
                   aria-label="Название"
                   onChange={(event) => setItems(items.map((it) => (it.key === item.key ? withTitle(it, event.target.value.replace(/\n/g, " ")) : it)))}
-                  className="block w-full resize-none bg-transparent text-[0.9375rem] leading-snug outline-none [field-sizing:content]"
+                  className="block w-full resize-none bg-transparent text-body leading-snug outline-none [field-sizing:content]"
                 />
               ) : (
-                <span className={cn("block text-[0.9375rem]", proposal.status === "dismissed" && "text-muted line-through")}>{itemTitle(item)}</span>
+                <span className={cn("block text-body", proposal.status === "dismissed" && "text-muted line-through")}>{itemTitle(item)}</span>
               )}
               {item.op === "update" && diffLines(item).length ? (
                 <DiffRows item={item} done={!pending} />
@@ -300,7 +300,7 @@ function dayTitle(day: string): string {
 function FailedActions({ message, canQueue, onRetry, onPostpone, onCancel }: { message: ChatMessage; canQueue: boolean; onRetry: () => void; onPostpone: () => void; onCancel: () => void }) {
   if (message.queued) {
     return (
-      <div className="mt-2 flex items-center gap-2 rounded-2xl bg-elevated py-2 pr-2 pl-3 text-[0.8125rem]" role="status">
+      <div className="mt-2 flex items-center gap-2 rounded-card bg-card py-2 pr-2 pl-3 text-[0.8125rem]" role="status">
         <Clock className="size-4 shrink-0 text-accent" aria-hidden="true" />
         <span className="min-w-0 flex-1">{message.queued.offline ? "Спрошу, когда появится связь" : `В очереди, попробую в ${hm(message.queued.nextAt)}`}</span>
         <button type="button" onClick={onCancel} className="h-8 shrink-0 rounded-full px-3 text-muted">
@@ -689,13 +689,13 @@ export function AssistView({
             <p className="mt-2 max-w-xs text-[0.875rem] text-muted" title="Без вашего «Применить» ничего не изменится">
               Спросите про дела или вставьте текст — предложу задачи.
             </p>
-            <p className="mt-1 max-w-xs text-[0.75rem] text-subtle">Например: «купить шины до 1 ноября и записаться на шиномонтаж». Без «Применить» ничего не меняю.</p>
+            <p className="mt-1 max-w-xs text-caption text-subtle">Например: «купить шины до 1 ноября и записаться на шиномонтаж». Без «Применить» ничего не меняю.</p>
           </div>
         ) : (
           <ul className="space-y-3 pt-2" aria-live="polite">            {messages.map((m) =>
               m.role === "user" ? (
                 <li key={m.id} className="flex justify-end">
-                  <p className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-3 py-2 text-[0.9375rem] whitespace-pre-wrap text-accent-fg">{m.text}</p>
+                  <p className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-3 py-2 text-body whitespace-pre-wrap text-accent-fg">{m.text}</p>
                 </li>
               ) : (
                 <li key={m.id} className="max-w-[95%]">
@@ -703,7 +703,7 @@ export function AssistView({
                     <AnswerViewCard view={m.view} onOpen={onOpen} />
                   ) : m.text ? (
                     m.error ? (
-                      <p className="text-[0.9375rem] whitespace-pre-wrap text-danger">{m.text}</p>
+                      <p className="text-body whitespace-pre-wrap text-danger">{m.text}</p>
                     ) : m.proposals?.some((p) => p.kind === "plan") ? (
                       withoutPlanLines(m.text) ? <AssistMarkdown text={withoutPlanLines(m.text)} /> : null
                     ) : (
@@ -720,7 +720,7 @@ export function AssistView({
                     <ProposalCard key={p.id} proposal={p} onApply={(items) => apply(m, p, items)} onDismiss={() => dismiss(m, p)} />
                   ))}
                   {m.chips?.length && !m.error && m.id === messages.at(-1)?.id ? <ChipRow chips={m.chips} disabled={busy} onChip={(chip) => takeChip(m, chip)} /> : null}
-                  {m.source && !m.error && (m.text || m.proposals?.length) ? <p className="mt-1 truncate text-[0.6875rem] text-muted/80">{m.source}</p> : null}
+                  {m.source && !m.error && (m.text || m.proposals?.length) ? <p className="mt-1 truncate text-[0.6875rem] text-muted">{m.source}</p> : null}
                   {m.error && !busy && m.id === messages.at(-1)?.id ? (
                     <FailedActions message={m} canQueue={Boolean(m.retryable && (conversationId || m.offline))} onRetry={() => retry(m)} onPostpone={() => void postpone(m)} onCancel={() => void cancelQueued(m)} />
                   ) : null}
@@ -823,7 +823,7 @@ export function AssistView({
                     onChange={(event) => setHistoryQuery(event.target.value)}
                     placeholder="Найти беседу"
                     aria-label="Найти беседу"
-                    className="h-10 w-full rounded-xl bg-elevated pr-3 pl-9 text-base outline-none placeholder:text-subtle"
+                    className="h-10 w-full rounded-card bg-card pr-3 pl-9 text-base outline-none placeholder:text-subtle"
                   />
                 </label>
               </div>
@@ -836,11 +836,11 @@ export function AssistView({
                   historyGroups.map((group) => (
                     <section key={group.day} className="mb-3">
                       <p className="mb-1 px-1 text-[0.6875rem] font-semibold tracking-wide text-subtle uppercase">{dayTitle(group.day)}</p>
-                      <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+                      <ul className="divide-y divide-line overflow-hidden rounded-card bg-card">
                         {group.items.map((c) => (
                           <li key={c.id} className="flex items-center">
                             <button type="button" onClick={() => void openConversation(c.id)} className={cn("min-w-0 flex-1 px-3 py-2 text-left", c.id === conversationId && "text-accent")}>
-                              <span className="block truncate text-[0.9375rem]">{c.title}</span>
+                              <span className="block truncate text-body">{c.title}</span>
                               <span className="block text-xs text-muted tabular-nums">{hm(c.updatedAt)}</span>
                             </button>
                             {confirmDelete === c.id ? (

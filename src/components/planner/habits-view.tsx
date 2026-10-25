@@ -110,7 +110,7 @@ export function HabitsView({ onOpenFocus }: { onOpenFocus?: () => void }) {
       {groups.map(({ section, items }) => (
         <section key={section.id} className="mt-2" data-section={section.id}>
           <h3 className="px-1 pb-1 text-[0.6875rem] font-semibold tracking-wide text-subtle uppercase">{section.label}</h3>
-          <ul className="overflow-hidden rounded-xl bg-elevated">
+          <ul className="overflow-hidden rounded-card bg-card">
             {items.map((habit, index) => (
               <HabitRow
                 key={habit.id}
@@ -231,8 +231,8 @@ function HabitRow({
           <HabitIcon habit={habit} />
         </button>
         <button type="button" onClick={onOpen} className={cn("min-w-0 flex-1 py-2 text-left", !due && state !== "done" && "opacity-60")}>
-          <span className={cn("block truncate text-[0.9375rem] leading-5", state === "done" && "text-muted")}>{habit.name}</span>
-          {sub ? <span className="block truncate text-[0.75rem] leading-4 text-muted">{sub}</span> : null}
+          <span className={cn("block truncate text-body leading-5", state === "done" && "text-muted")}>{habit.name}</span>
+          {sub ? <span className="block truncate text-caption leading-4 text-muted">{sub}</span> : null}
         </button>
         <span className="sr-only">
           <button type="button" onClick={() => moveHabit(habit.id, -1)} disabled={index === 0}>

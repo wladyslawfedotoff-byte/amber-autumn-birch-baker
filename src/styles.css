@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* 1.20: every colour, radius, shadow, size and timing lives in tokens.css. */
+@import "./tokens.css";
 /* 1.18: system font (SF on Apple devices) — nothing to download on start. */
 /* Never scan build output: the SSR build would otherwise pick up class names
    from the client bundle and emit a different CSS file (hash mismatch → the
@@ -6,70 +8,6 @@
 @source not "../.output";
 @source not "../node_modules/.nitro";
 
-:root {
-  --bg: #e8e4db;
-  --surface: #f6f4ef;
-  --elevated: #fffcf7;
-  --fg: #1c1d1a;
-  --muted: #5c5f59;
-  --subtle: #6c6f68;
-  --line: #ddd8ce;
-  --accent: #243e4a;
-  --accent-fg: #f4f2eb;
-  --danger: #8d3b3b;
-  --on-danger: #f7f3ee;
-  --warn: #8a5a2a;
-  --ok: #2c6b4a;
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --shadow-border:
-    0 0 0 1px color-mix(in oklab, var(--fg) 8%, transparent),
-    0 1px 2px -1px color-mix(in oklab, var(--fg) 6%, transparent);
-  color-scheme: light;
-}
-
-:root[data-theme="dark"] {
-  /* 1.18: true black for OLED, raised surfaces a step lighter (iOS grouped style). */
-  --bg: #000000;
-  --surface: #000000;
-  --elevated: #1c1c1e;
-  --fg: #f3f1ea;
-  --muted: #c2c4bc;
-  --subtle: #9a9d95;
-  --line: #38383a;
-  --accent: #d7e0da;
-  --accent-fg: #141614;
-  --danger: #e7b0b0;
-  --on-danger: #2a1414;
-  --warn: #e2c39a;
-  --ok: #a9d2bc;
-  --shadow-border: 0 0 0 1px color-mix(in oklab, var(--fg) 14%, transparent);
-  color-scheme: dark;
-}
-
-:root[data-accent="blue"] { --accent: #3d6cb5; --accent-fg: #f4f7fb; }
-:root[data-accent="teal"] { --accent: #1f6f73; --accent-fg: #f2f7f7; }
-:root[data-accent="green"] { --accent: #2f6b4f; --accent-fg: #f3f7f4; }
-:root[data-accent="orange"] { --accent: #a35a24; --accent-fg: #fbf6f1; }
-:root[data-accent="red"] { --accent: #8d3b3b; --accent-fg: #fbf4f4; }
-:root[data-accent="purple"] { --accent: #5c4d8a; --accent-fg: #f6f4fb; }
-:root[data-accent="pink"] { --accent: #8d4d68; --accent-fg: #fbf4f7; }
-
-:root[data-theme="dark"][data-accent="blue"] { --accent: #9eb6e0; --accent-fg: #12151c; }
-:root[data-theme="dark"][data-accent="teal"] { --accent: #9fd4d4; --accent-fg: #101616; }
-:root[data-theme="dark"][data-accent="green"] { --accent: #a9d2bc; --accent-fg: #121614; }
-:root[data-theme="dark"][data-accent="orange"] { --accent: #e2c09a; --accent-fg: #1a1410; }
-:root[data-theme="dark"][data-accent="red"] { --accent: #e7b0b0; --accent-fg: #1a1010; }
-:root[data-theme="dark"][data-accent="purple"] { --accent: #c9bfe0; --accent-fg: #141218; }
-:root[data-theme="dark"][data-accent="pink"] { --accent: #e7b8cb; --accent-fg: #1a1014; }
-
-.swatch-ink { background: #243e4a; }
-.swatch-blue { background: #3d6cb5; }
-.swatch-teal { background: #1f6f73; }
-.swatch-green { background: #2f6b4f; }
-.swatch-orange { background: #a35a24; }
-.swatch-red { background: #8d3b3b; }
-.swatch-purple { background: #5c4d8a; }
-.swatch-pink { background: #8d4d68; }
 
 @theme inline {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
@@ -87,6 +25,37 @@
   --color-on-danger: var(--on-danger);
   --color-warn: var(--warn);
   --color-ok: var(--ok);
+  --color-surface-2: var(--surface-2);
+  --color-card: var(--card);
+  --color-separator: var(--separator);
+  --color-label: var(--label);
+  --color-secondary-label: var(--secondary-label);
+  --color-tertiary-label: var(--tertiary-label);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-link: var(--link);
+  --color-icon-blue: var(--icon-blue);
+  --color-icon-orange: var(--icon-orange);
+  --color-icon-green: var(--icon-green);
+  --color-icon-red: var(--icon-red);
+  --color-icon-purple: var(--icon-purple);
+  --color-icon-teal: var(--icon-teal);
+  --color-icon-indigo: var(--icon-indigo);
+  --color-icon-pink: var(--icon-pink);
+  --color-icon-grey: var(--icon-grey);
+  --color-icon-mint: var(--icon-mint);
+  --color-icon-brown: var(--icon-brown);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-card: var(--r-card);
+  --radius-sheet: var(--r-sheet);
+  --radius-badge: var(--r-badge);
+  --text-caption: var(--fs-caption);
+  --text-body: var(--fs-body);
+  --text-title: var(--fs-title);
+  --text-large: var(--fs-large);
 }
 
 @layer base {
@@ -148,7 +117,7 @@
     backdrop-filter: blur(6px);
   }
   .scrim-menu {
-    background: rgb(0 0 0 / 0.22);
+    background: var(--scrim);
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
   }
@@ -331,8 +300,8 @@ input {
   width: 1.25rem;
   height: 1.25rem;
   border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  background: var(--knob);
+  box-shadow: var(--shadow-1);
   transition: transform 150ms var(--ease);
 }
 .ios-switch:checked {
@@ -394,14 +363,14 @@ input {
 /* 1.16: soft scroll edge — content fades under the header and the tab bar
    instead of a hard cut. Off for «Увеличить контраст» / «Уменьшить прозрачность». */
 [data-main-scroll] {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 18px, black calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, black 18px, black calc(100% - 18px), transparent 100%);
 }
 /* Phones (1.18): content runs under the frosted tab bar, so only the top edge fades. */
 @media (max-width: 767px) {
   [data-main-scroll] {
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px);
-    mask-image: linear-gradient(to bottom, transparent 0, #000 12px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 12px);
+    mask-image: linear-gradient(to bottom, transparent 0, black 12px);
   }
 }
 @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
@@ -466,7 +435,7 @@ svg.lucide[stroke-width="2"] {
     top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
     border-top-left-radius: 14px;
     border-top-right-radius: 14px;
-    box-shadow: 0 -8px 30px rgb(0 0 0 / 0.18);
+    box-shadow: var(--shadow-sheet);
   }
 }
 @keyframes sheet-up-full {
@@ -496,7 +465,7 @@ svg.lucide[stroke-width="2"] {
   z-index: 80;
   transform: scale(1.02);
   border-radius: 0.75rem;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.22);
+  box-shadow: var(--shadow-pop);
   transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
 }
 .ctx-menu {
@@ -539,10 +508,7 @@ nav[aria-label="Основные разделы"] {
 
 /* 1.19: grouped cards of the side menu; on true black they sit a step lighter. */
 .menu-card {
-  background: var(--surface);
-}
-:root[data-theme="dark"] .menu-card {
-  background: var(--elevated);
+  background: var(--card);
 }
 /* 1.19.1: hairlines between menu rows start after the 28 px badge. */
 .menu-card > li + li {
@@ -557,10 +523,20 @@ nav[aria-label="Основные разделы"] {
   height: 0.5px;
   background: var(--line);
 }
-/* 1.19.1: «+ Новый …» rows: a clear blue tint, ≥ 4.5:1 on the card in both themes. */
+/* «+ Новый …» rows: link colour, ≥ 4.5:1 in both themes. */
 .menu-add {
-  color: #0062cc;
+  color: var(--link);
 }
-:root[data-theme="dark"] .menu-add {
-  color: #409cff;
+/* Editor cards (RowGroup): rows without badges, hairline from the text edge. */
+.row-card > * + * {
+  position: relative;
+}
+.row-card > * + *::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: var(--space-3);
+  height: 0.5px;
+  background: var(--separator);
 }

@@ -288,7 +288,7 @@ export function CalendarView({
         {menu ? (
           <>
             <button type="button" aria-label="Закрыть меню вида" tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setMenu(false)} />
-            <div ref={menuRef} className="card-lift absolute top-full right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl bg-elevated shadow-lg" role="menu" aria-label="Вид календаря">
+            <div ref={menuRef} className="card-lift absolute top-full right-0 z-20 mt-1 w-56 overflow-hidden rounded-card bg-card shadow-lg" role="menu" aria-label="Вид календаря">
               {CALENDAR_MODES.map((item) => (
                 <button
                   key={item.id}
@@ -299,7 +299,7 @@ export function CalendarView({
                     setMode(item.id);
                     setMenu(false);
                   }}
-                  className="flex h-11 w-full items-center gap-3 px-3 text-left text-[0.9375rem]"
+                  className="flex h-11 w-full items-center gap-3 px-3 text-left text-body"
                 >
                   <span className="min-w-0 flex-1">{item.label}</span>
                   {mode === item.id ? <Check className="size-4 text-accent" /> : null}
@@ -510,8 +510,8 @@ function MonthGrid({
                     >
                       <span
                         className={cn(
-                          "flex size-7 items-center justify-center rounded-full text-[0.9375rem] tabular-nums",
-                          selected ? "bg-accent font-semibold text-accent-fg" : isToday ? "font-semibold text-accent" : inMonth ? "text-fg" : "text-subtle/70",
+                          "flex size-7 items-center justify-center rounded-full text-body tabular-nums",
+                          selected ? "bg-accent font-semibold text-accent-fg" : isToday ? "font-semibold text-accent" : inMonth ? "text-fg" : "text-subtle",
                         )}
                       >
                         {date.getDate()}
@@ -583,11 +583,11 @@ function DayRows({
     return empty ? <p className="px-1 py-4 text-sm text-muted">{empty}</p> : null;
   }
   return (
-    <ul className="divide-y divide-line overflow-hidden rounded-xl bg-elevated">
+    <ul className="divide-y divide-line overflow-hidden rounded-card bg-card">
       {special.map((item) => {
         const age = ageLabel(item, iso, today);
         return (
-          <li key={item.id} className="flex min-h-11 items-center gap-3 px-3 text-[0.9375rem]">
+          <li key={item.id} className="flex min-h-11 items-center gap-3 px-3 text-body">
             <span className="w-5 shrink-0 text-center" aria-hidden="true">
               {iconOf(item)}
             </span>
@@ -619,7 +619,7 @@ function DayRows({
               </span>
             </button>
             <button type="button" onClick={() => onOpen(task.id)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 pr-1 text-left">
-              <span className={cn("min-w-0 flex-1 truncate text-[0.9375rem]", task.done ? "text-subtle line-through" : "text-fg")}>
+              <span className={cn("min-w-0 flex-1 truncate text-body", task.done ? "text-subtle line-through" : "text-fg")}>
                 {task.maint ? shortMaintTitle(task, assets) : task.title}
                 {task.maint ? <span className="block truncate text-xs text-muted">🔧 {maintAsset(task, assets)?.name ?? "Обслуживание"}</span> : null}
               </span>
@@ -628,7 +628,7 @@ function DayRows({
             <button
               type="button"
               aria-label={`Перенести ${task.title}`}
-              className="drag-handle flex h-11 w-8 shrink-0 items-center justify-center text-subtle/70"
+              className="drag-handle flex h-11 w-8 shrink-0 items-center justify-center text-subtle"
               onPointerDown={(event) => onDrag(event, task)}
             >
               <GripVertical className="size-3.5" />
@@ -757,7 +757,7 @@ function TimeGrid({
               <span className={cn("text-[0.6875rem]", isToday ? "text-accent" : "text-subtle")}>{letterOf(iso)}</span>
               <span
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-full text-[0.9375rem] tabular-nums",
+                  "flex size-7 items-center justify-center rounded-full text-body tabular-nums",
                   selected ? "bg-accent font-semibold text-accent-fg" : isToday ? "font-semibold text-accent" : "text-fg",
                 )}
               >

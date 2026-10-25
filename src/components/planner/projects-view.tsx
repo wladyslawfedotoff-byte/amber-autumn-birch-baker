@@ -49,15 +49,15 @@ export function ProjectsView({
       {projects.length === 0 ? (
         <Empty title="Пока нет проектов" hint="Проект — дело длиннее одного дня, с этапами. Нажмите «+», чтобы создать." />
       ) : (
-        <ul className="overflow-hidden rounded-xl bg-elevated">
+        <ul className="overflow-hidden rounded-card bg-card">
           {projects.map((item) => {
             const { done, total } = projectProgress(item);
             return (
               <li key={item.id} className="border-line not-first:border-t">
                 <button type="button" onClick={() => setOpenId(item.id)} className="flex w-full items-center gap-3 px-3 py-2 text-left">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[0.9375rem] font-medium">{item.title || "Без названия"}</span>
-                    <span className="mt-1 flex items-center gap-2 text-[0.75rem] text-muted">
+                    <span className="block truncate text-body font-medium">{item.title || "Без названия"}</span>
+                    <span className="mt-1 flex items-center gap-2 text-caption text-muted">
                       <span className="shrink-0">{spanLabel(item)}</span>
                       <span className="h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-bg" aria-hidden="true">
                         <span className="block h-full rounded-full bg-accent" style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} />
@@ -112,7 +112,7 @@ function NewProjectSheet({ open, onClose, onCreated }: { open: boolean; onClose:
           placeholder="Например: ремонт кухни"
           aria-label="Название проекта"
           enterKeyHint="done"
-          className="h-11 w-full rounded-xl bg-elevated px-3 text-base outline-none placeholder:text-subtle"
+          className="h-11 w-full rounded-card bg-card px-3 text-base outline-none placeholder:text-subtle"
         />
         <DateRows start={start} end={end} onStart={setStart} onEnd={setEnd} />
         <p className="mt-2 px-1 text-xs text-muted">Этапы «План → В работе → Готово» появятся сами, их можно переименовать.</p>
@@ -123,7 +123,7 @@ function NewProjectSheet({ open, onClose, onCreated }: { open: boolean; onClose:
 
 function DateRows({ start, end, onStart, onEnd }: { start: string; end: string; onStart: (v: string) => void; onEnd: (v: string) => void }) {
   return (
-    <div className="mt-3 divide-y divide-line overflow-hidden rounded-xl bg-elevated text-[0.9375rem]">
+    <div className="mt-3 divide-y divide-line overflow-hidden rounded-card bg-card text-body">
       <label className="flex min-h-11 items-center gap-3 px-3">
         <span className="flex-1">Начало</span>
         <input type="date" aria-label="Начало" value={start} onChange={(event) => onStart(event.target.value)} style={{ minWidth: "8.5rem" }} className="h-9 rounded-lg bg-surface px-2 text-right outline-none" />
@@ -213,7 +213,7 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
           <MoreHorizontal className="size-5" />
         </button>
       </div>
-      <div className="flex items-center gap-2 text-[0.75rem] text-muted">
+      <div className="flex items-center gap-2 text-caption text-muted">
         <button type="button" onClick={() => setSettings(true)} className="flex h-8 items-center gap-2 rounded-full bg-elevated px-3">
           <CalendarRange className="size-3.5" aria-hidden="true" />
           {spanLabel(project)}
@@ -263,7 +263,7 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
               {stage.cards.map((card) => (
                 <li key={card.id}>
                   <div className="drag-handle flex items-start rounded-lg bg-elevated pl-3" onPointerDown={(event) => beginCard(event, card, stage.id)}>
-                    <p className="min-w-0 flex-1 py-2 text-[0.9375rem] leading-snug">
+                    <p className="min-w-0 flex-1 py-2 text-body leading-snug">
                       {card.taskId && isBlocked(tasks.find((item) => item.id === card.taskId) ?? { dependsOn: null, done: false }, tasks) ? (
                         <Lock className="mr-1 inline size-3.5 text-warn" aria-label="Ждёт другого дела" />
                       ) : null}
@@ -357,7 +357,7 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
               </Button>
             </div>
           ) : (
-            <button type="button" onClick={() => setConfirm(true)} className="h-11 w-full rounded-xl bg-elevated text-[0.9375rem] text-danger">
+            <button type="button" onClick={() => setConfirm(true)} className="h-11 w-full rounded-card bg-card text-body text-danger">
               Удалить проект
             </button>
           )}

@@ -1,5 +1,5 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { AlertCircle, CalendarCheck, Folder, Sunrise, ChevronDown, ChevronRight, Hash, Inbox, List, ListChecks, Pin, PinOff, Plus, Search, Settings, Users } from "lucide-react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { AlertCircle, CalendarCheck, Folder, Sunrise, ChevronRight, Hash, Inbox, List, ListChecks, Pin, PinOff, Plus, Search, Settings, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NAV_ICONS } from "@/components/planner/tab-icons";
 import { cn } from "@/lib/cn";
@@ -25,6 +25,8 @@ import {
 import { projectProgress } from "@/lib/projects";
 import { summarize } from "@/lib/maintenance/ops";
 import { useShareScope } from "@/lib/use-share-scope";
+import { GroupedCard, IconBadge, Tile } from "@/components/ui/kit";
+import { cycleColor, type IconColor } from "@/lib/design/tokens";
 import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 import { activeScope } from "@/lib/offline/device-store";
 
@@ -34,12 +36,12 @@ type ViewNav = Extract<NavId, View>;
 /** Smart-list tiles (2×2). «Просрочено» is not a screen: it opens «Сегодня», where overdue tasks sit on top. */
 type Tile = "today" | "inbox" | "tomorrow" | "checklist" | "overdue";
 const TILES: Tile[] = ["today", "inbox", "tomorrow", "checklist", "overdue"];
-const TILE_META: Record<Tile, { label: string; color: string; icon: typeof Inbox }> = {
-  today: { label: "Сегодня", color: "#0a84ff", icon: CalendarCheck },
-  inbox: { label: "Входящие", color: "#5856d6", icon: Inbox },
-  tomorrow: { label: "Завтра", color: "#ff9500", icon: Sunrise },
-  checklist: { label: "Все", color: "#8e8e93", icon: ListChecks },
-  overdue: { label: "Просрочено", color: "#ff3b30", icon: AlertCircle },
+const TILE_META: Record<Tile, { label: string; color: IconColor; icon: typeof Inbox }> = {
+  today: { label: "Сегодня", color: "blue", icon: CalendarCheck },
+  inbox: { label: "Входящие", color: "indigo", icon: Inbox },
+  tomorrow: { label: "Завтра", color: "orange", icon: Sunrise },
+  checklist: { label: "Все", color: "grey", icon: ListChecks },
+  overdue: { label: "Просрочено", color: "red", icon: AlertCircle },
 };
 /** Everything else that is a screen: one row each in «Разделы». */
 const ROWS: ViewNav[] = ["week", "shared", "calendar", "schedule", "habits", "assist", "focus", "matrix", "dates", "maintenance"];
@@ -65,20 +67,18 @@ function saveFolded(value: Record<DrawerTab, boolean>) {
 }
 
 /** One colour per section (iOS system colours). */
-const ROW_COLORS: Partial<Record<ViewNav, string>> = {
-  week: "#30b0c7",
-  shared: "#a2845e",
-  calendar: "#ff3b30",
-  schedule: "#0a84ff",
-  habits: "#34c759",
-  assist: "#af52de",
-  focus: "#ff2d55",
-  matrix: "#00c7be",
-  dates: "#ff9500",
-  maintenance: "#8e8e93",
+const ROW_COLORS: Partial<Record<ViewNav, IconColor>> = {
+  week: "teal",
+  shared: "brown",
+  calendar: "red",
+  schedule: "blue",
+  habits: "green",
+  assist: "purple",
+  focus: "pink",
+  matrix: "mint",
+  dates: "orange",
+  maintenance: "grey",
 };
-/** Lists, projects and tags have no colour of their own: they cycle this palette by position. */
-const PALETTE = ["#0a84ff", "#ff9500", "#34c759", "#af52de", "#ff2d55", "#30b0c7", "#5856d6", "#ff3b30"];
 const GLYPH: Record<DrawerTab, typeof Inbox> = { lists: List, projects: Folder, tags: Hash };
 
 const label = (id: NavId) => NAV_ITEMS.find((item) => item.id === id)?.label ?? id;
@@ -208,7 +208,7 @@ export function Sidebar({
       name: list.name,
       count: n > 0 ? String(n) : null,
       pin: `list:${list.id}`,
-      color: PALETTE[index % PALETTE.length],
+      color: cycleColor(index),
       shared: Boolean(share && ((list.members ?? []).length > 0 || ownerOf(list, share.dataOwner) !== share.me)),
       open: () => onView(`list:${list.id}`),
     };
@@ -221,7 +221,7 @@ export function Sidebar({
       // «0/2» says something (nothing done yet); an empty project shows nothing.
       count: total > 0 ? `${done}/${total}` : null,
       pin: `project:${project.id}`,
-      color: PALETTE[(index + 3) % PALETTE.length],
+      color: cycleColor(index + 3),
       open: () => openProject(project.id),
     };
   });
@@ -229,7 +229,7 @@ export function Sidebar({
     .sort((a, b) => a.localeCompare(b, "ru"))
     .map((tag, index) => {
       const n = tasks.filter((task) => !task.done && (task.tags ?? []).includes(tag)).length;
-      return { key: `tag:${tag}`, name: tag, count: n > 0 ? String(n) : null, pin: null, color: PALETTE[(index + 5) % PALETTE.length], open: () => onView(`tag:${tag}`) };
+      return { key: `tag:${tag}`, name: tag, count: n > 0 ? String(n) : null, pin: null, color: cycleColor(index + 5), open: () => onView(`tag:${tag}`) };
     });
   const groupItems: Record<DrawerTab, GroupItem[]> = { lists: listItems, projects: projectItems, tags: tagItems };
   const searching = query.trim().length > 0;
@@ -254,7 +254,7 @@ export function Sidebar({
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-bg text-fg">
       <div className="flex shrink-0 items-center gap-2 px-4 pt-2 pb-1">
         <img src={FAVICON_SVG} alt="" width={28} height={28} className="size-7 shrink-0 rounded-[0.45rem]" />
-        <p className="min-w-0 flex-1 truncate text-[1.25rem] leading-tight font-bold tracking-tight">{APP_NAME}</p>
+        <p className="min-w-0 flex-1 truncate text-title leading-tight font-bold tracking-tight">{APP_NAME}</p>
         <Button
           size="icon"
           variant="ghost"
@@ -278,7 +278,7 @@ export function Sidebar({
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Поиск списков"
               aria-label="Поиск списков"
-              className="h-9 w-full rounded-[0.625rem] bg-fg/[0.07] pr-3 pl-8 text-[0.9375rem] outline-none placeholder:text-subtle"
+              className="h-9 w-full rounded-[0.625rem] bg-fg/[0.07] pr-3 pl-8 text-body outline-none placeholder:text-subtle"
             />
           </label>
         ) : null}
@@ -293,21 +293,7 @@ export function Sidebar({
               const n = tileCount(id);
               return (
                                 <li key={id}>
-                  <button
-                    type="button"
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => onView(target)}
-                    className={cn(
-                      "press flex h-[4.5rem] w-full flex-col justify-between menu-card rounded-xl p-2 text-left shadow-[0_0.5px_0_var(--line)]",
-                      active && "ring-2 ring-accent/60",
-                    )}
-                  >
-                    <span className="flex w-full items-start justify-between">
-                      <Badge color={meta.color} icon={Icon} big />
-                      <span className={cn("text-[1.375rem] leading-none font-bold tabular-nums", n === 0 && "opacity-35")}>{n}</span>
-                    </span>
-                    <span className="truncate text-[0.875rem] leading-tight font-semibold text-muted">{meta.label}</span>
-                  </button>
+                  <Tile icon={Icon} color={meta.color} label={meta.label} count={n} active={active} onClick={() => onView(target)} />
                 </li>
               );
             })}
@@ -315,7 +301,7 @@ export function Sidebar({
         ) : null}
 
         {!searching && pinItems.length > 0 ? (
-          <Card title="Закреплённые">
+          <GroupedCard title="Закреплённые">
             {pinItems.map((item) => (
               <GroupRow
                 key={item.key}
@@ -332,11 +318,11 @@ export function Sidebar({
                 }}
               />
             ))}
-          </Card>
+          </GroupedCard>
         ) : null}
 
         {!searching && rows.length > 0 ? (
-          <Card title="Разделы">
+          <GroupedCard title="Разделы">
             {rows.map((id) => {
               const Icon = NAV_ICONS[id];
               const active = view === id || (id === "today" && view.startsWith("day:"));
@@ -349,15 +335,15 @@ export function Sidebar({
                     onClick={() => onView(id)}
                     className={cn(ROW, active && "bg-fg/[0.06]")}
                   >
-                    <Badge color={ROW_COLORS[id] ?? "#8e8e93"} icon={Icon} />
+                    <IconBadge color={ROW_COLORS[id] ?? "grey"} icon={Icon} />
                     <span className="min-w-0 flex-1 truncate">{label(id)}</span>
-                    {n > 0 ? <span className="shrink-0 text-[0.9375rem] text-subtle tabular-nums">{n}</span> : null}
+                    {n > 0 ? <span className="shrink-0 text-body text-subtle tabular-nums">{n}</span> : null}
                     <ChevronRight className="size-4 shrink-0 text-subtle/60" aria-hidden="true" />
                   </button>
                 </li>
               );
             })}
-          </Card>
+          </GroupedCard>
         ) : null}
 
         {groups.map((group) => {
@@ -368,7 +354,7 @@ export function Sidebar({
           const title = group.id === "lists" ? "Мои списки" : group.label;
           const isFolded = !searching && folded[group.id];
           return (
-            <Card
+            <GroupedCard
               key={group.id}
               title={title}
               folded={isFolded}
@@ -401,13 +387,13 @@ export function Sidebar({
                 ) : (
                   <li>
                     <button type="button" onClick={() => setAdding(group.id)} className={cn(ROW, "menu-add font-medium")}>
-                      <Badge color="#0a84ff" icon={Plus} />
+                      <IconBadge color="blue" icon={Plus} />
                       {group.add}
                     </button>
                   </li>
                 )
               ) : null}
-            </Card>
+            </GroupedCard>
           );
         })}
 
@@ -422,27 +408,8 @@ export function Sidebar({
 
 /** One row inside a grouped card: 44 px, a 28 px badge; hairlines between rows start after the badge (.menu-card). */
 const ROW =
-  "flex h-11 w-full touch-manipulation items-center gap-3 px-3 text-left text-[0.9375rem] transition-colors duration-150 select-none [-webkit-touch-callout:none] active:bg-fg/[0.06]";
+  "flex h-11 w-full touch-manipulation items-center gap-3 px-3 text-left text-body transition-colors duration-150 select-none [-webkit-touch-callout:none] active:bg-fg/[0.06]";
 
-/** A grouped inset card with a small caption; the caption folds the card when onFold is set. */
-function Card({ title, children, folded, onFold, count }: { title: string; children: ReactNode; folded?: boolean; onFold?: () => void; count?: number }) {
-  return (
-    <section aria-label={title} className="mt-4">
-      {onFold ? (
-        <button type="button" aria-expanded={!folded} onClick={onFold} className="mb-1 flex w-full items-center gap-1 px-1 text-left">
-          <SectionLabel>{title}</SectionLabel>
-          {count ? <span className="text-[0.75rem] text-subtle tabular-nums">{count}</span> : null}
-          <ChevronDown className={cn("ml-auto size-4 text-subtle transition-transform duration-150", folded && "-rotate-90")} aria-hidden="true" />
-        </button>
-      ) : (
-        <div className="mb-1 px-1">
-          <SectionLabel>{title}</SectionLabel>
-        </div>
-      )}
-      {folded ? null : <ul className="menu-card overflow-hidden rounded-xl">{children}</ul>}
-    </section>
-  );
-}
 
 function AddField({ kind, draft, setDraft, onSubmit, onCancel }: { kind: DrawerTab; draft: string; setDraft: (v: string) => void; onSubmit: () => void; onCancel: () => void }) {
   const name = kind === "projects" ? "Название проекта" : "Название списка";
@@ -463,29 +430,14 @@ function AddField({ kind, draft, setDraft, onSubmit, onCancel }: { kind: DrawerT
           }}
           placeholder={name}
           aria-label={name}
-          className="h-11 w-full bg-transparent pr-3 pl-[3.25rem] text-[0.9375rem] text-fg outline-none placeholder:text-subtle"
+          className="h-11 w-full bg-transparent pr-3 pl-[3.25rem] text-body text-fg outline-none placeholder:text-subtle"
         />
       </form>
     </li>
   );
 }
 
-/** The one icon style of the menu: a solid squircle (radius 25%) with a white glyph. */
-function Badge({ color, icon: Icon, big }: { color: string; icon: typeof Inbox; big?: boolean }) {
-  return (
-    <span
-      className={cn("flex shrink-0 items-center justify-center text-white", big ? "size-8 rounded-[0.5rem]" : "size-7 rounded-[0.4375rem]")}
-      style={{ background: color }}
-      aria-hidden="true"
-    >
-      <Icon className={big ? "size-[1.125rem]" : "size-4"} strokeWidth={2.25} />
-    </span>
-  );
-}
 
-function SectionLabel({ children }: { children: ReactNode }) {
-  return <p className="text-[0.6875rem] font-semibold tracking-wide text-subtle uppercase">{children}</p>;
-}
 
 function GroupRow({
   item,
@@ -522,11 +474,11 @@ function GroupRow({
         }}
         className={cn(ROW, active && "bg-fg/[0.06] font-medium")}
       >
-        <Badge color={item.color ?? "#8e8e93"} icon={icon} />
+        <IconBadge color={item.color ?? "grey"} icon={icon} />
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
         {pinned && !hidePinMark ? <Pin className="size-3.5 shrink-0 text-subtle" aria-label="закреплён" /> : null}
         {item.shared ? <Users className="size-3.5 shrink-0 text-subtle" aria-label="общий список" /> : null}
-        {item.count ? <span className="shrink-0 text-[0.9375rem] text-subtle tabular-nums">{item.count}</span> : null}
+        {item.count ? <span className="shrink-0 text-body text-subtle tabular-nums">{item.count}</span> : null}
       </button>
       {menuOpen ? (
         <div role="menu" className="mx-2 mb-2 flex items-center gap-1 rounded-lg bg-elevated p-1 text-sm">

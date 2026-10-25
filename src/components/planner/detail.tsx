@@ -88,7 +88,7 @@ export function TaskDetail({
         <span aria-hidden="true" className="sheet-grabber lg:hidden" />
         <div className="flex items-center gap-2 px-2 py-1">
           <p className="px-2 text-sm text-muted">Задача</p>
-          <button type="button" onClick={onClose} className="ml-auto h-11 rounded-full px-3 text-[0.9375rem] font-semibold text-accent lg:hidden">
+          <button type="button" onClick={onClose} className="ml-auto h-11 rounded-full px-3 text-body font-semibold text-accent lg:hidden">
             Готово
           </button>
           <Button className="ml-auto hidden lg:inline-flex" size="icon" variant="ghost" aria-label="Закрыть" onClick={onClose}>
