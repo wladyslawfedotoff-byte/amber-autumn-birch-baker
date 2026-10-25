@@ -536,3 +536,11 @@ nav[aria-label="Основные разделы"] {
     animation: none !important;
   }
 }
+
+/* 1.19: grouped cards of the side menu; on true black they sit a step lighter. */
+.menu-card {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .menu-card {
+  background: var(--elevated);
+}
