@@ -60,7 +60,7 @@ export function SectionHeader({
   const label = <span className={cn(CAPS, tone === "accent" && "text-accent-ink")}>{title}</span>;
   if (!onFold) return <Tag className="mb-1 px-1">{label}</Tag>;
   return (
-    <button type="button" aria-expanded={!folded} onClick={onFold} className="mb-1 flex min-h-8 w-full items-center gap-1 px-1 text-left">
+    <button type="button" aria-expanded={!folded} onClick={onFold} className="hit mb-1 flex min-h-8 w-full items-center gap-1 px-1 text-left">
       {label}
       {folded && count ? <span className="text-caption text-tertiary-label tabular-nums">{count}</span> : null}
       <ChevronDown className={cn("ml-auto size-[var(--icon-sm)] text-tertiary-label transition-transform duration-[var(--dur-fast)]", folded && "-rotate-90")} aria-hidden="true" />

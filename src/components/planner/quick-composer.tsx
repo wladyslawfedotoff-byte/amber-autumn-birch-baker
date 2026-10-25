@@ -1,8 +1,10 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useState, type RefObject } from "react";
 import { Plus } from "lucide-react";
 import { AddTaskForm, type QuickOptions } from "@/components/planner/task-row";
 import { cn } from "@/lib/cn";
 import { useSheetDrag } from "@/lib/sheet-drag";
+import { parseQuick } from "@/lib/quick-add";
+import { formatLong, shiftIso, todayIso } from "@/lib/dates";
 
 /**
  * Quick add on phones: a round «+» opens a composer docked to
@@ -45,6 +47,8 @@ export function QuickComposer({
   onAdd: (title: string, options: QuickOptions) => void;
 }) {
   const { panelRef, onPointerDown: onDragDown } = useSheetDrag(onClose);
+  const [draft, setDraft] = useState("");
+  const heading = headingFor(title, parseQuick(draft).due);
   useEffect(() => {
     if (!open) return;
     // A sheet closed by a drag keeps its inline transform; reset it for the next open.
@@ -78,11 +82,19 @@ export function QuickComposer({
       >
         <div className="-mx-3 -mt-2 touch-none px-3 pt-0 pb-2" onPointerDown={onDragDown}>
           <span aria-hidden="true" className="sheet-grabber md:hidden" />
-          <p className="px-1 text-xs font-medium text-subtle">{title}</p>
+          <p className="px-1 text-xs font-medium text-subtle" aria-live="polite">{heading}</p>
         </div>
-        <AddTaskForm placeholder={placeholder} inputRef={inputRef} onAdd={onAdd} onEscape={onClose} />
+        <AddTaskForm placeholder={placeholder} inputRef={inputRef} onAdd={onAdd} onEscape={onClose} onDraft={setDraft} />
         <p className="px-1 pt-2 text-xs text-subtle">«завтра в 10», «в пятницу в 15» — дата и время распознаются сами. Несколько строк — несколько задач.</p>
       </div>
     </div>
   );
+}
+
+/** Шапка следует распознанной дате (1.22): «На завтра», «В список «Дом» · на завтра». */
+function headingFor(title: string, due: string | null): string {
+  if (!due) return title;
+  const today = todayIso();
+  const day = due === today ? "На сегодня" : due === shiftIso(today, 1) ? "На завтра" : `На ${formatLong(due).toLowerCase()}`;
+  return title.startsWith("На ") ? day : `${title} · ${day.toLowerCase()}`;
 }

@@ -66,7 +66,7 @@ export function MatrixView({ selectedId, onOpen }: { selectedId: string | null; 
       <p className="mb-2 hidden text-xs text-muted sm:block">
         Нажмите на заголовок, чтобы развернуть квадрант. Перетащите задачу мышью в другой квадрант или удерживайте её — «Переместить в…».
       </p>
-      <div className={cn("grid min-h-0 flex-1 gap-2 sm:gap-3", expanded == null ? "grid-cols-2 grid-rows-2" : "grid-cols-1 grid-rows-1")}>
+      <div className={cn("grid min-h-0 flex-1 gap-2 sm:gap-3", expanded == null ? "overflow-y-auto grid-cols-[repeat(auto-fit,minmax(min(100%,10.5rem),1fr))] auto-rows-[minmax(11rem,1fr)]" : "grid-cols-1 grid-rows-1")}>
         {shown.map((quad) => (
           <Quadrant
             key={quad.id}
@@ -151,7 +151,15 @@ function Quadrant({
         style={{ background: `color-mix(in oklab, ${quad.color} 14%, var(--card))` }}
       >
         <span className="size-2 shrink-0 rounded-full" style={{ background: quad.color }} aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate text-caption font-semibold leading-tight text-label sm:text-sm">{quad.title}</span>
+        <span className="min-w-0 flex-1 truncate text-caption font-semibold leading-tight text-label sm:text-sm">
+          {/* Телефон (1.22): короткое название, полное — в развёрнутом квадранте и на широком экране. */}
+          {expanded ? quad.title : (
+            <>
+              <span className="sm:hidden">{quad.short}</span>
+              <span className="hidden sm:inline">{quad.title}</span>
+            </>
+          )}
+        </span>
         <span className="shrink-0 text-[0.6875rem] tabular-nums text-secondary-label">{items.length}</span>
         {expanded ? <Minimize2 className="size-3.5 shrink-0 text-subtle" aria-hidden="true" /> : <Maximize2 className="hidden size-3.5 shrink-0 text-subtle sm:block" aria-hidden="true" />}
       </button>
@@ -310,10 +318,10 @@ function MatrixRow({
           event.preventDefault();
           onMenu({ taskId: task.id, title: task.title, x: event.clientX, y: event.clientY });
         }}
-        className="drag-handle flex h-8 min-w-0 flex-1 select-none items-center gap-1 pr-1 text-left"
+        className="hit drag-handle flex h-8 min-w-0 flex-1 select-none items-center gap-1 pr-1 text-left"
         style={{ WebkitTouchCallout: "none" }}
       >
-        <span className={cn("min-w-0 flex-1 line-clamp-2 break-words text-label", roomy ? "text-sm" : "text-[0.8125rem] leading-tight")}>{task.maint ? shortMaintTitle(task, assets) : task.title}</span>
+        <span className={cn("min-w-0 flex-1 line-clamp-2 hyphens-auto text-label [overflow-wrap:normal]", roomy ? "text-sm" : "text-[0.8125rem] leading-tight")}>{task.maint ? shortMaintTitle(task, assets) : task.title}</span>
         {dot ? <span className="size-1.5 shrink-0 rounded-full" style={{ background: dot }} aria-hidden="true" /> : null}
         {task.due && (roomy || task.due !== today) ? (
           <span className={cn("shrink-0 text-[0.625rem] tabular-nums", overdue ? "text-danger" : "text-tertiary-label")}>{dueLabel(task.due, today)}</span>

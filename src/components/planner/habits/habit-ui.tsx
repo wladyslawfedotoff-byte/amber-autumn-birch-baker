@@ -57,7 +57,7 @@ export function RingCheck({
       aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
-      className={cn("relative flex shrink-0 items-center justify-center rounded-full tabular-nums disabled:cursor-default", text ? "text-[0.8125rem]" : "")}
+      className={cn("hit relative flex shrink-0 items-center justify-center rounded-full tabular-nums disabled:cursor-default", text ? "text-[0.8125rem]" : "")}
       style={{ width: size, height: size }}
     >
       <svg viewBox={`0 0 ${size} ${size}`} className="absolute inset-0" aria-hidden="true">

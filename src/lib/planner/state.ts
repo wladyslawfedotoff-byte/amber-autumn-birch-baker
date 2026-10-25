@@ -1,3 +1,4 @@
+import type { DeletedTask } from "@/lib/task-undo";
 /** The planner state and its actions (types only) — split out of planner-store.ts in 1.15. */
 import { patchAsset, type FuelInput, type PartInput, type PainPlanInput, type AssetInput, type RuleInput, type ServiceInput } from "@/lib/maintenance/ops";
 import { type Tombstones } from "@/lib/sync/merge";
@@ -117,7 +118,9 @@ export type PlannerState = {
   assignTask: (id: string, login: string | null) => void;
   /** Share a whole list: its tasks are visible to these logins too. */
   setListMembers: (id: string, members: string[]) => void;
-  deleteTask: (id: string) => void;
+  /** Удаляет и возвращает снимок для «Вернуть». */
+  deleteTask: (id: string) => DeletedTask | null;
+  undoDelete: (deleted: DeletedTask) => void;
   /** One subtask per line (a pasted list becomes several). */
   addSubtask: (taskId: string, title: string) => void;
   /** «Дублировать»: copy right after the original; returns the copy's id. */

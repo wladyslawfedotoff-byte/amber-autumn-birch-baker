@@ -22,6 +22,7 @@ import { DependsBlock } from "@/components/planner/objects/deps";
 import { cleanDates, dueLabel, repeatLabel, shiftIso, todayIso } from "@/lib/dates";
 import { colorHex, colorLabel } from "@/lib/task-colors";
 import { usePlanner } from "@/lib/planner-store";
+import { deleteWithUndo } from "@/lib/done-toast";
 import { ownerOf } from "@/lib/queries";
 import { displayName, useProfile } from "@/lib/use-capabilities";
 import { isImportant, isUrgent } from "@/lib/planner-types";
@@ -592,7 +593,15 @@ export function TaskDetail({
                 destructive
                 chevron={false}
                 title={foreign ? "Убрать у себя" : "Удалить задачу"}
-                onClick={() => setConfirm(true)}
+                onClick={() => {
+                  // Свою задачу удаляем сразу: внизу появится «Вернуть». Чужую — только с подтверждением.
+                  if (foreign) {
+                    setConfirm(true);
+                    return;
+                  }
+                  deleteWithUndo(deleteTask, task.id, task.title);
+                  onClose();
+                }}
               />
             </GroupedCard>
           )}

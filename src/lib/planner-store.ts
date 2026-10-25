@@ -8,6 +8,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { plannerStorage } from "@/lib/offline/device-store";
 import { syncNow } from "@/lib/sync/clock";
 import { emptyTombstones } from "@/lib/sync/merge";
+import { removeTask, restoreDeleted } from "@/lib/task-undo";
 import { safeDependsOn, wouldCycle } from "@/lib/task-deps";
 import { cleanDates, firstChosenDate, todayIso } from "@/lib/dates";
 import { currentLogin } from "@/lib/use-capabilities";
@@ -61,7 +62,7 @@ export const usePlanner = create<PlannerState>()(
           done: false,
           priority: input.priority ?? 0,
           due: parsed.due ?? input.due,
-          tags: input.tags ?? [],
+          tags: [...new Set([...(input.tags ?? []), ...parsed.tags])],
           subtasks: [],
           createdAt: Date.now(),
           completedAt: null,
@@ -177,10 +178,12 @@ export const usePlanner = create<PlannerState>()(
         set((s) => ({
           lists: s.lists.map((l) => (l.id === id ? { ...l, members: [...new Set(members)] } : l)),
         })),
-      deleteTask: (id) =>
-        set((s) => ({
-          tasks: s.tasks.filter((t) => t.id !== id).map((t) => (t.dependsOn === id ? { ...t, dependsOn: null } : t)),
-        })),
+      deleteTask: (id) => {
+        const { tasks, deleted } = removeTask(get().tasks, id);
+        if (deleted) set({ tasks });
+        return deleted;
+      },
+      undoDelete: (deleted) => set((s) => ({ tasks: restoreDeleted(s.tasks, deleted) })),
       addSubtask: (taskId, title) => {
         const titles = splitLines(title);
         if (!titles.length) return;

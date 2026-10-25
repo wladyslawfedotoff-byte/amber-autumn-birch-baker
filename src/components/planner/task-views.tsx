@@ -1,6 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Archive, GripVertical, Lock, RotateCcw, Trash2 } from "lucide-react";
 import { CAPS, SectionHeader } from "@/components/ui/kit";
+import { deleteWithUndo } from "@/lib/done-toast";
 import { TodayStrip, TodaySummary, WeekDays } from "@/components/planner/today-strip";
 import { AddTaskForm, TaskRow } from "@/components/planner/task-row";
 import { RowWindow } from "@/components/planner/row-window";
@@ -563,22 +564,9 @@ function ArchiveList({
           <Button size="icon" variant="ghost" aria-label={`Вернуть «${task.title}» в работу`} title="Вернуть в работу" onClick={() => restoreTask(task.id)}>
             <RotateCcw className="size-4" />
           </Button>
-          {confirm === task.id ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                deleteTask(task.id);
-                setConfirm(null);
-              }}
-            >
-              Удалить
-            </Button>
-          ) : (
-            <Button size="icon" variant="ghost" aria-label={`Удалить «${task.title}»`} title="Удалить насовсем" onClick={() => setConfirm(task.id)}>
-              <Trash2 className="size-4" />
-            </Button>
-          )}
+          <Button size="icon" variant="ghost" aria-label={`Удалить «${task.title}»`} title="Удалить — внизу появится «Вернуть»" onClick={() => deleteWithUndo(deleteTask, task.id, task.title)}>
+            <Trash2 className="size-4" />
+          </Button>
         </div>
       ))}
     </div>

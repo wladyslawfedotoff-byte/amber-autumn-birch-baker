@@ -1,3 +1,6 @@
+import { ownerOf } from "@/lib/queries";
+import { useProfile } from "@/lib/use-capabilities";
+import { deleteWithUndo } from "@/lib/done-toast";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, FolderKanban, Flag, Sunrise, Trash2, PanelBottomOpen } from "lucide-react";
@@ -26,6 +29,9 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
   const projects = usePlanner((s) => s.projects) ?? [];
   const [page, setPage] = useState<"main" | "projects">("main");
   const [confirm, setConfirm] = useState(false);
+  const profile = useProfile();
+  // Чужую задачу «Удалить» лишь убирает у себя — вернуть её нельзя, поэтому там остаётся подтверждение.
+  const foreign = Boolean(profile.multiUser && profile.login && ownerOf(task, profile.dataOwner || profile.login) !== profile.login);
   const today = todayIso();
 
   useEffect(() => {
@@ -126,15 +132,15 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
               role="menuitem"
               className={cn(item, "border-t-[6px] border-fg/5 text-danger")}
               onClick={() => {
-                if (!confirm) {
+                if (foreign && !confirm) {
                   haptic("warn");
                   setConfirm(true);
                   return;
                 }
-                run(() => deleteTask(task.id))();
+                run(() => deleteWithUndo(deleteTask, task.id, task.title))();
               }}
             >
-              <span className="flex-1">{confirm ? "Точно удалить?" : "Удалить"}</span>
+              <span className="flex-1">{confirm ? "Точно убрать у себя?" : foreign ? "Убрать у себя" : "Удалить"}</span>
               <Trash2 className="size-5" />
             </button>
           </>

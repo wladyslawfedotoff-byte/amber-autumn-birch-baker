@@ -446,9 +446,9 @@ function LookSection() {
         {ACCENTS.map((item) => {
           const on = accent === item.id;
           return (
-            <button key={item.id} type="button" aria-pressed={on} aria-label={item.name} onClick={() => setAccent(item.id)} className="flex flex-col items-center gap-2">
+            <button key={item.id} type="button" aria-pressed={on} aria-label={item.name} onClick={() => setAccent(item.id)} className="flex min-w-0 flex-col items-center gap-2">
               <span className={cn("size-10 rounded-full", item.swatch, on ? "ring-2 ring-fg ring-offset-2 ring-offset-surface" : "")} />
-              <span className={cn("text-xs", on ? "text-fg" : "text-muted")}>{item.name}</span>
+              <span className={cn("max-w-full truncate text-xs", on ? "text-fg" : "text-muted")}>{item.name}</span>
             </button>
           );
         })}
