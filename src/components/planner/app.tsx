@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { Columns3, List, Menu, Search, Trash2, X } from "lucide-react";
+import { flushSync } from "react-dom";
+import { Columns3, List, Menu, Search, X } from "lucide-react";
 import { AssistantNoticeList } from "@/components/planner/assist-notices";
 import { useAssistantNotices } from "@/lib/assistant/use-notices";
 import { ChecklistView } from "@/components/planner/checklist-view";
@@ -30,6 +31,7 @@ import { Fab, QuickComposer } from "@/components/planner/quick-composer";
 import { TAB_ICONS } from "@/components/planner/tab-icons";
 import { TAB_OPTIONS, canBoard } from "@/lib/ui-prefs";
 import { useViewportFrame } from "@/lib/use-viewport-frame";
+import { useSheetDrag } from "@/lib/sheet-drag";
 import { useShareScope } from "@/lib/use-share-scope";
 import { markReady, useBoot } from "@/lib/boot";
 import { PlannerSkeleton } from "@/components/planner/skeleton";
@@ -129,6 +131,10 @@ export function PlannerApp() {
   }, [ready]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Large title (1.18): big at the top of the list, compact in the bar once scrolled.
+  const [collapsed, setCollapsed] = useState(false);
+  const closeDetail = useCallback(() => setSelectedId(null), []);
+  const detailDrag = useSheetDrag(closeDetail);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [drawer, setDrawer] = useState(false);
@@ -253,7 +259,7 @@ export function PlannerApp() {
     document.documentElement.dataset.accent = accent;
     // Safari tints its bars from theme-color: match the app surface (no grey band under the tab bar).
     const surface = getComputedStyle(document.documentElement).getPropertyValue("--surface").trim();
-    if (surface) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", surface);
+    if (surface) document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", surface));
   }, [theme, accent]);
 
   useViewportFrame();
@@ -287,6 +293,17 @@ export function PlannerApp() {
   }
 
   function openView(next: View) {
+    // Smooth cross-fade between sections (View Transitions, no bounce); plain switch elsewhere.
+    const doc = typeof document === "undefined" ? null : (document as Document & { startViewTransition?: (cb: () => void) => unknown });
+    const calm = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (doc?.startViewTransition && !calm && next !== view) {
+      doc.startViewTransition(() => flushSync(() => switchView(next)));
+      return;
+    }
+    switchView(next);
+  }
+  function switchView(next: View) {
+    setCollapsed(false);
     if (next === "assist") setAssistProject(view === "projects" ? shownProject.current : null);
     setView(next);
     setBoard(false);
@@ -392,6 +409,8 @@ export function PlannerApp() {
     }
     return { title: "Во «Входящие»", placeholder: "Созвон завтра в 10", defaults: { due: null, listId: null } };
   })();
+  // Chat and wide boards keep a single compact bar.
+  const bigTitleOff = view === "assist" && !query.trim();
   const bannerKey = dueHits.map((hit) => `${hit.key}:${hit.stamp}`).join("|");
 
   return (
@@ -410,14 +429,18 @@ export function PlannerApp() {
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-35 shrink-0 px-2 py-1.5 md:px-8 md:py-3">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <header className={cn("relative z-35 shrink-0 px-2 py-2 transition-shadow duration-200 md:px-8 md:py-3", collapsed && "max-md:shadow-[0_0.5px_0_var(--line)]")}>
           <div className="flex items-center gap-2">
             <Button size="icon" variant="ghost" className="md:hidden" aria-label="Открыть меню" onClick={() => setDrawer(true)}>
               <Menu className="size-5" />
             </Button>
             <div className="min-w-0 flex-1">
               {listId ? (
+                <>
+                <p className={cn("truncate text-center text-[1.0625rem] font-semibold transition-opacity duration-200 md:hidden", !collapsed && "opacity-0")} aria-hidden="true">
+                  {lists.find((list) => list.id === listId)?.name ?? ""}
+                </p>
                 <input
                   aria-label="Название списка"
                   value={lists.find((list) => list.id === listId)?.name ?? ""}
@@ -426,12 +449,20 @@ export function PlannerApp() {
                     const current = lists.find((list) => list.id === listId)?.name ?? "";
                     if (!current.trim()) renameList(listId, "Без названия");
                   }}
-                  className="w-full bg-transparent text-xl font-semibold tracking-tight outline-none md:font-display md:text-4xl md:font-normal"
+                  className="hidden w-full bg-transparent text-xl font-semibold tracking-tight outline-none md:block md:text-4xl md:font-bold"
                 />
+                </>
               ) : (
-                <h1 className="truncate text-xl font-semibold tracking-tight md:font-display md:text-4xl md:font-normal">{query.trim() ? "Поиск" : viewTitle(view, lists)}</h1>
+                <h1
+                  className={cn(
+                    "truncate text-center text-[1.0625rem] font-semibold transition-opacity duration-200 md:text-left md:text-4xl md:font-bold md:tracking-tight",
+                    !collapsed && !bigTitleOff && "max-md:opacity-0",
+                  )}
+                >
+                  {query.trim() ? "Поиск" : viewTitle(view, lists)}
+                </h1>
               )}
-              {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+              {subtitle ? <p className="hidden truncate text-xs text-muted md:block">{subtitle}</p> : null}
             </div>
             {canBoard(view) && !query.trim() ? (
               <Button
@@ -459,7 +490,7 @@ export function PlannerApp() {
           </div>
           <SyncPill />
           {showSearch ? (
-            <label className="relative mt-1.5 block">
+            <label className="relative mt-2 block">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle" />
               <input
                 value={query}
@@ -531,7 +562,35 @@ export function PlannerApp() {
         ) : null}
 
         <div className="relative flex min-h-0 flex-1 flex-col">
-        <div data-main-scroll className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-2 md:px-8 md:py-6", view === "assist" && !query.trim() ? "pb-0 md:pb-0" : "pb-24")}>
+        <div
+          data-main-scroll
+          onScroll={(event) => setCollapsed(event.currentTarget.scrollTop > 40)}
+          className={cn(
+            "min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-0 md:px-8 md:py-6",
+            view === "assist" && !query.trim() ? "pb-[calc(3.25rem+var(--safe-b))] md:pb-0" : "pb-[calc(6rem+3.25rem+var(--safe-b))] md:pb-24",
+          )}
+        >
+          {!bigTitleOff ? (
+            <div className="pb-2 md:hidden">
+              {listId ? (
+                <input
+                  aria-label="Название списка"
+                  value={lists.find((list) => list.id === listId)?.name ?? ""}
+                  onChange={(event) => renameList(listId, event.target.value)}
+                  onBlur={() => {
+                    const current = lists.find((list) => list.id === listId)?.name ?? "";
+                    if (!current.trim()) renameList(listId, "Без названия");
+                  }}
+                  className="large-title w-full bg-transparent outline-none"
+                />
+              ) : (
+                <p className="large-title truncate" aria-hidden="true">
+                  {query.trim() ? "Поиск" : viewTitle(view, lists)}
+                </p>
+              )}
+              {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+            </div>
+          ) : null}
           {!ready ? <PlannerSkeleton /> : null}
           <Suspense fallback={<PlannerSkeleton />}>
           {ready && showLists ? (
@@ -546,11 +605,11 @@ export function PlannerApp() {
             />
           ) : null}
           {listId && !query.trim() ? (
-            <div className="mt-6 flex justify-center">
+            <div className="mt-16 flex justify-center">
               {confirmList ? (
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setConfirmList(false)}>
-                    Отмена
+                    Отменить
                   </Button>
                   <Button
                     variant="destructive"
@@ -565,9 +624,9 @@ export function PlannerApp() {
                   </Button>
                 </div>
               ) : (
-                <Button variant="ghost" size="sm" className="text-subtle" onClick={() => setConfirmList(true)}>
-                  <Trash2 className="size-4" /> Удалить список
-                </Button>
+                <button type="button" className="h-11 px-4 text-xs text-subtle underline-offset-2 active:underline" onClick={() => setConfirmList(true)}>
+                  Удалить список…
+                </button>
               )}
             </div>
           ) : null}
@@ -602,6 +661,8 @@ export function PlannerApp() {
         ) : null}
         </div>
 
+        {/* Phones: bars float above the translucent tab bar; content scrolls under both. */}
+        <div className="z-36 max-md:absolute max-md:inset-x-0 max-md:bottom-[calc(3.25rem+var(--safe-b))] max-md:bg-surface">
         <DoneToastBar />
         <PainPromptBar onOpen={() => openView("maintenance")} />
 
@@ -621,9 +682,10 @@ export function PlannerApp() {
             ) : null}
           </div>
         ) : null}
+        </div>
 
         <nav
-          className="relative z-36 grid shrink-0 border-t border-line bg-surface pb-safe md:hidden"
+          className="frost z-36 grid shrink-0 pb-safe max-md:absolute max-md:inset-x-0 max-md:bottom-0 md:hidden"
           style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
           aria-label="Основные разделы"
         >
@@ -637,10 +699,10 @@ export function PlannerApp() {
                 type="button"
                 aria-current={active ? "page" : undefined}
                 onClick={() => openView(id)}
-                className={cn("flex h-[3.25rem] min-w-0 flex-col items-center justify-center gap-0.5 text-[0.6875rem]", active ? "text-accent" : "text-subtle")}
+                className={cn("flex h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 text-[0.6875rem]", active ? "text-accent" : "text-subtle")}
               >
                 <Icon className="size-[1.375rem]" strokeWidth={active ? 2 : 1.75} />
-                <span className="max-w-full truncate px-0.5">{label}</span>
+                <span className="max-w-full truncate px-1">{label}</span>
               </button>
             );
           })}
@@ -659,9 +721,15 @@ export function PlannerApp() {
       ) : null}
 
       {task ? (
-        <aside className="sheet sheet-safe absolute inset-x-0 bottom-0 z-50 flex w-full flex-col bg-surface lg:static lg:inset-auto lg:z-auto lg:w-96 lg:shrink-0 lg:border-l lg:border-line">
-          <TaskDetail key={task.id} taskId={task.id} onClose={() => setSelectedId(null)} onOpen={setSelectedId} />
+        <>
+        <button type="button" aria-hidden="true" tabIndex={-1} className="scrim absolute inset-0 z-50 lg:hidden" onClick={closeDetail} />
+        <aside
+          ref={detailDrag.panelRef}
+          className="sheet task-sheet sheet-safe absolute inset-x-0 bottom-0 z-50 flex w-full flex-col bg-surface lg:static lg:inset-auto lg:z-auto lg:w-96 lg:shrink-0 lg:border-l lg:border-line"
+        >
+          <TaskDetail key={task.id} taskId={task.id} onClose={closeDetail} onOpen={setSelectedId} onHeaderPointerDown={detailDrag.onPointerDown} />
         </aside>
+        </>
       ) : null}
     </div>
   );

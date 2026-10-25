@@ -15,8 +15,8 @@ import { leadWarranty, warrantyText } from "@/lib/maintenance/warranty";
 import { Badge, KindIcon, WarrBadge, subtitle } from "./shared";
 import { StatsView } from "./stats";
 import { nearestByCard } from "@/lib/maintenance/nearest";
+import { honestDue } from "@/lib/maintenance/honest-due";
 import { shortMaintTitle } from "@/lib/maintenance/short-title";
-import { dueLabel } from "@/lib/dates";
 import { cn } from "@/lib/cn";
 import type { Task } from "@/lib/planner-types";
 
@@ -30,22 +30,22 @@ function Nearest({ tasks, assets, onOpenTask, onOpenCard }: { tasks: Task[]; ass
       <p className="mb-1 px-1 text-xs font-medium text-subtle">Ближайшее</p>
       <div className="overflow-hidden rounded-xl bg-elevated">
         {groups.map(({ asset, tasks: items }) => (
-          <div key={asset.id} className="border-b border-line/60 px-3 py-1.5 last:border-0">
-            <p className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase text-subtle">
-              <button type="button" onClick={() => onOpenCard(asset.id)} className="flex min-h-7 min-w-0 items-center gap-1.5 uppercase">
+          <div key={asset.id} className="border-b border-line/60 px-3 py-2 last:border-0">
+            <p className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase text-subtle">
+              <button type="button" onClick={() => onOpenCard(asset.id)} className="flex min-h-7 min-w-0 items-center gap-2 uppercase">
               <KindIcon kind={asset.kind} className="size-4 rounded-none border-0 bg-transparent [&_svg]:size-3.5" />
               <span className="truncate">{asset.name}</span>
               </button>
             </p>
             <ul>
               {items.map((task) => {
-                const overdue = task.due != null && task.due < today;
+                const due = honestDue(task, assets, today);
                 return (
                   <li key={task.id}>
                     <button type="button" onClick={() => onOpenTask?.(task.id)} className="flex h-9 w-full items-center gap-2 text-left text-sm">
                       <span className="min-w-0 flex-1 truncate text-fg">{shortMaintTitle(task, assets)}</span>
-                      <span className={cn("shrink-0 text-xs tabular-nums", overdue ? "text-danger" : task.due === today ? "text-accent" : "text-muted")}>
-                        {task.due ? dueLabel(task.due, today) : "без даты"}
+                      <span className={cn("shrink-0 text-xs tabular-nums", due.tone === "danger" ? "text-danger" : due.tone === "accent" ? "text-accent" : "text-muted")}>
+                        {due.text}
                       </span>
                     </button>
                   </li>
@@ -76,7 +76,7 @@ function Row({ asset, summary, onOpen }: { asset: Asset; summary: AssetSummary; 
   const warr = asset.kind === "car" || (hasRule && summary.status !== "ok") ? null : leadWarranty(asset, todayIso());
   return (
     <li>
-      <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 rounded-xl bg-elevated px-3 py-2.5 text-left">
+      <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 rounded-xl bg-elevated px-3 py-2 text-left">
         <KindIcon kind={asset.kind} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[0.9375rem] font-semibold">{asset.name}</span>
@@ -145,18 +145,18 @@ export function MaintenanceView({ onOpenTask }: { onOpenTask?: (taskId: string) 
           <Nearest tasks={tasks} assets={assets} onOpenTask={onOpenTask} onOpenCard={setOpenId} />
           {groups.map((g, i) => (
             <section key={g.id} aria-label={g.title} className={i ? "mt-4" : ""}>
-              <p className="mb-1 flex items-baseline gap-1.5 px-1 text-xs font-medium text-subtle">
+              <p className="mb-1 flex items-baseline gap-2 px-1 text-xs font-medium text-subtle">
                 {g.title}
                 <span className="font-normal">{g.items.length}</span>
               </p>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {g.items.map((x) => (
                   <Row key={x.asset.id} asset={x.asset} summary={x.summary} onOpen={() => setOpenId(x.asset.id)} />
                 ))}
               </ul>
             </section>
           ))}
-          <button type="button" onClick={() => setStats(true)} className="mt-3 flex h-11 items-center gap-1.5 px-1 text-[0.8125rem] font-medium text-accent md:hidden">
+          <button type="button" onClick={() => setStats(true)} className="mt-3 flex h-11 items-center gap-2 px-1 text-[0.8125rem] font-medium text-accent md:hidden">
             <BarChart3 className="size-4" aria-hidden="true" /> Статистика: авто и техника
           </button>
         </>

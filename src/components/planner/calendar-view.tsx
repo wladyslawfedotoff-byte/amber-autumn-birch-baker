@@ -252,7 +252,7 @@ export function CalendarView({
 
   return (
     <div ref={rootRef} className="-mx-1 md:mx-0">
-      <div className={cn("relative z-20 mb-1 flex items-center gap-0.5", mode !== "month" && mode !== "list" && "sticky -top-2 -mt-2 bg-surface pt-2")}>
+      <div className={cn("relative z-20 mb-1 flex items-center gap-1", mode !== "month" && mode !== "list" && "sticky -top-2 -mt-2 bg-surface pt-2")}>
         <h2 className="min-w-0 flex-1 truncate px-1 text-lg font-semibold tracking-tight">{title}</h2>
         {showToday ? (
           <button
@@ -261,7 +261,7 @@ export function CalendarView({
               setCursor(new Date());
               setDay(today);
             }}
-            className="h-11 shrink-0 rounded-full px-2.5 text-sm text-accent"
+            className="h-11 shrink-0 rounded-full px-3 text-sm text-accent"
           >
             Сегодня
           </button>
@@ -299,7 +299,7 @@ export function CalendarView({
                     setMode(item.id);
                     setMenu(false);
                   }}
-                  className="flex h-11 w-full items-center gap-3 px-3 text-left text-[15px]"
+                  className="flex h-11 w-full items-center gap-3 px-3 text-left text-[0.9375rem]"
                 >
                   <span className="min-w-0 flex-1">{item.label}</span>
                   {mode === item.id ? <Check className="size-4 text-accent" /> : null}
@@ -380,7 +380,7 @@ export function CalendarView({
         />
       ) : (
         <section className="mt-3" aria-label={formatLong(day)}>
-          <div className="mb-1.5 flex items-baseline gap-2 px-1">
+          <div className="mb-2 flex items-baseline gap-2 px-1">
             <h3 className="text-sm font-semibold">{day === today ? `Сегодня, ${formatLong(day).split(", ")[1] ?? ""}` : formatLong(day)}</h3>
             <span className="text-xs text-subtle">{countText(tasksOn(day).filter((task) => !task.done).length)}</span>
           </div>
@@ -478,7 +478,7 @@ function MonthGrid({
             <div key={weekStart}>
               <div className="grid" style={{ gridTemplateColumns: columns }}>
                 {weekNumbers ? (
-                  <div className="flex h-11 items-start justify-center pt-1.5 text-[0.625rem] tabular-nums text-subtle" title={`Неделя ${isoWeek(weekStart)}`}>
+                  <div className="flex h-11 items-start justify-center pt-2 text-[0.625rem] tabular-nums text-subtle" title={`Неделя ${isoWeek(weekStart)}`}>
                     {isoWeek(weekStart)}
                   </div>
                 ) : null}
@@ -506,7 +506,7 @@ function MonthGrid({
                       aria-label={label}
                       aria-pressed={selected}
                       onClick={() => onPick(iso)}
-                      className={cn("flex h-11 flex-col items-center pt-0.5", over && "rounded-lg bg-accent/20")}
+                      className={cn("flex h-11 flex-col items-center pt-1", over && "rounded-lg bg-accent/20")}
                     >
                       <span
                         className={cn(
@@ -516,7 +516,7 @@ function MonthGrid({
                       >
                         {date.getDate()}
                       </span>
-                      <span className="mt-0.5 flex h-1.5 items-center gap-[3px]" aria-hidden="true">
+                      <span className="mt-1 flex h-1.5 items-center gap-[3px]" aria-hidden="true">
                         {dots.map((hex, index) => (
                           <span key={index} className={cn("size-[5px] rounded-full", hex ? "" : "bg-subtle")} style={hex ? { background: hex } : undefined} />
                         ))}
@@ -527,7 +527,7 @@ function MonthGrid({
                 })}
               </div>
               {rowBars.length > 0 ? (
-                <div className="mb-0.5 flex flex-col gap-0.5">
+                <div className="mb-1 flex flex-col gap-1">
                   {rowBars.map((bar) => (
                     <div key={`${bar.stageId}-${weekStart}`} className="grid" style={{ gridTemplateColumns: columns }}>
                       <div
@@ -538,7 +538,7 @@ function MonthGrid({
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") onPick(bar.start);
                         }}
-                        className="drag-handle mx-0.5 flex h-5 items-center overflow-hidden rounded bg-accent/15 px-1.5 text-left text-[0.6875rem] text-fg"
+                        className="drag-handle mx-1 flex h-5 items-center overflow-hidden rounded bg-accent/15 px-2 text-left text-[0.6875rem] text-fg"
                         style={{ gridColumn: `${bar.col + offset} / span ${bar.span}` }}
                       >
                         <span className="truncate">
@@ -769,7 +769,7 @@ function TimeGrid({
       </div>
       {hasAllDay ? (
         <div className="grid border-b border-line py-1" style={{ gridTemplateColumns: columns }}>
-          <div className="pt-0.5 text-center text-[0.625rem] leading-tight text-subtle">весь день</div>
+          <div className="pt-1 text-center text-[0.625rem] leading-tight text-subtle">весь день</div>
           {lists.map(({ iso, all, layout, special }) => {
             const items = [
               ...special.map((item) => ({ id: item.id, title: `${iconOf(item)} ${item.title}`, task: null as Task | null })),
@@ -780,14 +780,15 @@ function TimeGrid({
             ];
             const shown = items.slice(0, 3);
             return (
-              <div key={iso} className="flex min-w-0 flex-col gap-0.5 px-px">
+              <div key={iso} className="flex min-w-0 flex-col gap-1 px-px">
                 {shown.map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => (item.task ? onOpen(item.id) : onPick(iso))}
                     className={cn(
-                      "truncate rounded px-1 py-0.5 text-left text-[0.6875rem] leading-tight",
+                      // 1.18: two lines (with hyphenation) instead of a cut-off title.
+                      "line-clamp-2 rounded px-1 py-1 text-left text-[0.6875rem] leading-tight break-words hyphens-auto",
                       item.task?.done ? "bg-elevated text-subtle line-through" : "bg-accent/15 text-fg",
                     )}
                     style={item.task?.color ? { background: `color-mix(in oklab, ${colorHex(item.task.color)} 22%, transparent)` } : undefined}
@@ -848,7 +849,7 @@ function TimeGrid({
                     borderLeft: `2px solid ${hex}`,
                   }}
                 >
-                  <span className="block truncate font-medium text-fg">{task.title}</span>
+                  <span className={cn("block font-medium break-words hyphens-auto text-fg", height > 30 ? "line-clamp-2" : "truncate")}>{task.title}</span>
                   {height > 30 ? <span className="block truncate text-[0.625rem] text-muted tabular-nums">{timeRange(task)}</span> : null}
                 </button>
               );

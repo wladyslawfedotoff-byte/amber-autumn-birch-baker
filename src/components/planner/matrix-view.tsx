@@ -8,6 +8,7 @@ import { setPopover, useDismiss, usePopoverStore } from "@/lib/popover";
 import { isImportant, isUrgent, type Asset, type Task } from "@/lib/planner-types";
 import { colorHex } from "@/lib/task-colors";
 import { useDoneToast } from "@/lib/done-toast";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 /**
  * Eisenhower matrix: four quadrants on one screen (also on a
@@ -63,7 +64,7 @@ export function MatrixView({ selectedId, onOpen }: { selectedId: string | null; 
       <p className="mb-2 hidden text-xs text-muted sm:block">
         Нажмите на заголовок, чтобы развернуть квадрант. Перетащите задачу мышью в другой квадрант или удерживайте её — «Переместить в…».
       </p>
-      <div className={cn("grid min-h-0 flex-1 gap-1.5 sm:gap-3", expanded == null ? "grid-cols-2 grid-rows-2" : "grid-cols-1 grid-rows-1")}>
+      <div className={cn("grid min-h-0 flex-1 gap-2 sm:gap-3", expanded == null ? "grid-cols-2 grid-rows-2" : "grid-cols-1 grid-rows-1")}>
         {shown.map((quad) => (
           <Quadrant
             key={quad.id}
@@ -84,7 +85,7 @@ export function MatrixView({ selectedId, onOpen }: { selectedId: string | null; 
       {menu ? <MoveMenu boxRef={menuBoxRef} menu={menu} tasks={open} onMove={move} onOpen={onOpen} onClose={() => setMenu(null)} /> : null}
       {drag && drag.over != null ? (
         <div
-          className="pointer-events-none fixed z-50 max-w-48 truncate rounded-md border border-line bg-elevated px-3 py-1.5 text-sm text-fg shadow"
+          className="pointer-events-none fixed z-50 max-w-48 truncate rounded-md border border-line bg-elevated px-3 py-2 text-sm text-fg shadow"
           style={{ left: drag.x + 12, top: drag.y + 12 }}
         >
           {drag.title}
@@ -144,18 +145,18 @@ function Quadrant({
         onClick={onToggle}
         aria-expanded={expanded}
         title={expanded ? "Свернуть — показать все четыре" : "Развернуть на весь экран"}
-        className="flex h-9 shrink-0 items-center gap-1.5 px-2 text-left sm:h-11 sm:px-3"
+        className="flex h-9 shrink-0 items-center gap-2 px-2 text-left sm:h-11 sm:px-3"
         style={{ background: `color-mix(in oklab, ${quad.color} 14%, var(--elevated))` }}
       >
         <span className="size-2 shrink-0 rounded-full" style={{ background: quad.color }} aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold leading-tight text-fg sm:text-sm">{quad.title}</span>
-        <span className="shrink-0 text-[11px] tabular-nums text-muted">{items.length}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold leading-tight text-fg sm:text-sm">{quad.title}</span>
+        <span className="shrink-0 text-[0.6875rem] tabular-nums text-muted">{items.length}</span>
         {expanded ? <Minimize2 className="size-3.5 shrink-0 text-subtle" aria-hidden="true" /> : <Maximize2 className="hidden size-3.5 shrink-0 text-subtle sm:block" aria-hidden="true" />}
       </button>
       {expanded ? <p className="px-3 pt-1 text-xs text-muted">{quad.hint}</p> : null}
       <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-1">
         {sorted.length === 0 ? (
-          <li className="px-1.5 py-2 text-[11px] leading-snug text-subtle sm:text-xs">
+          <li className="px-2 py-2 text-[0.6875rem] leading-snug text-subtle sm:text-xs">
             {quad.short}. {quad.example}.
           </li>
         ) : null}
@@ -174,7 +175,7 @@ function Quadrant({
           />
         ))}
       </ul>
-      <form onSubmit={add} className="flex shrink-0 items-center gap-1 border-t border-line px-1.5">
+      <form onSubmit={add} className="flex shrink-0 items-center gap-1 border-t border-line px-2">
         <Plus className="size-3.5 shrink-0 text-subtle" aria-hidden="true" />
         <input
           value={draft}
@@ -182,7 +183,7 @@ function Quadrant({
           placeholder={expanded ? quad.example : "Добавить"}
           aria-label={`Добавить в «${quad.title}»`}
           enterKeyHint="done"
-          className="h-9 min-w-0 flex-1 bg-transparent text-[13px] text-fg outline-none placeholder:text-subtle"
+          className="h-9 min-w-0 flex-1 bg-transparent text-[0.8125rem] text-fg outline-none placeholder:text-subtle"
         />
       </form>
     </section>
@@ -215,7 +216,7 @@ function MatrixRow({
   const assets = usePlanner((s) => s.assets) ?? NO_ASSETS;
   const toggleTask = usePlanner((s) => s.toggleTask);
   const showToast = useDoneToast((s) => s.show);
-  const overdue = task.due != null && task.due < today;
+  const overdue = isTaskOverdue(task, assets, today);
   const dot = colorHex(task.color);
   const timer = useRef<number | null>(null);
   const longPressed = useRef(false);
@@ -312,10 +313,10 @@ function MatrixRow({
         className="drag-handle flex h-8 min-w-0 flex-1 select-none items-center gap-1 pr-1 text-left"
         style={{ WebkitTouchCallout: "none" }}
       >
-        <span className={cn("min-w-0 flex-1 line-clamp-2 break-words text-fg", roomy ? "text-sm" : "text-[13px] leading-tight")}>{task.maint ? shortMaintTitle(task, assets) : task.title}</span>
+        <span className={cn("min-w-0 flex-1 line-clamp-2 break-words text-fg", roomy ? "text-sm" : "text-[0.8125rem] leading-tight")}>{task.maint ? shortMaintTitle(task, assets) : task.title}</span>
         {dot ? <span className="size-1.5 shrink-0 rounded-full" style={{ background: dot }} aria-hidden="true" /> : null}
         {task.due && (roomy || task.due !== today) ? (
-          <span className={cn("shrink-0 text-[10px] tabular-nums", overdue ? "text-danger" : "text-subtle")}>{dueLabel(task.due, today)}</span>
+          <span className={cn("shrink-0 text-[0.625rem] tabular-nums", overdue ? "text-danger" : "text-subtle")}>{dueLabel(task.due, today)}</span>
         ) : null}
       </button>
     </li>

@@ -114,7 +114,7 @@ async function openSettings(page) {
 }
 
 async function closeDetail(page) {
-  await page.getByRole("button", { name: "Закрыть", exact: true }).click();
+  await page.locator("aside.sheet").getByRole("button", { name: /^(Закрыть|Готово)$/ }).first().click();
 }
 
 async function waitText(page, text, label, timeout = 30_000) {

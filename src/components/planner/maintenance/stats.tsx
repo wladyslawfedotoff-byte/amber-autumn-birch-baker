@@ -29,7 +29,7 @@ function KmChart({ asset, currentMonth }: { asset: Asset; currentMonth: string }
         <div className="flex h-[7.5rem] items-end gap-2" role="img" aria-label={`Километры по месяцам: ${months.map((m) => `${name(m.month)} ${m.estimated ? "≈ " : ""}${m.km}`).join(", ")}`}>
           {months.map((m) => (
             <div key={m.month} className="flex h-full min-w-0 flex-1 flex-col justify-end text-center text-[0.625rem] text-subtle" title={`${name(m.month)}: ${m.estimated ? "≈ " : ""}${groupKm(m.km)} км${m.spanMonths > 1 ? ` (за ${m.spanMonths} мес.)` : ""}`}>
-              <span className="mb-0.5 tabular-nums">{groupKm(m.km)}</span>
+              <span className="mb-1 tabular-nums">{groupKm(m.km)}</span>
               <i
                 className={cn("block rounded-t", m.estimated ? "border border-line" : "bg-accent")}
                 style={{
@@ -37,18 +37,18 @@ function KmChart({ asset, currentMonth }: { asset: Asset; currentMonth: string }
                   ...(m.estimated ? { backgroundImage: "repeating-linear-gradient(45deg, var(--line) 0 4px, transparent 4px 8px)" } : {}),
                 }}
               />
-              <span className="mt-0.5">{MONTHS_SHORT[Number(m.month.slice(5)) - 1]}</span>
+              <span className="mt-1">{MONTHS_SHORT[Number(m.month.slice(5)) - 1]}</span>
             </div>
           ))}
         </div>
         {span > 1 ? <p className="mt-2 text-xs text-muted">Штрих — в эти месяцы пробег не обновляли: цифра — среднее за {span} мес. между двумя обновлениями.</p> : span === 1 ? <p className="mt-2 text-xs text-muted">Штрих — в этом месяце пробег не обновляли, цифра примерная.</p> : null}
       </div>
-      <div className="mt-2 flex items-center gap-3 rounded-xl bg-elevated px-3 py-2.5">
+      <div className="mt-2 flex items-center gap-3 rounded-xl bg-elevated px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="text-xs text-muted">{name(last.month)}{running ? " · месяц ещё идёт" : last.spanMonths > 1 ? ` · за ${last.spanMonths} мес.` : ""}</p>
           <p className="text-[0.9375rem] font-semibold tabular-nums">{last.estimated ? "≈ " : ""}{groupKm(last.km)} км</p>
         </div>
-        {delta !== null && prev ? <span className={cn("rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold", delta > 0 ? "bg-warn/15 text-warn" : "bg-ok/15 text-ok")}>{delta > 0 ? "+" : ""}{delta}% к прошлому месяцу</span> : null}
+        {delta !== null && prev ? <span className={cn("rounded-full px-2 py-1 text-[0.6875rem] font-semibold", delta > 0 ? "bg-warn/15 text-warn" : "bg-ok/15 text-ok")}>{delta > 0 ? "+" : ""}{delta}% к прошлому месяцу</span> : null}
       </div>
     </>
   );
@@ -104,11 +104,11 @@ function CarMoney({ car }: { car: Asset }) {
               const h = Math.round((total / maxMonth) * 84);
               return (
                 <div key={m} className="flex h-full min-w-0 flex-1 flex-col justify-end text-center text-[0.625rem] text-subtle">
-                  <span className="mb-0.5 truncate tabular-nums">{total ? (Math.round(total / 100) / 10).toLocaleString("ru-RU") : ""}</span>
+                  <span className="mb-1 truncate tabular-nums">{total ? (Math.round(total / 100) / 10).toLocaleString("ru-RU") : ""}</span>
                   <div className="flex flex-col-reverse overflow-hidden rounded-t" style={{ height: `${total ? Math.max(4, h) : 0}px` }}>
                     {(["fuel", "service", "ins"] as const).map((k) => (row[k] > 0 ? <i key={k} className="block w-full" style={{ height: `${(row[k] / total) * 100}%`, background: SPEND_COLORS[k] }} /> : null))}
                   </div>
-                  <span className="mt-0.5">{MONTHS_SHORT[Number(m.slice(5)) - 1]}</span>
+                  <span className="mt-1">{MONTHS_SHORT[Number(m.slice(5)) - 1]}</span>
                 </div>
               );
             })}
@@ -120,7 +120,7 @@ function CarMoney({ car }: { car: Asset }) {
         <FieldLabel hint="Итог года — всё, что потрачено на машину. ₽ на км — итог, делённый на километры за год по обновлениям пробега." className="mb-1">
           Расходы по годам
         </FieldLabel>
-        <ul className="space-y-1.5">
+        <ul className="space-y-2">
           {years.map((y) => {
             const sp = byYear[y]!;
             const o = ownership(car, y);
@@ -131,7 +131,7 @@ function CarMoney({ car }: { car: Asset }) {
                     <span>{y}</span>
                     <span className="tabular-nums">{money(spendTotal(sp))}</span>
                   </span>
-                  <span className="mt-1.5 block" style={{ width: `${Math.round((spendTotal(sp) / maxYear) * 100)}%` }}>
+                  <span className="mt-2 block" style={{ width: `${Math.round((spendTotal(sp) / maxYear) * 100)}%` }}>
                     <SpendBar spend={sp} />
                   </span>
                   <span className="mt-1 block text-xs text-subtle">{o.perKm !== null ? `≈ ${fmt1(o.perKm)} ₽ на км · ${groupKm(o.km)} км` : "км за год неизвестны"}</span>
@@ -140,7 +140,7 @@ function CarMoney({ car }: { car: Asset }) {
             );
           })}
         </ul>
-        <div className="mt-2 rounded-xl bg-elevated px-3 py-2.5">
+        <div className="mt-2 rounded-xl bg-elevated px-3 py-2">
           <p className="text-xs font-medium text-subtle">{picked}: из чего состоит</p>
           <SpendLegend spend={own.spend} />
           <div className="mt-2 flex gap-4 border-t border-line pt-2 text-[0.8125rem]">
@@ -168,7 +168,7 @@ function AutoStats({ cars }: { cars: Asset[] }) {
           Километры по месяцам
         </FieldLabel>
         {cars.length > 1 ? (
-          <div className="flex flex-wrap gap-1.5 pb-2">
+          <div className="flex flex-wrap gap-2 pb-2">
             {cars.map((c) => (
               <button key={c.id} type="button" aria-pressed={c.id === car.id} onClick={() => setCarId(c.id)} className={cn("h-8 rounded-full border px-3 text-[0.8125rem]", c.id === car.id ? "border-accent bg-accent text-accent-fg" : "border-line text-muted")}>
                 {c.name}
@@ -191,7 +191,7 @@ export function StatsView({ assets, onBack }: { assets: Asset[]; onBack: () => v
   const [tab, setTab] = useState<"auto" | "tech">(cars.length || !tech.length ? "auto" : "tech");
   return (
     <div className="mx-auto w-full max-w-3xl pb-10">
-      <button type="button" onClick={onBack} className="-mt-1 flex h-11 items-center gap-0.5 pr-3 text-sm text-muted" aria-label="Назад">
+      <button type="button" onClick={onBack} className="-mt-1 flex h-11 items-center gap-1 pr-3 text-sm text-muted" aria-label="Назад">
         <ChevronLeft className="size-4" aria-hidden="true" />
         Обслуживание
       </button>

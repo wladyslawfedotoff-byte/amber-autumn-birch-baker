@@ -33,12 +33,12 @@ export function WarrantyPicker({ mode, months, until, boughtAt, onChange }: { mo
         ]}
       />
       {mode === "months" ? (
-        <div className="mt-1.5 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-2">
           <input inputMode="numeric" aria-label="Гарантия, месяцев" value={months} onChange={(e) => onChange({ mode, months: e.target.value, until })} placeholder="36" className={cn(field, "w-24 flex-none")} />
           <span className="text-xs text-muted">{end ? `до ${day(end)}` : boughtAt ? "мес." : "мес. — укажите дату покупки"}</span>
         </div>
       ) : null}
-      {mode === "until" ? <input type="date" aria-label="Гарантия до" value={until} onChange={(e) => onChange({ mode, months, until: e.target.value })} className={cn(field, "mt-1.5 text-left")} /> : null}
+      {mode === "until" ? <input type="date" aria-label="Гарантия до" value={until} onChange={(e) => onChange({ mode, months, until: e.target.value })} className={cn(field, "mt-2 text-left")} /> : null}
     </div>
   );
 }
@@ -99,19 +99,19 @@ export function TechBlock({ asset }: { asset: Asset }) {
         </div>
         {parts.length ? (
           <>
-            <ul className="space-y-1.5">
+            <ul className="space-y-2">
               {parts.map((p) => {
                 const st = warrantyState({ boughtAt: p.boughtAt ?? asset.boughtAt, ...p }, today, soon);
                 const files = [asset.attachments, asset.links, asset.contacts].reduce((n, list) => n + (list ?? []).filter((a) => a.entryId === p.id).length, 0);
                 return (
                   <li key={p.id}>
-                    <button type="button" onClick={() => setSheet(p)} className="flex w-full items-center gap-2 rounded-xl bg-elevated px-3 py-2.5 text-left">
+                    <button type="button" onClick={() => setSheet(p)} className="flex w-full items-center gap-2 rounded-xl bg-elevated px-3 py-2 text-left">
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[0.9375rem] font-semibold">{p.name}</span>
                         <span className="block truncate text-xs text-subtle">
                           {[p.boughtAt ? day(p.boughtAt) : null, p.price ? money(p.price) : null].filter(Boolean).join(" · ") || "без даты и цены"}
                           {files ? (
-                            <span className="ml-1 inline-flex items-center gap-0.5">
+                            <span className="ml-1 inline-flex items-center gap-1">
                               · <Paperclip className="size-3" aria-hidden="true" />
                               {files}
                             </span>
@@ -125,7 +125,7 @@ export function TechBlock({ asset }: { asset: Asset }) {
                 );
               })}
             </ul>
-            {invested > 0 ? <p className="mt-1.5 px-1 text-xs text-muted">Вложено всего: {money(invested)}</p> : null}
+            {invested > 0 ? <p className="mt-2 px-1 text-xs text-muted">Вложено всего: {money(invested)}</p> : null}
           </>
         ) : (
           <p className="rounded-xl border border-dashed border-line px-3 py-3 text-[0.8125rem] text-muted">Компонентов нет — для простой техники так и надо. Для компьютера добавьте, например, «Видеокарта, 58 900 ₽, гарантия 36 мес.» и фото чека.</p>
@@ -174,7 +174,7 @@ export function PartSheet({ asset, part, onClose }: { asset: Asset; part: TechPa
   };
   const sep = !part && kind === "item";
   return (
-    <Sheet open title={part ? "Компонент: изменить" : "Новый компонент"} onClose={discard} action={{ label: "Сохранить", onClick: save, disabled: !ok }}>
+    <Sheet open title={part ? "Компонент: изменить" : "Новый компонент"} onClose={discard} action={{ label: "Готово", onClick: save, disabled: !ok }}>
       <div className="space-y-2">
         {!part ? (
           <Seg
@@ -189,7 +189,7 @@ export function PartSheet({ asset, part, onClose }: { asset: Asset; part: TechPa
         ) : null}
         <input autoFocus={!part} value={name} onChange={(e) => setName(e.target.value)} placeholder={sep ? "Название — например, Монитор" : "Название — например, Видеокарта"} aria-label="Название" maxLength={80} className={field} />
         {!part && !sep ? (
-          <div className="flex flex-wrap gap-1.5" aria-label="Быстрый выбор">
+          <div className="flex flex-wrap gap-2" aria-label="Быстрый выбор">
             {PART_NAMES.filter((n) => !(asset.parts ?? []).some((p) => p.name === n)).map((n) => (
               <button key={n} type="button" onClick={() => setName(n)} className={cn("h-8 rounded-full border px-3 text-[0.8125rem]", name === n ? "border-accent bg-accent text-accent-fg" : "border-line text-muted")}>
                 {n}
@@ -228,7 +228,7 @@ export function PartSheet({ asset, part, onClose }: { asset: Asset; part: TechPa
             {confirm ? (
               <div className="flex gap-2">
                 <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>
-                  Отмена
+                  Отменить
                 </Button>
                 <Button
                   variant="destructive"

@@ -41,7 +41,7 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
         {contacts.map((contact) => (
           <li key={contact.id} className="rounded-xl border border-line bg-elevated p-3">
             <div className="flex items-start gap-2">
-              <UserRound className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden="true" />
+              <UserRound className="mt-1 size-4 shrink-0 text-muted" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 {editing === contact.id ? (
                   <>
@@ -56,7 +56,7 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
                       aria-label="Роль"
                       placeholder="Роль: заказчик, поставщик…"
                       onChange={(event) => updateContact(projectId, contact.id, { role: event.target.value })}
-                      className="mt-0.5 w-full bg-transparent text-xs text-muted outline-none placeholder:text-subtle"
+                      className="mt-1 w-full bg-transparent text-xs text-muted outline-none placeholder:text-subtle"
                     />
                   </>
                 ) : (
@@ -74,18 +74,18 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
             <div className="mt-2 flex flex-wrap gap-2">
               {contact.phone ? (
                 <>
-                  <a href={`tel:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3 text-sm text-fg">
+                  <a href={`tel:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-sm text-fg">
                     <Phone className="size-3.5" aria-hidden="true" />
                     {contact.phone}
                   </a>
-                  <a href={`sms:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3 text-sm text-fg" aria-label={`Сообщение ${contact.name}`}>
+                  <a href={`sms:${contact.phone.replace(/\s/g, "")}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-sm text-fg" aria-label={`Сообщение ${contact.name}`}>
                     <MessageSquare className="size-3.5" aria-hidden="true" />
                     SMS
                   </a>
                 </>
               ) : null}
               {contact.email ? (
-                <a href={`mailto:${contact.email}`} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3 text-sm text-fg">
+                <a href={`mailto:${contact.email}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-sm text-fg">
                   <Mail className="size-3.5" aria-hidden="true" />
                   {contact.email}
                 </a>
@@ -95,7 +95,7 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
               {editing === contact.id ? "Готово" : "Изменить"}
             </button>
             {editing === contact.id ? (
-            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <input
                 value={contact.phone ?? ""}
                 aria-label="Телефон"
@@ -132,10 +132,10 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка" aria-label="Заметка" className={field} />
           <div className="flex gap-2">
             <Button type="submit" variant="primary" size="sm" disabled={!name.trim()}>
-              Сохранить
+              Готово
             </Button>
             <Button type="button" variant="soft" size="sm" onClick={() => setOpen(false)}>
-              Отмена
+              Отменить
             </Button>
           </div>
         </form>

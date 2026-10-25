@@ -1,13 +1,5 @@
 @import "tailwindcss";
-/* 1.17: fonts are served by the app itself (no external font host on start). */
-@import "@fontsource/ibm-plex-sans/cyrillic-400.css";
-@import "@fontsource/ibm-plex-sans/cyrillic-500.css";
-@import "@fontsource/ibm-plex-sans/cyrillic-600.css";
-@import "@fontsource/ibm-plex-sans/latin-400.css";
-@import "@fontsource/ibm-plex-sans/latin-500.css";
-@import "@fontsource/ibm-plex-sans/latin-600.css";
-@import "@fontsource/newsreader/latin-500.css";
-@import "@fontsource/newsreader/latin-600.css";
+/* 1.18: system font (SF on Apple devices) — nothing to download on start. */
 /* Never scan build output: the SSR build would otherwise pick up class names
    from the client bundle and emit a different CSS file (hash mismatch → the
    server-rendered <link> 404s and the page flashes unstyled). */
@@ -36,13 +28,14 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #121310;
-  --surface: #191a17;
-  --elevated: #22231f;
+  /* 1.18: true black for OLED, raised surfaces a step lighter (iOS grouped style). */
+  --bg: #000000;
+  --surface: #000000;
+  --elevated: #1c1c1e;
   --fg: #f3f1ea;
   --muted: #c2c4bc;
   --subtle: #9a9d95;
-  --line: #34362f;
+  --line: #38383a;
   --accent: #d7e0da;
   --accent-fg: #141614;
   --danger: #e7b0b0;
@@ -79,8 +72,8 @@
 .swatch-pink { background: #8d4d68; }
 
 @theme inline {
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-elevated: var(--elevated);
@@ -150,6 +143,14 @@
 @layer utilities {
   .scrim {
     background: color-mix(in oklab, var(--fg) 32%, transparent);
+    /* 1.18: the content under a sheet or menu is softly blurred (iOS). */
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  .scrim-menu {
+    background: rgb(0 0 0 / 0.22);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
   }
 
   .press {
@@ -253,20 +254,21 @@ textarea.text-sm {
   font-size: 1rem;
 }
 
-/* Compact density on phones: ~15px body, smaller headings,
-   tap targets stay 44px (spacing is not scaled, only the type ramp). */
+/* Compact density on phones, 1.18 four-step type ramp (iOS-like):
+   12 caption · 15 body (sm = base) · 20 title · 34 large title.
+   Tap targets stay 44px (spacing is not scaled, only the type ramp). */
 @media (max-width: 767px) {
   :root {
-    --text-xs: 0.71875rem;
-    --text-xs--line-height: 1.35;
-    --text-sm: 0.8125rem;
-    --text-sm--line-height: 1.35;
+    --text-xs: 0.75rem;
+    --text-xs--line-height: 1.33;
+    --text-sm: 0.9375rem;
+    --text-sm--line-height: 1.33;
     --text-base: 0.9375rem;
-    --text-base--line-height: 1.4;
-    --text-lg: 1.0625rem;
-    --text-xl: 1.1875rem;
-    --text-2xl: 1.375rem;
-    --text-3xl: 1.5rem;
+    --text-base--line-height: 1.33;
+    --text-lg: 1.25rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.25rem;
+    --text-3xl: 2.125rem;
   }
   body {
     line-height: 1.4;
@@ -279,7 +281,7 @@ textarea.text-sm {
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea {
-    font-size: 16px;
+    font-size: max(16px, 1rem);
   }
 }
 
@@ -395,9 +397,142 @@ input {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
   mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
 }
+/* Phones (1.18): content runs under the frosted tab bar, so only the top edge fades. */
+@media (max-width: 767px) {
+  [data-main-scroll] {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 12px);
+  }
+}
 @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
   [data-main-scroll] {
     -webkit-mask-image: none;
     mask-image: none;
+  }
+}
+
+/* ---- 1.18 Apple-style pass ---- */
+
+/* One thin icon stroke everywhere (explicit heavier strokes, e.g. ticks, stay). */
+svg.lucide[stroke-width="2"] {
+  stroke-width: 1.75;
+}
+
+/* Large title (iOS): 34px bold at the top of the list; the bar shows a
+   compact 17px copy once the list scrolls (see app.tsx «collapsed»). */
+.large-title {
+  font-size: 2.125rem;
+  line-height: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+
+/* Frosted translucent bars. Solid for «Увеличить контраст» / «Уменьшить прозрачность». */
+.frost {
+  background: color-mix(in oklab, var(--surface) 72%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 -0.5px 0 var(--line);
+}
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  .scrim,
+  .scrim-menu {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: color-mix(in oklab, var(--fg) 45%, transparent);
+  }
+  .frost {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: 0 -1px 0 var(--line);
+  }
+}
+
+/* Sheet grabber: the small pill that says «pull me down». */
+.sheet-grabber {
+  display: block;
+  width: 36px;
+  height: 5px;
+  margin: 6px auto 2px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--fg) 22%, transparent);
+}
+
+/* Task card on phones: a page sheet with the list peeking above it. */
+@media (max-width: 1023px) {
+  .task-sheet {
+    top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+    border-top-left-radius: 14px;
+    border-top-right-radius: 14px;
+    box-shadow: 0 -8px 30px rgb(0 0 0 / 0.18);
+  }
+}
+@keyframes sheet-up-full {
+  from {
+    transform: translateY(100%);
+  }
+}
+.sheet-panel,
+.task-sheet {
+  animation-name: sheet-up-full;
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Long-press: the row lifts, the rest dims, a menu appears next to it. */
+.task-row,
+.task-row * {
+  -webkit-touch-callout: none;
+}
+@media (pointer: coarse) {
+  .task-row {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+.task-row[data-lifted="true"] {
+  z-index: 80;
+  transform: scale(1.02);
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.22);
+  transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
+}
+.ctx-menu {
+  animation: ctx-in 160ms var(--ease);
+  transform-origin: top center;
+  background: color-mix(in oklab, var(--elevated) 86%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+}
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  .ctx-menu {
+    background: var(--elevated);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@keyframes ctx-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+/* Section switch: short cross-fade, no bounce; the tab bar stays put. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+}
+nav[aria-label="Основные разделы"] {
+  view-transition-name: tabbar;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

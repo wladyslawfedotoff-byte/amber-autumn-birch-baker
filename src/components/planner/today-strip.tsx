@@ -3,9 +3,11 @@ import { daysBetween, nextOccurrence, shiftIso, todayIso, weekdayLetter, occursO
 import { usePlanner } from "@/lib/planner-store";
 import { cn } from "@/lib/cn";
 import { habitChip, habitsForDay } from "@/lib/habit-plan";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 export function TodaySummary() {
   const tasks = usePlanner((s) => s.tasks);
+  const assets = usePlanner((s) => s.assets);
   const habits = usePlanner((s) => s.habits);
   const milestones = usePlanner((s) => s.milestones);
   const today = todayIso();
@@ -16,8 +18,8 @@ export function TodaySummary() {
     })
     .filter((row) => row.days >= 0 && row.days <= 14)
     .sort((a, b) => a.days - b.days);
-  const todayN = tasks.filter((task) => !task.done && task.due === today).length;
-  const overdueN = tasks.filter((task) => !task.done && task.due != null && task.due < today).length;
+  const overdueN = tasks.filter((task) => isTaskOverdue(task, assets, today)).length;
+  const todayN = tasks.filter((task) => !task.done && task.due != null && task.due <= today).length - overdueN;
   const planned = habitsForDay(habits, today);
   const habitLeft = planned.filter((habit) => !habit.checks.includes(today)).length;
   const nextDate = soon[0];
@@ -38,7 +40,7 @@ export function TodaySummary() {
     <div className="mb-3">
       <p className="text-base font-semibold tracking-tight text-fg">{line}</p>
       {flagged.length ? (
-        <ul className="mt-1 space-y-0.5">
+        <ul className="mt-1 space-y-1">
           {flagged.map((row) => (
             <li key={row.item.id} className="truncate text-sm">
               <span aria-hidden="true">{iconOf(row.item)} </span>
@@ -84,14 +86,14 @@ export function WeekDays({
             aria-label={`${weekdayLetter(day)} ${Number(day.slice(8))}, задач ${count}`}
             onClick={() => onPick(day)}
             className={cn(
-              "flex min-h-14 flex-col items-center justify-center rounded-xl px-1 py-1.5 text-xs",
+              "flex min-h-14 flex-col items-center justify-center rounded-xl px-1 py-2 text-xs",
               on ? "bg-accent text-accent-fg" : "text-muted",
             )}
           >
             <span>{weekdayLetter(day)}</span>
             <span className="tabular-nums">{Number(day.slice(8))}</span>
             <span className="mt-1 tabular-nums">{count > 0 ? count : "·"}</span>
-            <span className={cn("mt-0.5 size-1.5 rounded-full", habitsDone ? "bg-current" : "bg-transparent")} />
+            <span className={cn("mt-1 size-1.5 rounded-full", habitsDone ? "bg-current" : "bg-transparent")} />
           </button>
         );
       })}

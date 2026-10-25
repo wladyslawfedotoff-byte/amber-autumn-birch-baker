@@ -84,7 +84,7 @@ export function NewAssetSheet({ open, onClose, onCreated }: { open: boolean; onC
           save();
         }}
       >
-        <div role="radiogroup" aria-label="Что это" className="flex flex-wrap gap-1.5 pb-2">
+        <div role="radiogroup" aria-label="Что это" className="flex flex-wrap gap-2 pb-2">
           {KINDS.map((k) => (
             <button
               key={k.id}
@@ -92,7 +92,7 @@ export function NewAssetSheet({ open, onClose, onCreated }: { open: boolean; onC
               role="radio"
               aria-checked={kind === k.id}
               onClick={() => setKind(k.id)}
-              className={cn("h-9 rounded-full border px-3.5 text-[0.8125rem]", kind === k.id ? "border-accent bg-accent text-accent-fg" : "border-line text-muted")}
+              className={cn("h-9 rounded-full border px-4 text-[0.8125rem]", kind === k.id ? "border-accent bg-accent text-accent-fg" : "border-line text-muted")}
             >
               {k.label}
             </button>
@@ -124,7 +124,7 @@ export function NewAssetSheet({ open, onClose, onCreated }: { open: boolean; onC
               <DateField label="Заменён" value={lastAt} onChange={setLastAt} />
             </div>
           ) : null}
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Заметка" aria-label="Заметка" rows={2} maxLength={2000} className={cn(field, "h-auto py-2.5")} />
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Заметка" aria-label="Заметка" rows={2} maxLength={2000} className={cn(field, "h-auto py-2")} />
         </div>
         <InlineHint label="Что куда писать" className="mt-1">
           Автомобиль — номер и пробег, правила «каждые N км или N мес.». Техника — модель, дата покупки, цена и гарантия (компьютер можно собрать из компонентов в карточке). Расходник — «менять раз в N мес.» и дата последней замены: Пора напомнит заранее. Правила и историю можно добавить в карточке.
@@ -198,7 +198,7 @@ export function EditAssetSheet({ assetId, onClose, onDeleted }: { assetId: strin
         ) : null}
         <label className="block">
           <span className={smallLabel}>Заметка</span>
-          <textarea defaultValue={asset.notes} onChange={(e) => update(asset.id, { notes: e.target.value })} rows={3} maxLength={2000} className={cn(field, "h-auto py-2.5")} />
+          <textarea defaultValue={asset.notes} onChange={(e) => update(asset.id, { notes: e.target.value })} rows={3} maxLength={2000} className={cn(field, "h-auto py-2")} />
         </label>
         <div>
           <FieldLabel hint="За сколько до срока карточка станет «скоро» и Пора создаст задачу-напоминание. Считается по тому, что наступит раньше: дни до даты или километры до пробега.">Когда считать «скоро»</FieldLabel>
@@ -212,7 +212,7 @@ export function EditAssetSheet({ assetId, onClose, onDeleted }: { assetId: strin
           {confirm ? (
             <div className="flex gap-2">
               <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>
-                Отмена
+                Отменить
               </Button>
               <Button
                 variant="destructive"
@@ -255,7 +255,7 @@ export function MileageSheet({ assetId, onClose }: { assetId: string; onClose: (
     onClose();
   };
   return (
-    <Sheet open title="Пробег" onClose={onClose} action={{ label: "Сохранить", onClick: save, disabled: n === undefined }}>
+    <Sheet open title="Пробег" onClose={onClose} action={{ label: "Готово", onClick: save, disabled: n === undefined }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -272,7 +272,7 @@ export function MileageSheet({ assetId, onClose }: { assetId: string; onClose: (
           <ul className="mt-1 divide-y divide-line rounded-xl bg-elevated">
             {[...asset.readings].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 12).map((r) =>
               fixing === r.id ? (
-                <li key={r.id} className="flex items-center gap-2 px-3 py-1.5">
+                <li key={r.id} className="flex items-center gap-2 px-3 py-2">
                   <span className="w-20 shrink-0 text-xs text-muted">{formatShortDay(r.date)} {r.date.slice(0, 4)}</span>
                   <input autoFocus inputMode="numeric" aria-label={`Пробег на ${r.date}`} value={fixValue} onChange={(e) => setFixValue(e.target.value)} className={cn(field, "min-w-0 flex-1")} />
                   <Button variant="primary" disabled={cleanNumber(fixValue) === undefined} onClick={() => { if (fixReading(asset.id, r.id, fixValue)) setFixing(null); }}>Ок</Button>
@@ -346,7 +346,7 @@ export function RuleSheet({
     onClose();
   };
   return (
-    <Sheet open title={rule ? "Правило" : insDefault ? "Новый платёж" : "Новое правило"} onClose={onClose} action={{ label: rule ? "Сохранить" : "Добавить", onClick: save, disabled: !ok }}>
+    <Sheet open title={rule ? "Правило" : insDefault ? "Новый платёж" : "Новое правило"} onClose={onClose} action={{ label: rule ? "Готово" : "Добавить", onClick: save, disabled: !ok }}>
       <div className="space-y-2">
         <input autoFocus={!rule} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={car ? "Что делать — например, замена масла" : "Что делать — например, заменить фильтр"} aria-label="Что делать" maxLength={120} className={field} />
         <FieldLabel hint="Можно один срок или несколько сразу — тогда сработает тот, что наступит раньше. Например: каждые 10 000 км или 12 мес.">Когда</FieldLabel>
@@ -469,7 +469,7 @@ export function ServiceSheet({ assetId, preset, editing, onClose }: { assetId: s
     onClose();
   };
   return (
-    <Sheet open title={editing ? "Изменить запись" : "Запись в историю"} onClose={discard} action={{ label: "Сохранить", onClick: save, disabled: !ok }}>
+    <Sheet open title={editing ? "Изменить запись" : "Запись в историю"} onClose={discard} action={{ label: "Готово", onClick: save, disabled: !ok }}>
       <div className="space-y-2">
         <input autoFocus={!preset && !editing} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={asset.kind === "car" ? "Что сделано — например, замена масла" : "Что сделано — например, заменён фильтр"} aria-label="Что сделано" maxLength={160} className={field} />
         <div className="flex gap-2">
@@ -483,7 +483,7 @@ export function ServiceSheet({ assetId, preset, editing, onClose }: { assetId: s
             <input value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Сервис, магазин" maxLength={120} aria-label="Где" className={field} />
           </label>
         </div>
-        <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка" aria-label="Заметка" rows={2} maxLength={1000} className={cn(field, "h-auto py-2.5")} />
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка" aria-label="Заметка" rows={2} maxLength={1000} className={cn(field, "h-auto py-2")} />
         <AssetObjects asset={asset} parentId={id} label="Чеки, файлы и ссылки записи" />
         {asset.rules.length ? (
           <div className="rounded-xl bg-elevated px-3 py-2">
@@ -493,7 +493,7 @@ export function ServiceSheet({ assetId, preset, editing, onClose }: { assetId: s
                 const on = guess.includes(r.id);
                 return (
                   <li key={r.id}>
-                    <label className="flex min-h-11 items-center gap-2.5 py-1 text-[0.9375rem]">
+                    <label className="flex min-h-11 items-center gap-3 py-1 text-[0.9375rem]">
                       <input type="checkbox" checked={on} onChange={() => setPicked(on ? guess.filter((x) => x !== r.id) : [...guess, r.id])} className="size-5 shrink-0 accent-[var(--accent)]" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{r.title}</span>
@@ -539,7 +539,7 @@ export function EntrySheet({ assetId, entry, onClose, onEdit }: { assetId: strin
         <Button variant="primary" className="mb-2 w-full" onClick={onEdit}>Изменить запись</Button>
         {confirm ? (
           <div className="flex gap-2">
-            <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>Отмена</Button>
+            <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>Отменить</Button>
             <Button variant="destructive" className="flex-1" onClick={() => void remove()}>Удалить запись</Button>
           </div>
         ) : (

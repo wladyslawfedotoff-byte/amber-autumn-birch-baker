@@ -100,13 +100,13 @@ try {
   // three fill-ups through the sheet (a partial one in the middle of a stretch), one through the quick row
   let d = await fillSheet(page, { date: iso(-60), km: "80 500", liters: "40", sum: "2 400" });
   await shot(page, "02-fillup-sheet");
-  await d.getByRole("button", { name: "Сохранить" }).click();
+  await d.getByRole("button", { name: "Готово" }).click();
   d = await fillSheet(page, { date: iso(-45), km: "80 800", liters: "10", sum: "600", full: false });
-  await d.getByRole("button", { name: "Сохранить" }).click();
+  await d.getByRole("button", { name: "Готово" }).click();
   d = await fillSheet(page, { date: iso(-30), km: "81 000", liters: "26", sum: "1 560" });
-  await d.getByRole("button", { name: "Сохранить" }).click();
+  await d.getByRole("button", { name: "Готово" }).click();
   d = await fillSheet(page, { date: iso(-5), km: "81 900", liters: "44", sum: "2 640" });
-  await d.getByRole("button", { name: "Сохранить" }).click();
+  await d.getByRole("button", { name: "Готово" }).click();
   // 500→1900: stretch 1 = 10 + 26 = 36 l / 500 km; stretch 2 = 44 l / 900 km → 80 l / 1400 km = 5,7 l/100 km, 4800/1400 = 3,4 ₽/km
   await page.getByRole("region", { name: "Заправки" }).getByText(/^5,7\s*л\/100 км$/).waitFor();
   await page.getByText("по 2 отрезкам между полными баками").waitFor();
@@ -133,7 +133,7 @@ try {
   await dialog(page, "Правило").getByRole("button", { name: "Сделано — записать" }).click();
   const paid = dialog(page, "Запись в историю");
   if ((await paid.getByLabel("Стоимость").inputValue()) !== "12000") throw new Error("usual cost not prefilled");
-  await paid.getByRole("button", { name: "Сохранить" }).click();
+  await paid.getByRole("button", { name: "Готово" }).click();
   ok("paying it: the usual cost is prefilled");
 
   // maintenance entry with a cost + receipt
@@ -143,7 +143,7 @@ try {
   await ed.getByLabel("Стоимость").fill("6 400");
   await ed.getByLabel("Добавить файл").setInputFiles(join(FILES, "site.jpg"));
   await ed.getByRole("button", { name: /^Удалить site/ }).waitFor({ timeout: 15_000 });
-  await ed.getByRole("button", { name: "Сохранить" }).click();
+  await ed.getByRole("button", { name: "Готово" }).click();
   await page.getByText("Всего на машину").waitFor();
   ok("total cost of ownership block (fuel + maintenance)");
   await full(page, "04-car-card");
@@ -154,7 +154,7 @@ try {
   await page.getByRole("button", { name: /44 л/ }).click();
   const fd = dialog(page, "Заправка: изменить");
   await fd.getByLabel("Литры").fill("46");
-  await fd.getByRole("button", { name: "Сохранить" }).click();
+  await fd.getByRole("button", { name: "Готово" }).click();
   await page.getByRole("region", { name: "Заправки" }).getByText(/^5,9\s*л\/100 км$/).waitFor();
   ok("fill-up edited → consumption recalculated (5,9)");
   await page.getByRole("button", { name: "Назад к списку" }).click();
@@ -188,11 +188,11 @@ try {
   await pd.getByLabel("Добавить файл").setInputFiles(join(FILES, "site.jpg"));
   await pd.getByRole("button", { name: /^Удалить site/ }).waitFor({ timeout: 15_000 });
   await shot(page, "06-component-sheet");
-  await pd.getByRole("button", { name: "Сохранить" }).click();
+  await pd.getByRole("button", { name: "Готово" }).click();
   pd = await addPart({ chip: "Процессор", bought: addMonths(iso(0), -6), price: "24 600", months: "36" });
-  await pd.getByRole("button", { name: "Сохранить" }).click();
+  await pd.getByRole("button", { name: "Готово" }).click();
   pd = await addPart({ chip: "Диск", bought: addMonths(iso(0), -40), price: "9 800", months: "24" }); // expired
-  await pd.getByRole("button", { name: "Сохранить" }).click();
+  await pd.getByRole("button", { name: "Готово" }).click();
   await page.getByText(/гарантия \d+ дн\./).first().waitFor();
   await page.getByText("истекла", { exact: false }).first().waitFor().catch(() => undefined);
   await page.getByText("Вложено всего: ").waitFor();
@@ -207,7 +207,7 @@ try {
   await pd.getByLabel("Цена, ₽").fill("24 900");
   await pd.getByLabel("Дата покупки").fill(addMonths(iso(0), -10));
   await pd.getByLabel("Гарантия, месяцев").fill("36");
-  await pd.getByRole("button", { name: "Сохранить" }).click();
+  await pd.getByRole("button", { name: "Готово" }).click();
   await page.getByRole("button", { name: "Назад к списку" }).click();
   await page.getByRole("region", { name: "Авто" }).waitFor();
   await page.getByRole("region", { name: "Техника" }).getByText("Монитор", { exact: true }).waitFor();

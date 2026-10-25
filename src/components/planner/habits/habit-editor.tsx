@@ -149,7 +149,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
                 key={t.name}
                 type="button"
                 onClick={() => setDraft({ ...habitDraft({ ...t.extra, name: t.name }) })}
-                className={cn("flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-elevated px-3 text-[0.8125rem]", draft.name === t.name && "ring-2 ring-accent")}
+                className={cn("flex h-9 shrink-0 items-center gap-2 rounded-full bg-elevated px-3 text-[0.8125rem]", draft.name === t.name && "ring-2 ring-accent")}
               >
                 <span aria-hidden="true">{t.extra.icon}</span>
                 {t.name}
@@ -330,7 +330,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
               <div className="flex items-center gap-2 py-1">
                 <span className="text-xs text-muted">Удалить вместе с отметками?</span>
                 <button type="button" onClick={() => setConfirm(false)} className="h-9 px-2 text-sm text-muted">
-                  Отмена
+                  Отменить
                 </button>
                 <button
                   type="button"

@@ -158,7 +158,7 @@ function ReminderRow({
           </span>
           <span className="truncate text-sm text-fg">{hit.title}</span>
         </span>
-        <span className="mt-0.5 block pl-14 text-xs text-subtle">
+        <span className="mt-1 block pl-14 text-xs text-subtle">
           {kindLabel(hit.kind)} · {hit.whenLabel}
         </span>
       </button>
@@ -196,24 +196,24 @@ export function ReminderBanner({
   const kmAsset = kmFor?.(hit);
 
   return (
-    <div className="relative z-10 shrink-0 bg-surface px-3 pb-1.5 md:px-8" role="status">
-      <div className="card-lift flex h-9 items-center gap-1 rounded-full bg-elevated pr-0.5 pl-3 text-sm">
+    <div className="relative z-10 shrink-0 bg-surface px-3 pb-2 md:px-8" role="status">
+      <div className="card-lift flex h-9 items-center gap-1 rounded-full bg-elevated pr-1 pl-3 text-sm">
         <Bell className="size-3.5 shrink-0 text-danger" aria-hidden="true" />
-        <button type="button" onClick={() => onOpen(hit)} className="flex h-9 min-w-0 flex-1 items-center gap-1.5 text-left">
+        <button type="button" onClick={() => onOpen(hit)} className="flex h-9 min-w-0 flex-1 items-center gap-2 text-left">
           <span className="shrink-0 text-xs tabular-nums text-danger">{hit.time}</span>
           <span className="truncate text-fg">{hit.title}</span>
         </button>
         {extra > 0 ? (
-          <button type="button" onClick={onMore} className="h-9 shrink-0 px-1.5 text-xs text-muted" aria-label={`Ещё напоминаний: ${extra}`}>
+          <button type="button" onClick={onMore} className="h-9 shrink-0 px-2 text-xs text-muted" aria-label={`Ещё напоминаний: ${extra}`}>
             +{extra}
           </button>
         ) : null}
         {kmAsset && onMileage ? (
-          <button type="button" onClick={() => onMileage(kmAsset)} className="h-9 shrink-0 px-1.5 text-xs font-medium text-accent">
+          <button type="button" onClick={() => onMileage(kmAsset)} className="h-9 shrink-0 px-2 text-xs font-medium text-accent">
             Обновить пробег
           </button>
         ) : (
-          <button type="button" onClick={() => onAck(hit)} className="h-9 shrink-0 px-1.5 text-xs font-medium text-accent">
+          <button type="button" onClick={() => onAck(hit)} className="h-9 shrink-0 px-2 text-xs font-medium text-accent">
             Понятно
           </button>
         )}

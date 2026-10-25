@@ -16,6 +16,10 @@ import { notesPreview, progressLabel, subtaskProgress } from "@/lib/task-tools";
 import { useSubtasksOpen } from "@/lib/use-subtasks-open";
 import { colorStyle } from "@/lib/task-colors";
 import { useDoneToast } from "@/lib/done-toast";
+import { haptic } from "@/lib/haptics";
+import { honestDue } from "@/lib/maintenance/honest-due";
+import { TaskContextMenu } from "@/components/planner/task-menu";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 function ring(priority: Priority): string {
   if (priority === 3) return "border-danger";
@@ -28,6 +32,8 @@ const NO_ASSETS: Asset[] = [];
 /** Swipe distance (px) that triggers the action, and the furthest the row moves. */
 const SWIPE_AT = 72;
 const SWIPE_MAX = 120;
+/** Hold time (ms) that opens the long-press menu; any move before it cancels. */
+const HOLD_MS = 450;
 
 /** Memoized (1.15): ticking one task redraws only that row. */
 export const TaskRow = memo(function TaskRow({
@@ -72,7 +78,7 @@ export const TaskRow = memo(function TaskRow({
   const [open, setOpen] = useSubtasksOpen(task.id, !task.done && !foldSubtasks);
   const [step, setStep] = useState("");
   const preview = notesPreview(task.notes);
-  const overdue = !task.done && task.due != null && task.due < today;
+  const overdue = isTaskOverdue(task, assets, today);
   const tomorrow = shiftIso(today, 1);
   const canPostpone = !task.done && !onDragStart && overdue && !ticked;
   const checked = task.done || ticked;
@@ -83,6 +89,7 @@ export const TaskRow = memo(function TaskRow({
       return;
     }
     const wasDone = task.done;
+    haptic();
     toggleTask(task.id);
     if (wasDone) return;
     const after = usePlanner.getState().tasks.find((t) => t.id === task.id);
@@ -93,6 +100,14 @@ export const TaskRow = memo(function TaskRow({
   const [dx, setDx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const swiped = useRef(false);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const [menu, setMenu] = useState<DOMRect | null>(null);
+  function openMenu() {
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    haptic("select");
+    setMenu(rect);
+  }
   const canTomorrow = !checked && !task.done;
   function onSwipeStart(event: PointerEvent<HTMLDivElement>) {
     // A swipe that ended without a click must not eat the next real tap (1.15.1).
@@ -105,9 +120,19 @@ export const TaskRow = memo(function TaskRow({
     let mode: "undecided" | "swipe" | "scroll" = "undecided";
     let last = 0;
     let buzzed = false;
+    // Long-press (1.18): still finger for HOLD_MS → menu. Any swipe or scroll cancels it.
+    let held = false;
+    const hold = window.setTimeout(() => {
+      if (mode !== "undecided") return;
+      held = true;
+      swiped.current = true;
+      openMenu();
+    }, HOLD_MS);
     const move = (ev: globalThis.PointerEvent) => {
       const mx = ev.clientX - startX;
       const my = ev.clientY - startY;
+      if (held) return;
+      if (Math.abs(mx) > 8 || Math.abs(my) > 8) window.clearTimeout(hold);
       if (mode === "undecided") {
         if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) mode = "scroll";
         else if (Math.abs(mx) > 12 && Math.abs(mx) > Math.abs(my) * 1.5) {
@@ -124,9 +149,17 @@ export const TaskRow = memo(function TaskRow({
       setDx(last);
     };
     const end = () => {
+      window.clearTimeout(hold);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
+      if (held) {
+        // The click that ends the hold must not open the card.
+        window.setTimeout(() => {
+          swiped.current = false;
+        }, 400);
+        return;
+      }
       if (mode !== "swipe") return;
       swiped.current = true;
       // Only the click that belongs to this very gesture is swallowed.
@@ -147,7 +180,15 @@ export const TaskRow = memo(function TaskRow({
 
   return (
     <div
+      ref={rowRef}
       data-selected={selected ? "true" : undefined}
+      data-lifted={menu ? "true" : undefined}
+      onContextMenu={(event) => {
+        // Right click / Android long-press: same menu instead of the browser one.
+        if ((event.target as HTMLElement).closest("input, textarea")) return;
+        event.preventDefault();
+        if (!menu) openMenu();
+      }}
       className={cn("task-row flex items-start overflow-hidden bg-elevated", checked && "opacity-75")}
       style={dx > 0 ? { background: "var(--accent)", touchAction: "pan-y" } : dx < 0 ? { background: "var(--warn)", touchAction: "pan-y" } : { ...tint, touchAction: "pan-y" }}
       onPointerDown={onSwipeStart}
@@ -203,15 +244,20 @@ export const TaskRow = memo(function TaskRow({
               {task.maint ? shortMaintTitle(task, assets) : task.title}
             </span>
             {preview ? (
-              <span className="mt-0.5 flex items-center gap-1 text-[0.75rem] text-muted">
+              <span className="mt-1 flex items-center gap-1 text-[0.75rem] text-muted">
                 <NotebookText className="size-3 shrink-0" aria-hidden="true" />
                 <span className="min-w-0 truncate">{preview}</span>
               </span>
             ) : null}
-            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.75rem] leading-4 text-muted empty:hidden">
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] leading-4 text-muted empty:hidden">
               {ticked ? <span className="text-ok">отмечено · дальше {task.due ? dueLabel(task.due, today) : "—"}</span> : null}
               {showDue && task.due && !ticked ? (
-                <span className={overdue ? "text-danger" : undefined}>{dueLabel(task.due, today)}</span>
+                task.maint && !checked ? (
+                  // «Обслуживание»: the real deadline («через 300 км», «до 5 нояб.»), red only when truly late.
+                  <MaintDue task={task} assets={assets} today={today} />
+                ) : (
+                  <span className={overdue ? "text-danger" : undefined}>{dueLabel(task.due, today)}</span>
+                )
               ) : null}
               {task.startAt ? (
                 <span className="tabular-nums">
@@ -229,13 +275,13 @@ export const TaskRow = memo(function TaskRow({
               ))}
               <ShareBadges task={task} />
               {blockedBy ? (
-                <span className="flex min-w-0 items-center gap-0.5 text-warn" data-testid="blocked-badge">
+                <span className="flex min-w-0 items-center gap-1 text-warn" data-testid="blocked-badge">
                   <Lock className="size-3 shrink-0" aria-hidden="true" />
                   <span className="max-w-40 truncate">ждёт: {blockedBy.title}</span>
                 </span>
               ) : null}
               {files > 0 ? (
-                <span className="flex items-center gap-0.5" aria-label={`Вложения, ссылки, контакты: ${files}`} data-testid="objects-badge">
+                <span className="flex items-center gap-1" aria-label={`Вложения, ссылки, контакты: ${files}`} data-testid="objects-badge">
                   <Paperclip className="size-3" aria-hidden="true" />
                   <span className="tabular-nums">{files}</span>
                 </span>
@@ -246,7 +292,7 @@ export const TaskRow = memo(function TaskRow({
             <button
               type="button"
               onClick={() => openMileage(kmAsset)}
-              className="mt-0.5 h-7 shrink-0 rounded-full bg-accent/10 px-2.5 text-xs font-medium text-accent"
+              className="mt-1 h-7 shrink-0 rounded-full bg-accent/10 px-3 text-xs font-medium text-accent"
             >
               Обновить пробег
             </button>
@@ -259,7 +305,7 @@ export const TaskRow = memo(function TaskRow({
               title={open ? "Свернуть подзадачи" : "Показать подзадачи"}
               onClick={() => setOpen(!open)}
               className={cn(
-                "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-1.5 text-[0.75rem] tabular-nums",
+                "-my-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-2 text-[0.75rem] tabular-nums",
                 progress.done === progress.total ? "text-accent" : "text-muted",
               )}
             >
@@ -273,9 +319,9 @@ export const TaskRow = memo(function TaskRow({
               type="button"
               aria-label={`Перенести «${task.title}» на завтра`}
               onClick={() => updateTask(task.id, { due: tomorrow })}
-              className="-my-2 flex h-10 shrink-0 items-center px-0.5 [@media(pointer:coarse)]:hidden"
+              className="-my-2 flex h-10 shrink-0 items-center px-1 [@media(pointer:coarse)]:hidden"
             >
-              <span className="rounded-full bg-bg px-1.5 text-[0.6875rem] leading-[1.125rem] text-muted">завтра</span>
+              <span className="rounded-full bg-bg px-2 text-[0.6875rem] leading-[1.125rem] text-muted">завтра</span>
             </button>
           ) : null}
         </div>
@@ -345,6 +391,7 @@ export const TaskRow = memo(function TaskRow({
         </button>
       ) : null}
       </div>
+      {menu ? <TaskContextMenu task={task} rect={menu} onClose={() => setMenu(null)} onOpen={onOpen} /> : null}
     </div>
   );
 });
@@ -467,4 +514,10 @@ function QuickChip({ label, off, onToggle, what }: { label: string; off: boolean
       <span aria-hidden="true">{off ? "↺" : "×"}</span>
     </button>
   );
+}
+
+
+function MaintDue({ task, assets, today }: { task: Task; assets: Asset[]; today: string }) {
+  const due = honestDue(task, assets, today);
+  return <span className={due.tone === "danger" ? "text-danger" : due.tone === "accent" ? "text-accent" : undefined}>{due.text}</span>;
 }

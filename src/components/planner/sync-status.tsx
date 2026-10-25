@@ -46,7 +46,7 @@ export function SyncPill() {
   if (offline) {
     pill = (
       <div className="flex flex-col items-center">
-        <div role="status" className="flex h-7 items-center gap-1.5 rounded-full bg-elevated pr-0.5 pl-2.5 text-xs text-muted shadow-sm" data-testid="offline-pill">
+        <div role="status" className="flex h-7 items-center gap-2 rounded-full bg-elevated pr-1 pl-3 text-xs text-muted shadow-sm" data-testid="offline-pill">
           <CloudOff className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="whitespace-nowrap">
             Нет сети{pendingTotal > 0 ? ` · ${pendingLabel(pendingTotal)}` : ""}
@@ -58,7 +58,7 @@ export function SyncPill() {
             onClick={() => setHint((open) => !open)}
             className={cn("flex size-6 items-center justify-center rounded-full", hint ? "text-accent" : "text-subtle")}
           >
-            <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full border border-current text-[10px] leading-none font-semibold">
+            <span aria-hidden="true" className="flex size-4 items-center justify-center rounded-full border border-current text-[0.625rem] leading-none font-semibold">
               ?
             </span>
           </button>
@@ -72,20 +72,20 @@ export function SyncPill() {
     );
   } else if (status.justSynced) {
     pill = (
-      <div role="status" className="flex h-7 items-center gap-1.5 rounded-full bg-elevated px-2.5 text-xs text-ok shadow-sm" data-testid="synced-pill">
+      <div role="status" className="flex h-7 items-center gap-2 rounded-full bg-elevated px-3 text-xs text-ok shadow-sm" data-testid="synced-pill">
         <Check className="size-3.5" aria-hidden="true" />
         Синхронизировано
       </div>
     );
   } else if (pendingFiles > 0) {
     pill = (
-      <div role="status" className="flex h-7 items-center gap-1.5 rounded-full bg-elevated px-2.5 text-xs text-warn shadow-sm" data-testid="upload-pending-pill">
+      <div role="status" className="flex h-7 items-center gap-2 rounded-full bg-elevated px-3 text-xs text-warn shadow-sm" data-testid="upload-pending-pill">
         Ждут отправки · {pendingFiles}
       </div>
     );
   } else if (update) {
     pill = (
-      <button type="button" onClick={applyUpdate} className="flex h-7 items-center gap-1.5 rounded-full bg-elevated px-2.5 text-xs text-accent shadow-sm">
+      <button type="button" onClick={applyUpdate} className="flex h-7 items-center gap-2 rounded-full bg-elevated px-3 text-xs text-accent shadow-sm">
         <RefreshCw className="size-3.5" aria-hidden="true" />
         Новая версия · Обновить
       </button>

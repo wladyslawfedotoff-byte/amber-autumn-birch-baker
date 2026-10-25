@@ -78,7 +78,7 @@ export function CheckinSheet({ habit, day, onClose }: { habit: Habit; day: strin
         )}
       </div>
       {goal > 1 && draft.status === "done" && draft.amount < goal ? (
-        <p className="mt-1.5 px-1 text-xs text-muted">
+        <p className="mt-2 px-1 text-xs text-muted">
           Меньше цели ({goal}) — день засчитается частично.
         </p>
       ) : null}

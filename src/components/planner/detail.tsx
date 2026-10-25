@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { X } from "lucide-react";
 import { Row, RowGroup } from "@/components/ui/rows";
 import { Hint } from "@/components/ui/hint";
@@ -27,7 +27,18 @@ const LEVELS: { value: Priority; label: string }[] = [
   { value: 3, label: "Высокий" },
 ];
 
-export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClose: () => void; onOpen?: (id: string) => void }) {
+export function TaskDetail({
+  taskId,
+  onClose,
+  onOpen,
+  onHeaderPointerDown,
+}: {
+  taskId: string;
+  onClose: () => void;
+  onOpen?: (id: string) => void;
+  /** Bottom-sheet drag (phones): pull the header down to close. */
+  onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
+}) {
   const task = usePlanner((s) => s.tasks.find((item) => item.id === taskId));
   const lists = usePlanner((s) => s.lists);
   const projects = usePlanner((s) => s.projects ?? []);
@@ -73,11 +84,17 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 px-2 py-1">
-        <p className="px-2 text-sm text-muted">Задача</p>
-        <Button className="ml-auto" size="icon" variant="ghost" aria-label="Закрыть" onClick={onClose}>
-          <X className="size-5" />
-        </Button>
+      <div className="shrink-0 touch-none lg:touch-auto" onPointerDown={onHeaderPointerDown}>
+        <span aria-hidden="true" className="sheet-grabber lg:hidden" />
+        <div className="flex items-center gap-2 px-2 py-1">
+          <p className="px-2 text-sm text-muted">Задача</p>
+          <button type="button" onClick={onClose} className="ml-auto h-11 rounded-full px-3 text-[0.9375rem] font-semibold text-accent lg:hidden">
+            Готово
+          </button>
+          <Button className="ml-auto hidden lg:inline-flex" size="icon" variant="ghost" aria-label="Закрыть" onClick={onClose}>
+            <X className="size-5" />
+          </Button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8">
         <input
@@ -100,7 +117,7 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
               <p className="text-xs text-muted">Даты выбираются в «Повтор».</p>
             ) : (
               <>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {quick("Сегодня", today)}
                   {quick("Завтра", shiftIso(today, 1))}
                   {quick("Через неделю", shiftIso(today, 7))}
@@ -175,7 +192,7 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
               }}
               className={field}
             />
-            <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Когда напомнить" data-testid="remind-lead">
+            <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Когда напомнить" data-testid="remind-lead">
               {REMIND_LEADS.map((lead) => {
                 const on = normalizeLead(task.remindLead) === lead;
                 return (
@@ -310,7 +327,7 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
               <Row
                 label="Цвет"
                 value={
-                  <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-2">
                     {colorHex(task.color) ? <span className="size-3 rounded-full" style={{ background: colorHex(task.color)! }} /> : null}
                     {colorLabel(task.color)}
                   </span>
@@ -372,7 +389,7 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
               </Row>
               <Row label="Теги" value={task.tags.length ? task.tags.map((t) => `#${t}`).join(" ") : "—"} open={open === "tags"} onClick={() => toggle("tags")}>
                 {task.tags.length ? (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
+                  <div className="mb-2 flex flex-wrap gap-2">
                     {task.tags.map((item) => (
                       <button
                         key={item}
@@ -432,7 +449,7 @@ export function TaskDetail({ taskId, onClose, onOpen }: { taskId: string; onClos
           {confirm ? (
             <div className="flex gap-2">
               <Button variant="soft" onClick={() => setConfirm(false)}>
-                Отмена
+                Отменить
               </Button>
               <Button
                 variant="destructive"

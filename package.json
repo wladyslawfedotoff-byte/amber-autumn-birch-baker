@@ -1,6 +1,6 @@
 {
   "name": "pora",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "description": "«Пора» — личный планировщик: задачи, календарь, привычки, фокус-таймер и синхронизация через свой сервер.",
   "private": true,
   "sideEffects": false,
@@ -17,13 +17,11 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/popover.test.ts src/lib/sync/merge.test.ts src/lib/sync/world.test.ts src/lib/sync/offline-merge.test.ts src/lib/offline/outbox.test.ts src/lib/offline/local-db.test.ts src/lib/offline/stale-chunks.test.ts src/lib/dates.test.ts src/lib/task-tools.test.ts src/lib/task-done.test.ts src/lib/task-reset.test.ts src/lib/habit-stats.test.ts src/lib/habit-plan.test.ts src/lib/habit-view.test.ts src/lib/special-dates.test.ts src/lib/ui-prefs.test.ts src/lib/paste-lines.test.ts server/lib/sync-store.test.ts server/lib/db/db.test.ts server/lib/db/scripts.test.ts server/lib/auth.test.ts server/lib/pages.test.ts server/lib/http.test.ts server/lib/ai/ai.test.ts server/lib/ai/json-reply.test.ts server/lib/push/push.test.ts src/lib/assistant/apply.test.ts src/lib/assistant/markdown.test.ts src/lib/assistant/view.test.ts src/lib/assistant/suggest.test.ts src/lib/assistant/history.test.ts src/lib/task-deps.test.ts src/lib/attachments/queue.test.ts server/lib/attachments/attachments.test.ts server/lib/attachments/route.test.ts server/lib/attachments/detect.test.ts server/lib/attachments/cleanup.test.ts src/lib/attachments/exif.test.ts src/lib/reorder.test.ts server/lib/attachments/heic.test.ts src/lib/objects/links.test.ts server/lib/link-title.test.ts src/lib/maintenance/rules.test.ts src/lib/maintenance/ops.test.ts src/lib/maintenance/stats.test.ts src/lib/maintenance/plan.test.ts src/lib/maintenance/sync.test.ts src/lib/maintenance/fuel.test.ts src/lib/maintenance/warranty.test.ts server/lib/ai/maint.test.ts server/lib/quick-add/quick-add.test.ts server/lib/quick-add/parse.test.ts server/lib/quick-add/route.test.ts src/lib/maintenance/nearest.test.ts src/lib/sync/engine.test.ts src/lib/sync/prefetch.test.ts server/lib/sync-patch.route.test.ts server/lib/compress.test.ts",
+    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/popover.test.ts src/lib/sync/merge.test.ts src/lib/sync/world.test.ts src/lib/sync/offline-merge.test.ts src/lib/offline/outbox.test.ts src/lib/offline/local-db.test.ts src/lib/offline/stale-chunks.test.ts src/lib/dates.test.ts src/lib/task-tools.test.ts src/lib/task-done.test.ts src/lib/task-reset.test.ts src/lib/habit-stats.test.ts src/lib/habit-plan.test.ts src/lib/habit-view.test.ts src/lib/special-dates.test.ts src/lib/ui-prefs.test.ts src/lib/paste-lines.test.ts server/lib/sync-store.test.ts server/lib/db/db.test.ts server/lib/db/scripts.test.ts server/lib/auth.test.ts server/lib/pages.test.ts server/lib/http.test.ts server/lib/ai/ai.test.ts server/lib/ai/json-reply.test.ts server/lib/push/push.test.ts src/lib/assistant/apply.test.ts src/lib/assistant/markdown.test.ts src/lib/assistant/view.test.ts src/lib/assistant/suggest.test.ts src/lib/assistant/history.test.ts src/lib/task-deps.test.ts src/lib/attachments/queue.test.ts server/lib/attachments/attachments.test.ts server/lib/attachments/route.test.ts server/lib/attachments/detect.test.ts server/lib/attachments/cleanup.test.ts src/lib/attachments/exif.test.ts src/lib/reorder.test.ts server/lib/attachments/heic.test.ts src/lib/objects/links.test.ts server/lib/link-title.test.ts src/lib/maintenance/rules.test.ts src/lib/maintenance/ops.test.ts src/lib/maintenance/stats.test.ts src/lib/maintenance/plan.test.ts src/lib/maintenance/sync.test.ts src/lib/maintenance/fuel.test.ts src/lib/maintenance/warranty.test.ts server/lib/ai/maint.test.ts server/lib/quick-add/quick-add.test.ts server/lib/quick-add/parse.test.ts server/lib/quick-add/route.test.ts src/lib/maintenance/nearest.test.ts src/lib/maintenance/honest-due.test.ts src/lib/text-size.test.ts src/lib/sync/engine.test.ts src/lib/sync/prefetch.test.ts server/lib/sync-patch.route.test.ts server/lib/compress.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
   "dependencies": {
-    "@fontsource/ibm-plex-sans": "^5.3.0",
-    "@fontsource/newsreader": "^5.3.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-router": "^1.170.0",
     "@tanstack/react-start": "^1.168.60",

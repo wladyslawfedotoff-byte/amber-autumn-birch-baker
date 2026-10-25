@@ -27,6 +27,7 @@ import {
 import { projectProgress } from "@/lib/projects";
 import { summarize } from "@/lib/maintenance/ops";
 import { useShareScope } from "@/lib/use-share-scope";
+import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 
 /** Smart lists as tiles (in this order). */
 /** Navigation items that are screens of their own (not drawer groups). */
@@ -118,7 +119,8 @@ export function Sidebar({
 
   const prefs: NavPrefs = { tabBar, drawerHidden };
   const shows = (id: NavId) => inDrawer(id, prefs, phone);
-  const overdue = tasks.some((t) => !t.done && t.due != null && t.due < today);
+  const assetsAll = usePlanner((s) => s.assets) ?? [];
+  const overdue = tasks.some((t) => isTaskOverdue(t, assetsAll, today));
 
   const tiles = TILES.filter((id) => (id !== "shared" || share) && shows(id));
   const tools = TOOLS.filter((id) => (id !== "assist" || profile.assistant) && shows(id));
@@ -135,7 +137,6 @@ export function Sidebar({
     return 0;
   }
 
-  const assetsAll = usePlanner((s) => s.assets) ?? [];
   const maintAttention = assetsAll.filter((a) => summarize(a, today).status !== "ok").length;
   const habitLeft = habitsForDay(habits, today).filter((h) => !h.checks.includes(today)).length;
 
@@ -205,7 +206,7 @@ export function Sidebar({
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-bg text-fg">
-      <div className="flex shrink-0 items-center gap-2.5 px-3 pt-2 pb-1">
+      <div className="flex shrink-0 items-center gap-3 px-3 pt-2 pb-1">
         <img src={FAVICON_SVG} alt="" width={36} height={36} className="size-9 shrink-0 rounded-[0.6rem]" />
         <div className="min-w-0 flex-1">
           <p className="text-base leading-tight font-semibold">{APP_NAME}</p>
@@ -231,7 +232,7 @@ export function Sidebar({
 
       <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-1 pb-3" aria-label="Разделы">
         {tiles.length > 0 ? (
-          <ul className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
+          <ul className="grid gap-2" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
             {tiles.map((id) => {
               const Icon = NAV_ICONS[id];
               const active = view === id;
@@ -247,7 +248,7 @@ export function Sidebar({
                     )}
                   >
                     <Icon className={cn("size-4", active ? "" : "text-accent")} strokeWidth={1.75} aria-hidden="true" />
-                    <span className={cn("mt-0.5 text-[1.0625rem] leading-tight font-semibold tabular-nums", !active && !Number(tileCount(id)) && "opacity-35")}>{tileCount(id)}</span>
+                    <span className={cn("mt-1 text-[1.0625rem] leading-tight font-semibold tabular-nums", !active && !Number(tileCount(id)) && "opacity-35")}>{tileCount(id)}</span>
                     <span className={cn("max-w-full truncate leading-tight", tiles.length > 4 ? "text-[0.625rem]" : "text-[0.6875rem]", active ? "opacity-90" : "text-muted")}>
                       {label(id)}
                     </span>
@@ -259,7 +260,7 @@ export function Sidebar({
         ) : null}
 
         {tools.length > 0 ? (
-          <ul className="mt-1.5 flex flex-wrap gap-1.5">
+          <ul className="mt-2 flex flex-wrap gap-2">
             {tools.map((id) => {
               const Icon = NAV_ICONS[id];
               const active = view === id || (id === "today" && view.startsWith("day:"));
@@ -272,7 +273,7 @@ export function Sidebar({
                     aria-current={active ? "page" : undefined}
                     onClick={() => onView(id)}
                     className={cn(
-                      "press flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border px-2 text-[0.8125rem] whitespace-nowrap",
+                      "press flex h-9 w-full items-center justify-center gap-2 rounded-lg border px-2 text-[0.8125rem] whitespace-nowrap",
                       active ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface/60 text-fg",
                     )}
                   >
@@ -291,7 +292,7 @@ export function Sidebar({
           <section aria-label="Закреплённые" className="mt-3">
             <SectionLabel>Закреплённые</SectionLabel>
             {pinItems.length > 0 ? (
-              <ul className="flex flex-wrap gap-1.5">
+              <ul className="flex flex-wrap gap-2">
                 {pinItems.map((item) => (
                   <PinChip
                     key={item.key}
@@ -315,7 +316,7 @@ export function Sidebar({
         {tab && meta ? (
           <section className="mt-3" aria-label={meta.label}>
             {groups.length > 1 ? (
-              <div role="tablist" aria-label="Группы меню" className="grid rounded-xl bg-fg/[0.06] p-0.5" style={{ gridTemplateColumns: `repeat(${groups.length}, minmax(0, 1fr))` }}>
+              <div role="tablist" aria-label="Группы меню" className="grid rounded-xl bg-fg/[0.06] p-1" style={{ gridTemplateColumns: `repeat(${groups.length}, minmax(0, 1fr))` }}>
                 {groups.map((group) => (
                   <button
                     key={group.id}
@@ -395,7 +396,7 @@ export function Sidebar({
                   />
                 </form>
               ) : (
-                <button type="button" onClick={() => setAdding(true)} className="flex h-9 w-full items-center gap-1.5 rounded-lg px-2 text-left text-sm text-accent">
+                <button type="button" onClick={() => setAdding(true)} className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-accent">
                   <Plus className="size-4" aria-hidden="true" />
                   {meta.add}
                 </button>
@@ -453,12 +454,12 @@ function GroupRow({
       </button>
       {menuOpen ? (
         <div role="menu" className="mx-1 mb-1 flex items-center gap-1 rounded-lg bg-elevated p-1 text-sm">
-          <button type="button" role="menuitem" autoFocus onClick={onTogglePin} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-surface">
+          <button type="button" role="menuitem" autoFocus onClick={onTogglePin} className="flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-surface">
             {pinned ? <PinOff className="size-4" aria-hidden="true" /> : <Pin className="size-4" aria-hidden="true" />}
             {pinned ? "Открепить" : "Закрепить"}
           </button>
           <button type="button" role="menuitem" onClick={() => onMenu(false)} className="h-9 rounded-md px-3 text-muted">
-            Отмена
+            Отменить
           </button>
         </div>
       ) : null}
@@ -483,11 +484,11 @@ function PinChip({
   if (menuOpen) {
     return (
       <li className="flex h-8 items-center gap-1 rounded-full bg-elevated pr-1 pl-1 text-[0.8125rem]">
-        <button type="button" autoFocus onClick={onUnpin} className="flex h-7 items-center gap-1 rounded-full bg-surface px-2.5">
+        <button type="button" autoFocus onClick={onUnpin} className="flex h-7 items-center gap-1 rounded-full bg-surface px-3">
           <PinOff className="size-3.5" aria-hidden="true" />
           Открепить «{item.name.length > 14 ? `${item.name.slice(0, 13)}…` : item.name}»
         </button>
-        <button type="button" aria-label="Отмена" onClick={() => onMenu(false)} className="flex size-7 items-center justify-center rounded-full text-muted">
+        <button type="button" aria-label="Отменить" onClick={() => onMenu(false)} className="flex size-7 items-center justify-center rounded-full text-muted">
           <X className="size-3.5" />
         </button>
       </li>
@@ -504,7 +505,7 @@ function PinChip({
           item.open();
         }}
         className={cn(
-          "press flex h-8 max-w-full touch-manipulation items-center gap-1.5 rounded-full border px-2.5 text-[0.8125rem] select-none [-webkit-touch-callout:none]",
+          "press flex h-8 max-w-full touch-manipulation items-center gap-2 rounded-full border px-3 text-[0.8125rem] select-none [-webkit-touch-callout:none]",
           active ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface/60 text-fg",
         )}
       >

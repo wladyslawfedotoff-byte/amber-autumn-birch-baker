@@ -268,7 +268,7 @@ export function ScheduleView({
     <div ref={rootRef} className="mx-auto flex w-full max-w-3xl flex-col">
       <div className="sticky -top-2 z-20 -mx-4 -mt-2 bg-surface px-3 pt-2 pb-1 md:static md:mx-0 md:px-0">
       {rangeControl}
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-1">
         <button type="button" aria-label="Предыдущий день" onClick={() => setDay(shiftIso(day, -1))} className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted">
           <ChevronLeft className="size-5" />
         </button>
@@ -301,7 +301,7 @@ export function ScheduleView({
       {!hoursOk ? <p className="mb-2 px-1 text-xs text-danger">Конец рабочего дня раньше начала — поправьте в «Настройках».</p> : null}
 
       {gaps.length > 0 ? (
-        <div className="no-scrollbar -mx-4 flex items-center gap-1.5 overflow-x-auto px-4 py-1">
+        <div className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 py-1">
           <span className="shrink-0 text-[0.6875rem] text-subtle">Свободно</span>
           {gaps.map((gap) => (
             <button
@@ -310,7 +310,7 @@ export function ScheduleView({
               data-gap={`${gap.start}:${gap.end}`}
               aria-label={`Свободно ${fromMinutes(gap.start)}–${fromMinutes(gap.end)}: добавить задачу`}
               onClick={() => setSlot({ start: gap.start, end: Math.min(gap.end, gap.start + 60) })}
-              className="h-7 shrink-0 rounded-full bg-elevated px-2.5 text-xs tabular-nums text-muted"
+              className="h-7 shrink-0 rounded-full bg-elevated px-3 text-xs tabular-nums text-muted"
             >
               {fromMinutes(gap.start)}–{fromMinutes(gap.end)}
             </button>
@@ -320,7 +320,7 @@ export function ScheduleView({
 
       {untimed.length > 0 ? (
         <section className="mt-1 overflow-hidden rounded-xl bg-elevated" aria-label="Без времени">
-          <button type="button" aria-expanded={trayOpen} onClick={() => setTrayOpen(!trayOpen)} className="flex h-9 w-full items-center gap-1.5 px-3 text-left text-xs font-medium text-muted">
+          <button type="button" aria-expanded={trayOpen} onClick={() => setTrayOpen(!trayOpen)} className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs font-medium text-muted">
             <ChevronDown className={cn("size-3.5 transition-transform", !trayOpen && "-rotate-90")} aria-hidden="true" />
             Без времени · {untimed.length}
             <span className="ml-auto font-normal text-subtle">{trayOpen ? "потяните на доску" : ""}</span>
@@ -394,7 +394,7 @@ export function ScheduleView({
             }}
             style={{ ...blockStyle(span, bounds.from), ...colorStyle(span.color, 16) }}
             className={cn(
-              "drag-handle absolute z-10 overflow-hidden rounded-md border-l-2 bg-elevated px-1.5 py-0.5 text-left shadow-sm",
+              "drag-handle absolute z-10 overflow-hidden rounded-md border-l-2 bg-elevated px-2 py-1 text-left shadow-sm",
               span.clash ? "border-danger" : "border-accent",
               span.done && "opacity-50",
             )}
@@ -408,7 +408,7 @@ export function ScheduleView({
             <div
               aria-hidden="true"
               onPointerDown={(event) => beginDrag(event, span, "resize")}
-              className="absolute inset-x-0 bottom-0 flex h-3 cursor-ns-resize items-end justify-center pb-0.5"
+              className="absolute inset-x-0 bottom-0 flex h-3 cursor-ns-resize items-end justify-center pb-1"
             >
               <span className="h-0.5 w-6 rounded-full bg-subtle/50" />
             </div>

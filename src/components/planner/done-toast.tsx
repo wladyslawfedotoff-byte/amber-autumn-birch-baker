@@ -20,8 +20,8 @@ export function DoneToastBar() {
     ? `отмечено, следующий раз ${toast.next ? dueLabel(toast.next, todayIso()) : "—"}`
     : "готово — внизу списка, в «Готово»";
   return (
-    <div role="status" className="pointer-events-none absolute inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
-      <div className="card-lift pointer-events-auto flex max-w-md items-center gap-3 rounded-xl bg-fg px-4 py-2 text-sm text-surface">
+    <div role="status" className="pointer-events-none absolute inset-x-0 bottom-[5.5rem] z-30 flex justify-center px-4 md:bottom-6">
+      <div className="card-lift pointer-events-auto flex w-full max-w-md min-w-0 items-center gap-3 rounded-xl bg-fg px-4 py-2 text-sm text-surface">
         <Check className="size-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">
           «{toast.title}» {text}

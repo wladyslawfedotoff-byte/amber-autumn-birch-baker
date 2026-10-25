@@ -135,7 +135,7 @@ export function AttachmentsBlock({
                 >
                   <Thumb item={item} />
                 </button>
-                <div className="mt-0.5 flex items-start gap-1">
+                <div className="mt-1 flex items-start gap-1">
                   <span className="min-w-0 flex-1 truncate text-[0.65rem] text-muted" title={item.name}>
                     {pending ? "на телефоне · " : ""}
                     {item.takenAt ? formatTakenAt(item.takenAt) : item.name}
@@ -238,7 +238,7 @@ function LightboxImage({ item }: { item: AttachmentMeta }) {
   }, [item.id]);
   if (!src) return <div className="size-40 animate-pulse rounded-lg bg-elevated" />;
   return (
-    <figure className="flex flex-col items-center gap-1.5">
+    <figure className="flex flex-col items-center gap-2">
       <img src={src} alt={item.name} className="max-h-[78vh] max-w-full rounded-lg object-contain" />
       {item.takenAt ? <figcaption className="text-xs text-white/80">{formatTakenAt(item.takenAt)}</figcaption> : null}
     </figure>

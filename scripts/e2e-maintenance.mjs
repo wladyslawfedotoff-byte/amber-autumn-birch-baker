@@ -106,7 +106,7 @@ try {
   // mileage near the limit → «скоро» + a task is made
   await page.getByRole("button", { name: "Изменить", exact: true }).click();
   await dialog(page, "Пробег").getByLabel("Пробег, км").fill("83800");
-  await dialog(page, "Пробег").getByRole("button", { name: "Сохранить" }).click();
+  await dialog(page, "Пробег").getByRole("button", { name: "Готово" }).click();
   await page.getByText(/~?400 км/).first().waitFor();
   ok("mileage 83 800 → «скоро» (400 km left)");
 
@@ -127,7 +127,7 @@ try {
     { title: "Мойка и химчистка", date: "2026-09-05", km: "79000", cost: "1500" },
   ]) {
     const d = await addEntry(page, e);
-    await d.getByRole("button", { name: "Сохранить" }).click();
+    await d.getByRole("button", { name: "Готово" }).click();
     await page.getByText(e.title, { exact: true }).waitFor();
   }
   const d = await addEntry(page, { title: "Замена масла и фильтра", date: "2026-10-14", km: "83900", cost: "6400", place: "Сервис у дома" });
@@ -136,7 +136,7 @@ try {
   const reset = d.getByRole("checkbox", { name: /Замена масла/ });
   if (!(await reset.isChecked())) fail("rule not preselected from the title");
   await shot(page, "04-log-sheet");
-  await d.getByRole("button", { name: "Сохранить" }).click();
+  await d.getByRole("button", { name: "Готово" }).click();
   await page.getByText("Замена масла и фильтра", { exact: true }).waitFor();
   await page.getByText(/через 10 000 км|10 000 км/).first().waitFor();
   ok("service entry with a receipt photo resets the rule (next in 10 000 km)");
@@ -158,7 +158,7 @@ try {
   await ed.getByLabel("Заметка").fill("масло синтетика");
   if (!(await ed.getByRole("checkbox", { name: /Замена масла/ }).isChecked())) fail("edit: the reset rule is not shown as ticked");
   await shot(page, "12-edit-entry");
-  await ed.getByRole("button", { name: "Сохранить" }).click();
+  await ed.getByRole("button", { name: "Готово" }).click();
   const back = dialog(page, "Замена масла и фильтра");
   await back.getByText("Другой сервис").waitFor();
   await back.getByText("масло синтетика").waitFor();
@@ -180,7 +180,7 @@ try {
   ok("entry: file, link and contact in one chip strip (same row as tasks)");
   await shot(page, "13-entry-edited");
   ok("entry edited inline: place, cost, note changed, the receipt photo is kept");
-  await back.getByRole("button", { name: "Закрыть" }).click();
+  await back.getByRole("button", { name: /^(Отменить|Готово)$/ }).first().click();
   await page.getByText(/через 10 000 км|10 000 км/).first().waitFor();
   ok("rule still counts from the edited entry");
 
@@ -198,7 +198,7 @@ try {
   await ps.getByText(/запланировано на/).waitFor();
   await ps.getByRole("button", { name: "открыть задачу" }).waitFor();
   await shot(page, "15-pain-planned");
-  await ps.getByRole("button", { name: "Сохранить" }).click();
+  await ps.getByRole("button", { name: "Готово" }).click();
   await page.getByText("Сделать: Заменить стойки").waitFor();
   await page.getByText(/запланировано на/).first().waitFor();
   ok("«Что болит»: text and «что сделать» edited, planned as a task");
@@ -208,14 +208,14 @@ try {
   const cs = dialog(page, /Автомобиль: изменить/);
   await cs.getByLabel(/Марка, модель/).fill("Седан 1.6");
   await shot(page, "15-card-edit");
-  await cs.getByRole("button", { name: "Закрыть" }).click();
+  await cs.getByRole("button", { name: /^(Отменить|Готово)$/ }).first().click();
   await page.getByText(/Седан 1\.6/).first().waitFor();
   ok("card edited: model shown under the name");
   await page.getByRole("button", { name: "Изменить", exact: true }).first().click();
   const ms = dialog(page, "Пробег");
   await ms.getByText("Прежние показания").waitFor();
   await shot(page, "16-readings");
-  await ms.getByRole("button", { name: "Закрыть" }).click();
+  await ms.getByRole("button", { name: /^(Отменить|Готово)$/ }).first().click();
 
   // --- consumable + device ------------------------------------------------
   await page.getByRole("button", { name: "Назад к списку" }).click();
@@ -262,7 +262,7 @@ try {
   if ((await offered.getByLabel("Что сделано").inputValue()) !== "Заменить стойки") fail("history entry not prefilled from the note");
   await offered.getByLabel("Пробег, км").fill("84000");
   await shot(page, "18-pain-history-entry");
-  await offered.getByRole("button", { name: "Сохранить" }).click();
+  await offered.getByRole("button", { name: "Готово" }).click();
   await page.getByText("Заменить стойки", { exact: true }).first().waitFor();
   ok("task ticked → note solved → entry offered, prefilled and saved");
   await page.getByRole("button", { name: /Решённые: 1/ }).click();

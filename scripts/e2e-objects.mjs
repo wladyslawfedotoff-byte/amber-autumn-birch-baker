@@ -75,7 +75,7 @@ async function openMore(page) {
 }
 
 async function closeDetail(page) {
-  await page.getByRole("button", { name: "Закрыть", exact: true }).first().click();
+  await page.locator("aside.sheet").getByRole("button", { name: /^(Закрыть|Готово)$/ }).first().click();
 }
 
 async function serverFiles(page, kind, id) {
@@ -207,7 +207,7 @@ try {
     await form.getByPlaceholder("Роль").fill(role);
     await form.getByPlaceholder("Телефон").fill(phone);
     if (email) await form.getByPlaceholder("Почта").fill(email);
-    await form.getByRole("button", { name: "Сохранить" }).click();
+    await form.getByRole("button", { name: "Готово" }).click();
   }
   await addContact("Пользователь 1", "заказчик", "+7 900 000-00-01", "user1@example.com");
   await addContact("Пользователь 2", "поставщик", "+7 900 000-00-02", "");
