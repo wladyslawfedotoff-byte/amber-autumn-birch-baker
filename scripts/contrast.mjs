@@ -39,6 +39,7 @@ for (const [name, t] of Object.entries(themes)) {
   const pairs = [
     ["accent-fg on accent", t["accent-fg"], t.accent, 4.5],
     ["accent-fg on accent pressed", t["accent-fg"], dim(t.accent, 0.9), 4.5],
+    ["danger on segment (Высокий)", t.danger, t.elevated, 4.5],
     ["muted on line (disabled)", t.muted, t.line, 3],
     ["accent fill vs bg (UI)", t.accent, t.bg, 3],
     ["accent fill vs elevated (UI)", t.accent, t.elevated, 3],

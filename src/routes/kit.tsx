@@ -161,6 +161,14 @@ function KitPage() {
             { id: "month", label: "Месяц" },
           ]}
         />
+        <div className="mt-2">
+          <SegmentedControl
+            label="Приоритет"
+            options={[{ id: "0", label: "Нет" }, { id: "1", label: "Низкий" }, { id: "2", label: "Средний" }, { id: "3", label: "Высокий", tone: "danger" }]}
+            value="3"
+            onChange={() => {}}
+          />
+        </div>
         <div className="menu-card mt-2 flex items-center gap-3 rounded-card px-3 py-2">
           <span className="flex-1 text-body">Переключатель</span>
           <Toggle label="Вкл" checked={toggle} onChange={setToggle} />

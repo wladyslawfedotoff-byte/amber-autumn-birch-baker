@@ -335,7 +335,7 @@ export function TaskDetail({
           >
             <SegmentedControl
               label="Приоритет"
-              options={LEVELS.map((item) => ({ id: String(item.value), label: item.label }))}
+              options={LEVELS.map((item) => ({ id: String(item.value), label: item.label, tone: item.value === 3 ? ("danger" as const) : undefined }))}
               value={String(task.priority)}
               onChange={(id) => updateTask(task.id, { priority: Number(id) as Priority })}
             />

@@ -352,7 +352,8 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
   );
 }
 
-export function SegmentedControl<T extends string>({ options, value, onChange, label }: { options: { id: T; label: string }[]; value: T; onChange: (id: T) => void; label: string }) {
+/** tone: "danger" — выбранный сегмент подписан красным (например, «Высокий» приоритет). */
+export function SegmentedControl<T extends string>({ options, value, onChange, label }: { options: { id: T; label: string; tone?: "danger" }[]; value: T; onChange: (id: T) => void; label: string }) {
   return (
     <div role="radiogroup" aria-label={label} className="grid rounded-md bg-fg/[0.06] p-0.5" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map((option) => (
@@ -364,7 +365,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, l
           onClick={() => onChange(option.id)}
           className={cn(
             "min-h-8 rounded-[calc(var(--r-md)-2px)] text-[0.8125rem] transition-colors duration-[var(--dur-fast)]",
-            option.id === value ? "bg-surface-2 font-semibold text-label shadow-[var(--shadow-1)]" : "text-secondary-label",
+            option.id === value ? cn("bg-surface-2 font-semibold shadow-[var(--shadow-1)]", option.tone === "danger" ? "text-danger" : "text-label") : "text-secondary-label",
           )}
         >
           {option.label}
