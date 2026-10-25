@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Bell, CalendarRange, Car, Fuel, Inbox, LayoutGrid, Moon, ShieldCheck, Sun, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Banner, Counter, EmptyState, GroupedCard, IconBadge, InfoCard, ListRow, SearchField, SegmentedControl, SheetHeader, TextField, Tile, Toggle } from "@/components/ui/kit";
+import { Banner, CheckCircle, Chip, Counter, EmptyState, GroupedCard, IconBadge, InfoCard, ListRow, SearchField, SegmentedControl, SheetHeader, TextField, Tile, Toggle } from "@/components/ui/kit";
 import { COLOR_TOKENS, ICON_COLORS } from "@/lib/design/tokens";
 
 /** Living catalogue of the design tokens and the UI kit (hidden: reachable by URL only). */
@@ -164,6 +164,18 @@ function KitPage() {
           <Toggle label="Отключён" checked={false} onChange={() => {}} disabled />
           <Counter value={12} />
           <Counter value={3} tone="danger" />
+        </div>
+        <div className="menu-card mt-2 flex flex-wrap items-center gap-3 rounded-card px-3 py-2" aria-label="Отметки и пилюли">
+          <span className="text-body">Отметка</span>
+          <CheckCircle checked={false} />
+          <CheckCircle checked={false} ring="border-danger" />
+          <CheckCircle checked />
+          <CheckCircle checked={false} size="sm" />
+          <CheckCircle checked size="sm" />
+          <Chip tone="tint">Обновить пробег</Chip>
+          <Chip>завтра</Chip>
+          <Chip tone="outline">25 окт. ×</Chip>
+          <Chip tone="off">10:00 ↺</Chip>
         </div>
         <div className="menu-card mt-2 rounded-card">
           <SheetHeader title="Новая задача" onCancel={() => {}} onDone={() => {}} />

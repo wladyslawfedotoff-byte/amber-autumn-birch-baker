@@ -1,4 +1,4 @@
-import { CAPS } from "@/components/ui/kit";
+import { CAPS, CheckCircle, ListRow } from "@/components/ui/kit";
 import { maintAsset, shortMaintTitle } from "@/lib/maintenance/short-title";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
@@ -581,20 +581,23 @@ function DayRows({
 }) {
   const assets = usePlanner((s) => s.assets) ?? NO_ASSETS;
   if (tasks.length === 0 && special.length === 0) {
-    return empty ? <p className="px-1 py-4 text-sm text-muted">{empty}</p> : null;
+    return empty ? <p className="px-1 py-4 text-sm text-secondary-label">{empty}</p> : null;
   }
   return (
     <ul className="menu-card overflow-hidden rounded-card">
       {special.map((item) => {
         const age = ageLabel(item, iso, today);
         return (
-          <li key={item.id} className="flex min-h-11 items-center gap-3 px-3 text-body">
-            <span className="w-5 shrink-0 text-center" aria-hidden="true">
-              {iconOf(item)}
-            </span>
-            <span className="min-w-0 flex-1 truncate">{item.title}</span>
-            {age ? <span className="shrink-0 text-xs text-muted">{age}</span> : null}
-          </li>
+          <ListRow
+            key={item.id}
+            lead={
+              <span className="w-5 shrink-0 text-center" aria-hidden="true">
+                {iconOf(item)}
+              </span>
+            }
+            title={item.title}
+            trailing={age ? <span className="shrink-0 text-caption text-secondary-label">{age}</span> : undefined}
+          />
         );
       })}
       {tasks.map((task) => {
@@ -610,26 +613,19 @@ function DayRows({
               onClick={() => onToggle(task.id)}
               className="flex size-11 shrink-0 items-center justify-center"
             >
-              <span
-                className={cn(
-                  "flex size-[1.125rem] items-center justify-center rounded-[0.3125rem] border-[1.5px]",
-                  task.done ? "border-accent bg-accent text-accent-fg" : task.priority === 3 ? "border-danger" : task.priority === 2 ? "border-warn" : task.priority === 1 ? "border-accent" : "border-subtle",
-                )}
-              >
-                {task.done ? <Check className="size-3" strokeWidth={3} /> : null}
-              </span>
+              <CheckCircle checked={task.done} ring={task.priority === 3 ? "border-danger" : task.priority === 2 ? "border-warn" : task.priority === 1 ? "border-accent" : undefined} />
             </button>
             <button type="button" onClick={() => onOpen(task.id)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 pr-1 text-left">
-              <span className={cn("min-w-0 flex-1 truncate text-body", task.done ? "text-subtle line-through" : "text-fg")}>
+              <span className={cn("min-w-0 flex-1 truncate text-body", task.done ? "text-tertiary-label line-through" : "text-label")}>
                 {task.maint ? shortMaintTitle(task, assets) : task.title}
-                {task.maint ? <span className="block truncate text-xs text-muted">🔧 {maintAsset(task, assets)?.name ?? "Обслуживание"}</span> : null}
+                {task.maint ? <span className="block truncate text-caption text-secondary-label">🔧 {maintAsset(task, assets)?.name ?? "Обслуживание"}</span> : null}
               </span>
-              {time ? <span className={cn("shrink-0 text-xs tabular-nums", task.done ? "text-subtle" : "text-accent-ink")}>{time}</span> : null}
+              {time ? <span className={cn("shrink-0 text-caption tabular-nums", task.done ? "text-tertiary-label" : "text-accent-ink")}>{time}</span> : null}
             </button>
             <button
               type="button"
               aria-label={`Перенести ${task.title}`}
-              className="drag-handle flex h-11 w-8 shrink-0 items-center justify-center text-subtle"
+              className="hit drag-handle flex h-11 w-8 shrink-0 items-center justify-center text-tertiary-label"
               onPointerDown={(event) => onDrag(event, task)}
             >
               <GripVertical className="size-3.5" />
@@ -664,11 +660,11 @@ function ListAgenda({
 }) {
   const days = Array.from({ length: modeDays("list") }, (_, index) => shiftIso(start, index));
   const filled = days.filter((iso) => tasksOn(iso).length > 0 || specialOn(iso).length > 0);
-  if (filled.length === 0) return <p className="px-1 py-8 text-sm text-muted">Ближайшие две недели свободны. Нажмите «+», чтобы добавить задачу.</p>;
+  if (filled.length === 0) return <p className="px-1 py-8 text-sm text-secondary-label">Ближайшие две недели свободны. Нажмите «+», чтобы добавить задачу.</p>;
   return (
     <div className="mt-2 flex flex-col gap-3">
       {filled.map((iso) => (
-        <section key={iso} data-day={iso} className={cn("rounded-xl", drag?.active && drag.over === iso && "ring-2 ring-accent")}>
+        <section key={iso} data-day={iso} className={cn("rounded-card", drag?.active && drag.over === iso && "ring-2 ring-accent")}>
           <h3 className={cn("mb-1 px-1", CAPS)}>
             {iso === today ? "Сегодня · " : iso === shiftIso(today, 1) ? "Завтра · " : ""}
             {formatLong(iso)}
@@ -739,8 +735,8 @@ function TimeGrid({
   return (
     <div className="mt-1">
       <div ref={headRef} className="sticky top-9 z-10 bg-surface">
-      <div className="grid border-b border-line pb-1" style={{ gridTemplateColumns: columns }}>
-        <div className="flex items-end justify-center pb-1 text-[0.625rem] text-subtle">{weekNumbers ? `Н${isoWeek(days[0] ?? day)}` : ""}</div>
+      <div className="grid border-b border-separator pb-1" style={{ gridTemplateColumns: columns }}>
+        <div className="flex items-end justify-center pb-1 text-[0.625rem] text-tertiary-label">{weekNumbers ? `Н${isoWeek(days[0] ?? day)}` : ""}</div>
         {days.map((iso) => {
           const selected = iso === day;
           const isToday = iso === today;
@@ -755,11 +751,11 @@ function TimeGrid({
               onClick={() => onPick(iso)}
               className={cn("flex h-12 flex-col items-center justify-center rounded-lg", over && "bg-accent/20")}
             >
-              <span className={cn("text-[0.6875rem]", isToday ? "text-accent-ink" : "text-subtle")}>{letterOf(iso)}</span>
+              <span className={cn("text-[0.6875rem]", isToday ? "text-accent-ink" : "text-tertiary-label")}>{letterOf(iso)}</span>
               <span
                 className={cn(
                   "flex size-7 items-center justify-center rounded-full text-body tabular-nums",
-                  selected ? "bg-accent font-semibold text-accent-fg" : isToday ? "font-semibold text-accent-ink" : "text-fg",
+                  selected ? "bg-accent font-semibold text-accent-fg" : isToday ? "font-semibold text-accent-ink" : "text-label",
                 )}
               >
                 {dateOf(iso).getDate()}
@@ -769,8 +765,8 @@ function TimeGrid({
         })}
       </div>
       {hasAllDay ? (
-        <div className="grid border-b border-line py-1" style={{ gridTemplateColumns: columns }}>
-          <div className="pt-1 text-center text-[0.625rem] leading-tight text-subtle">весь день</div>
+        <div className="grid border-b border-separator py-1" style={{ gridTemplateColumns: columns }}>
+          <div className="pt-1 text-center text-[0.625rem] leading-tight text-tertiary-label">весь день</div>
           {lists.map(({ iso, all, layout, special }) => {
             const items = [
               ...special.map((item) => ({ id: item.id, title: `${iconOf(item)} ${item.title}`, task: null as Task | null })),
@@ -790,7 +786,7 @@ function TimeGrid({
                     className={cn(
                       // 1.18: two lines (with hyphenation) instead of a cut-off title.
                       "line-clamp-2 rounded px-1 py-1 text-left text-[0.6875rem] leading-tight break-words hyphens-auto",
-                      item.task?.done ? "bg-elevated text-subtle line-through" : "bg-accent/15 text-fg",
+                      item.task?.done ? "bg-card text-tertiary-label line-through" : "bg-accent/15 text-label",
                     )}
                     style={item.task?.color ? { background: `color-mix(in oklab, ${colorHex(item.task.color)} 22%, transparent)` } : undefined}
                   >
@@ -798,7 +794,7 @@ function TimeGrid({
                   </button>
                 ))}
                 {items.length > shown.length ? (
-                  <button type="button" onClick={() => onPick(iso)} className="px-1 text-left text-[0.625rem] text-subtle">
+                  <button type="button" onClick={() => onPick(iso)} className="px-1 text-left text-[0.625rem] text-tertiary-label">
                     +{items.length - shown.length}
                   </button>
                 ) : null}
@@ -811,15 +807,15 @@ function TimeGrid({
       <div ref={gridRef} className="relative grid" style={{ gridTemplateColumns: columns, height: HOUR * 24 }}>
         <div className="relative">
           {Array.from({ length: 24 }, (_, hour) => (
-            <span key={hour} className="absolute right-1.5 -translate-y-1/2 text-[0.625rem] tabular-nums text-subtle" style={{ top: hour * HOUR }}>
+            <span key={hour} className="absolute right-1.5 -translate-y-1/2 text-[0.625rem] tabular-nums text-tertiary-label" style={{ top: hour * HOUR }}>
               {hour === 0 ? "" : `${String(hour).padStart(2, "0")}:00`}
             </span>
           ))}
         </div>
         {lists.map(({ iso, all, layout }) => (
-          <div key={iso} data-day={iso} className="relative border-l border-line">
+          <div key={iso} data-day={iso} className="relative border-l border-separator">
             {Array.from({ length: 24 }, (_, hour) => (
-              <span key={hour} className="absolute inset-x-0 border-t border-line/70" style={{ top: hour * HOUR }} aria-hidden="true" />
+              <span key={hour} className="absolute inset-x-0 border-t border-separator/70" style={{ top: hour * HOUR }} aria-hidden="true" />
             ))}
             {iso === today && now != null ? (
               <span className="absolute inset-x-0 z-10 h-px bg-danger" style={{ top: (now / 60) * HOUR }} aria-hidden="true">
@@ -850,8 +846,8 @@ function TimeGrid({
                     borderLeft: `2px solid ${hex}`,
                   }}
                 >
-                  <span className={cn("block font-medium break-words hyphens-auto text-fg", height > 30 ? "line-clamp-2" : "truncate")}>{task.title}</span>
-                  {height > 30 ? <span className="block truncate text-[0.625rem] text-muted tabular-nums">{timeRange(task)}</span> : null}
+                  <span className={cn("block font-medium break-words hyphens-auto text-label", height > 30 ? "line-clamp-2" : "truncate")}>{task.title}</span>
+                  {height > 30 ? <span className="block truncate text-[0.625rem] text-secondary-label tabular-nums">{timeRange(task)}</span> : null}
                 </button>
               );
             })}

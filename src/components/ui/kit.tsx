@@ -4,8 +4,8 @@
  * ring), disabled (40 %), loading (spinner, inert), error / success.
  * Live catalogue: /kit.
  */
-import { useId, type InputHTMLAttributes, type ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Info, Loader2, Search, X, XCircle, type LucideIcon } from "lucide-react";
+import { useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Info, Loader2, Search, X, XCircle, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { icon as iconColor, type IconColor } from "@/lib/design/tokens";
 
@@ -40,14 +40,78 @@ export function Spinner({ className }: { className?: string }) {
 /** Подпись секции капсом — общий стиль для всех экранов. */
 export const CAPS = "text-[0.6875rem] font-semibold tracking-wide text-tertiary-label uppercase";
 
-export function SectionHeader({ title, count, folded, onFold }: { title: string; count?: number; folded?: boolean; onFold?: () => void }) {
-  const label = <span className={CAPS}>{title}</span>;
-  if (!onFold) return <div className="mb-1 px-1">{label}</div>;
+export function SectionHeader({
+  title,
+  count,
+  folded,
+  onFold,
+  tone,
+  as: Tag = "div",
+}: {
+  title: string;
+  count?: number;
+  folded?: boolean;
+  onFold?: () => void;
+  /** accent — сегодняшний день в «Неделе». */
+  tone?: "accent";
+  /** h2 для заголовков разделов в списках задач. */
+  as?: "div" | "h2" | "h3";
+}) {
+  const label = <span className={cn(CAPS, tone === "accent" && "text-accent-ink")}>{title}</span>;
+  if (!onFold) return <Tag className="mb-1 px-1">{label}</Tag>;
   return (
     <button type="button" aria-expanded={!folded} onClick={onFold} className="mb-1 flex min-h-8 w-full items-center gap-1 px-1 text-left">
       {label}
       {folded && count ? <span className="text-caption text-tertiary-label tabular-nums">{count}</span> : null}
       <ChevronDown className={cn("ml-auto size-[var(--icon-sm)] text-tertiary-label transition-transform duration-[var(--dur-fast)]", folded && "-rotate-90")} aria-hidden="true" />
+    </button>
+  );
+}
+
+/**
+ * Круглая отметка задачи (1.21). md — строка задачи (18 px), sm — подзадача и
+ * «Матрица» (16 px). Только вид: кнопку и зону нажатия 44 px даёт родитель.
+ */
+export function CheckCircle({ checked, size = "md", ring }: { checked: boolean; size?: "md" | "sm"; ring?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full transition-[background-color,border-color] duration-[var(--dur-fast)]",
+        size === "md" ? "size-[1.125rem] border-2" : "size-4 border-[1.5px]",
+        checked ? "border-accent bg-accent text-accent-fg" : (ring ?? "border-tertiary-label"),
+      )}
+    >
+      {checked ? <Check className={size === "md" ? "size-3" : "size-2.5"} strokeWidth={3} /> : null}
+    </span>
+  );
+}
+
+/**
+ * Маленькая кнопка-«пилюля» (1.21): «завтра», «Обновить пробег», распознанная
+ * дата. tint — акцентная подложка, plain — фон страницы, outline — рамка,
+ * off — пунктир и зачёркивание. Высота 28 px, зона нажатия 44 px через .hit.
+ */
+export function Chip({
+  tone = "plain",
+  className,
+  children,
+  ...props
+}: { tone?: "tint" | "plain" | "outline" | "off" } & ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "hit inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-caption tabular-nums transition-colors duration-[var(--dur-fast)] active:brightness-95",
+        tone === "tint" && "bg-accent/10 font-medium text-accent-ink",
+        tone === "plain" && "bg-bg text-secondary-label",
+        tone === "outline" && "border border-separator bg-surface-2 text-label",
+        tone === "off" && "border border-dashed border-separator text-tertiary-label line-through",
+        className,
+      )}
+      {...props}
+    >
+      {children}
     </button>
   );
 }

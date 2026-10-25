@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/cn";
+import { GroupedCard, ListRow, SegmentedControl } from "@/components/ui/kit";
 import { todayIso } from "@/lib/dates";
 import { breakFor, usePlanner } from "@/lib/planner-store";
 
@@ -41,19 +41,13 @@ export function FocusView() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col items-center py-2">
-      <div className="grid w-full max-w-xs grid-cols-3 gap-1 rounded-lg bg-elevated p-1" role="radiogroup" aria-label="Длина сессии">
-        {PRESETS.map((preset) => (
-          <button
-            key={preset.label}
-            type="button"
-            role="radio"
-            aria-checked={focus.workLen === preset.work}
-            onClick={() => setWorkLen(preset.work)}
-            className={cn("h-8 rounded-md text-sm", focus.workLen === preset.work ? "bg-surface font-semibold text-fg shadow-sm" : "text-muted")}
-          >
-            {preset.label}
-          </button>
-        ))}
+      <div className="w-full max-w-xs">
+        <SegmentedControl
+          label="Длина сессии"
+          options={PRESETS.map((preset) => ({ id: String(preset.work), label: preset.label }))}
+          value={String(focus.workLen)}
+          onChange={(id) => setWorkLen(Number(id))}
+        />
       </div>
 
       <div className="relative mt-6 size-56">
@@ -82,7 +76,7 @@ export function FocusView() {
         <Button variant="primary" className="min-w-28 rounded-full" onClick={() => (focus.running ? pauseFocus() : startFocus())}>
           {label}
         </Button>
-        <Button variant="soft" className="rounded-full" onClick={resetFocus}>
+        <Button variant="secondary" className="rounded-full" onClick={resetFocus}>
           Сброс
         </Button>
       </div>
@@ -92,37 +86,40 @@ export function FocusView() {
       </p>
       {focus.note ? <p className="mt-2 text-center text-sm text-fg">{focus.note}</p> : null}
 
-      <label className="mt-6 flex min-h-11 w-full items-center gap-3 rounded-card bg-card pl-3 text-body">
-        <span className="shrink-0">Задача</span>
-        <select
-          value={focus.taskId ?? ""}
-          onChange={(event) => setFocusTask(event.target.value || null)}
-          aria-label="Задача сессии"
-          className="h-11 min-w-0 flex-1 appearance-none truncate border-0 bg-transparent pr-3 text-right text-base text-muted shadow-none outline-none"
-        >
-          <option value="">Без задачи</option>
-          {openTasks.map((task) => (
-            <option key={task.id} value={task.id}>
-              {task.title}
-            </option>
-          ))}
-        </select>
-      </label>
-      {habit ? (
-        <div className="mt-2 flex min-h-11 w-full items-center gap-3 rounded-card bg-card pl-3 text-body">
-          <span className="shrink-0">Привычка</span>
-          <span className="min-w-0 flex-1 truncate text-right text-muted">
-            {habit.icon ? `${habit.icon} ` : ""}
-            {habit.name}
-          </span>
-          <button type="button" aria-label="Отвязать привычку" onClick={() => setFocusHabit(null)} className="flex size-11 items-center justify-center text-subtle">
-            <X className="size-4" />
-          </button>
-        </div>
-      ) : null}
+      <GroupedCard className="mt-6 w-full">
+        <ListRow
+          title="Задача"
+          value={
+            <select
+              value={focus.taskId ?? ""}
+              onChange={(event) => setFocusTask(event.target.value || null)}
+              aria-label="Задача сессии"
+              className="h-11 w-full min-w-0 appearance-none truncate border-0 bg-transparent text-right text-base text-secondary-label shadow-none outline-none"
+            >
+              <option value="">Без задачи</option>
+              {openTasks.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.title}
+                </option>
+              ))}
+            </select>
+          }
+        />
+        {habit ? (
+          <ListRow
+            title="Привычка"
+            value={`${habit.icon ? `${habit.icon} ` : ""}${habit.name}`}
+            trailing={
+              <button type="button" aria-label="Отвязать привычку" onClick={() => setFocusHabit(null)} className="hit -mr-2 flex size-8 shrink-0 items-center justify-center text-tertiary-label">
+                <X className="size-4" />
+              </button>
+            }
+          />
+        ) : null}
+      </GroupedCard>
       {habit ? <p className="mt-1 w-full px-1 text-xs text-subtle">Когда сессия закончится, сегодняшняя отметка добавится сама.</p> : null}
       {linked && !linked.done ? (
-        <Button className="mt-2" variant="ghost" size="sm" onClick={() => toggleTask(linked.id)}>
+        <Button className="mt-2" variant="plain" size="sm" onClick={() => toggleTask(linked.id)}>
           Отметить выполненной
         </Button>
       ) : null}
