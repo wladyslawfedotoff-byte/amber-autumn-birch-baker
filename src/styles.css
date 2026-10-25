@@ -1,4 +1,13 @@
 @import "tailwindcss";
+/* 1.17: fonts are served by the app itself (no external font host on start). */
+@import "@fontsource/ibm-plex-sans/cyrillic-400.css";
+@import "@fontsource/ibm-plex-sans/cyrillic-500.css";
+@import "@fontsource/ibm-plex-sans/cyrillic-600.css";
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/newsreader/latin-500.css";
+@import "@fontsource/newsreader/latin-600.css";
 /* Never scan build output: the SSR build would otherwise pick up class names
    from the client bundle and emit a different CSS file (hash mismatch → the
    server-rendered <link> 404s and the page flashes unstyled). */

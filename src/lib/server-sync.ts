@@ -27,6 +27,7 @@
  */
 import { usePlanner } from "@/lib/planner-store";
 import { markReady } from "@/lib/boot";
+import { PREFETCH_META_KEY, takePrefetch } from "@/lib/sync/prefetch";
 import { partialDocument, runSyncOnce, UserMismatch, type PatchAnswer, type RemoteDoc } from "@/lib/sync/engine";
 import { DEFAULT_ARCHIVE_DAYS, normalizeArchiveDays } from "@/lib/task-done";
 import type { Asset, Habit, Milestone, Project, Task, TaskList } from "@/lib/planner-types";
@@ -48,7 +49,7 @@ import {
   type SyncEntity,
 } from "@/lib/sync/merge";
 
-const META_KEY = "pora-server-sync";
+const META_KEY = PREFETCH_META_KEY;
 const STORE_KEY = "srok-planner";
 const LEGACY_NOTE_KEY = "pora-legacy-note";
 const PUSH_DELAY_MS = 700;
@@ -309,7 +310,11 @@ function applyData(data: SyncData): void {
  * Merge a server document into the CURRENT local state. Returns true when the
  * local side has something the server does not (→ needs a push).
  */
+/** Real request times of a copy that was prefetched by the <head> script (1.17). */
+const prefetchTiming = new WeakMap<object, { t0: number; t1: number }>();
+
 function integrate(remote: RemoteDoc, timing?: { t0: number; t1: number }): boolean {
+  timing = (remote && prefetchTiming.get(remote as object)) ?? timing;
   const offset =
     timing && Number.isFinite(remote.serverNow) ? remote.serverNow - (timing.t0 + timing.t1) / 2 : readMeta().clockOffset;
   setClockOffset(offset);
@@ -428,8 +433,14 @@ function failure(response: Response, body: Record<string, unknown> | null): Sync
 
 async function call(method: "GET" | "PUT", base?: number, body?: string, keepalive = false, known: number | null = null): Promise<{ status: number; doc: RemoteDoc }> {
   let response: Response;
+  // 1.17: the very first GET on a fresh device was already started in <head>.
+  const early = method === "GET" && known === null ? takePrefetch() : null;
+  let earlyT1 = 0;
   try {
-    response = await fetch("/api/sync", {
+    if (early) {
+      response = await early.response;
+      earlyT1 = early.t1 ?? Date.now();
+    } else response = await fetch("/api/sync", {
       method,
       cache: "no-store",
       credentials: "same-origin",
@@ -449,6 +460,7 @@ async function call(method: "GET" | "PUT", base?: number, body?: string, keepali
   if (response.status === 304) return { status: 304, doc: null as unknown as RemoteDoc };
   const json = await readJson(response);
   if ((response.ok || response.status === 409) && json && typeof json.revision === "number") {
+    if (early) prefetchTiming.set(json, { t0: early.t0, t1: earlyT1 });
     return { status: response.status, doc: json as unknown as RemoteDoc };
   }
   throw failure(response, json);

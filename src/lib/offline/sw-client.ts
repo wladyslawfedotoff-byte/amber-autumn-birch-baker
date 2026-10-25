@@ -5,8 +5,9 @@
  *   the page reloads once — the user sees the new version on the next launch;
  * - while the app is in use, «Обновить» appears in the status pill instead,
  *   and the new version also takes over the next time the app is opened.
- * The page is always fetched from the network first when online, so a stale
- * version can never stick.
+ * 1.17: the main page opens from the saved copy at once and the fresh one is
+ * fetched in the background; a new version is found on every start (sw.js is
+ * never cached), so a stale version lives at most until that reload.
  */
 type Listener = () => void;
 

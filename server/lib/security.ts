@@ -3,7 +3,7 @@
  * for scripts because TanStack Start streams inline hydration scripts; the
  * important parts are frame-ancestors/object-src/base-uri/form-action and
  * connect-src 'self' (no exfiltration to other origins). Only the app's own
- * origin (plus the web fonts) is allowed — no external script hosts (1.15).
+ * origin is allowed — no external script or font hosts (1.15, fonts 1.17).
  */
 /**
  * HSTS for one year, only on responses to HTTPS requests. Deliberately without
@@ -16,8 +16,8 @@ export function securityHeaders(secure = false): Record<string, string> {
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'`,
-    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
-    "font-src 'self' https://fonts.gstatic.com data:",
+    `style-src 'self' 'unsafe-inline'`,
+    "font-src 'self' data:",
     `img-src 'self' data: blob:`,
     `connect-src 'self'`,
     `frame-src 'self'`,

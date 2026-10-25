@@ -1,7 +1,10 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { APPLE_TOUCH_ICONS, FAVICON_ICO, FAVICON_SVG, MANIFEST_URL } from "@/lib/app-icons";
 import { APP_DESCRIPTION, APP_NAME, APP_TITLE } from "@/lib/site";
+import { PREFETCH_SCRIPT } from "@/lib/sync/prefetch";
 import appCss from "../styles.css?url";
+// The main text font is requested together with the CSS, not after it (1.17).
+import plexCyrillic400 from "@fontsource/ibm-plex-sans/files/ibm-plex-sans-cyrillic-400-normal.woff2?url";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -25,12 +28,7 @@ export const Route = createRootRoute({
     links: [
       { rel: "icon", type: "image/svg+xml", href: FAVICON_SVG },
       { rel: "icon", sizes: "16x16 32x32 48x48", href: FAVICON_ICO },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-      },
+      { rel: "preload", as: "font", type: "font/woff2", href: plexCyrillic400, crossOrigin: "anonymous" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: MANIFEST_URL },
       ...APPLE_TOUCH_ICONS.map(({ size, href }) => ({ rel: "apple-touch-icon", sizes: `${size}x${size}`, href })),
@@ -39,6 +37,8 @@ export const Route = createRootRoute({
   component: () => (
     <html lang="ru" suppressHydrationWarning>
       <head>
+        {/* 1.17: a fresh device asks for its first copy while the app's files load. */}
+        <script dangerouslySetInnerHTML={{ __html: PREFETCH_SCRIPT }} />
         <HeadContent />
       </head>
       <body>

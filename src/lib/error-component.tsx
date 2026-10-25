@@ -1,5 +1,6 @@
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { TriangleAlert } from "lucide-react";
+import { isChunkError, reloadForNewVersion } from "@/lib/offline/stale-chunks";
 
 const FALLBACK_MESSAGE = "An unexpected error occurred. Try reloading the page.";
 
@@ -10,6 +11,8 @@ function errorMessage(error: unknown): string {
 }
 
 export function AppErrorComponent({ error }: ErrorComponentProps) {
+  // A file of the previous version is gone after an update: reload once (1.17).
+  if (isChunkError(error) && reloadForNewVersion()) return null;
   return (
     <main
       className={
