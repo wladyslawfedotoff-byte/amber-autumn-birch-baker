@@ -60,11 +60,25 @@ function isAppPage(response) {
 
 async function navigate(event) {
   const cache = await caches.open(SHELL_CACHE);
+  const url = new URL(event.request.url);
   const network = fetch(event.request).then(async (response) => {
-    const url = new URL(event.request.url);
-    if (isAppPage(response) && url.pathname === "/") await cache.put(SHELL_URL, response.clone());
+    if (url.pathname === "/") {
+      if (isAppPage(response)) await cache.put(SHELL_URL, response.clone());
+      // Signed out on the server (redirect to /login): the saved page goes too.
+      else if (response.redirected || response.status === 401) await cache.delete(SHELL_URL);
+    }
     return response;
   });
+  // 1.17 «мгновенный старт»: the main page opens from the saved copy at once
+  // (it holds no user data, and every file it needs is in this same cache);
+  // the fresh page is fetched in the background for the next start.
+  if (url.pathname === "/") {
+    const instant = await cache.match(SHELL_URL);
+    if (instant) {
+      event.waitUntil(network.catch(() => undefined));
+      return instant;
+    }
+  }
   // A weak signal can hang for a long time: after a few seconds the saved page is shown.
   const timeout = new Promise((resolve) => setTimeout(() => resolve(null), NAV_TIMEOUT_MS));
   try {
@@ -73,7 +87,6 @@ async function navigate(event) {
   } catch {
     // offline: fall through to the saved page
   }
-  const url = new URL(event.request.url);
   const saved = url.pathname === "/login" ? null : await cache.match(SHELL_URL);
   if (saved) {
     event.waitUntil(network.catch(() => undefined));
