@@ -458,7 +458,7 @@ function GroupRow({
             {pinned ? "Открепить" : "Закрепить"}
           </button>
           <button type="button" role="menuitem" onClick={() => onMenu(false)} className="h-9 rounded-md px-3 text-muted">
-            Отмена
+            Отменить
           </button>
         </div>
       ) : null}
@@ -487,7 +487,7 @@ function PinChip({
           <PinOff className="size-3.5" aria-hidden="true" />
           Открепить «{item.name.length > 14 ? `${item.name.slice(0, 13)}…` : item.name}»
         </button>
-        <button type="button" aria-label="Отмена" onClick={() => onMenu(false)} className="flex size-7 items-center justify-center rounded-full text-muted">
+        <button type="button" aria-label="Отменить" onClick={() => onMenu(false)} className="flex size-7 items-center justify-center rounded-full text-muted">
           <X className="size-3.5" />
         </button>
       </li>

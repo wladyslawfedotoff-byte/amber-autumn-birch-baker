@@ -16,6 +16,8 @@ import { notesPreview, progressLabel, subtaskProgress } from "@/lib/task-tools";
 import { useSubtasksOpen } from "@/lib/use-subtasks-open";
 import { colorStyle } from "@/lib/task-colors";
 import { useDoneToast } from "@/lib/done-toast";
+import { haptic } from "@/lib/haptics";
+import { TaskContextMenu } from "@/components/planner/task-menu";
 
 function ring(priority: Priority): string {
   if (priority === 3) return "border-danger";
@@ -28,6 +30,8 @@ const NO_ASSETS: Asset[] = [];
 /** Swipe distance (px) that triggers the action, and the furthest the row moves. */
 const SWIPE_AT = 72;
 const SWIPE_MAX = 120;
+/** Hold time (ms) that opens the long-press menu; any move before it cancels. */
+const HOLD_MS = 450;
 
 /** Memoized (1.15): ticking one task redraws only that row. */
 export const TaskRow = memo(function TaskRow({
@@ -83,6 +87,7 @@ export const TaskRow = memo(function TaskRow({
       return;
     }
     const wasDone = task.done;
+    haptic();
     toggleTask(task.id);
     if (wasDone) return;
     const after = usePlanner.getState().tasks.find((t) => t.id === task.id);
@@ -93,6 +98,14 @@ export const TaskRow = memo(function TaskRow({
   const [dx, setDx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const swiped = useRef(false);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const [menu, setMenu] = useState<DOMRect | null>(null);
+  function openMenu() {
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    haptic("select");
+    setMenu(rect);
+  }
   const canTomorrow = !checked && !task.done;
   function onSwipeStart(event: PointerEvent<HTMLDivElement>) {
     // A swipe that ended without a click must not eat the next real tap (1.15.1).
@@ -105,9 +118,19 @@ export const TaskRow = memo(function TaskRow({
     let mode: "undecided" | "swipe" | "scroll" = "undecided";
     let last = 0;
     let buzzed = false;
+    // Long-press (1.18): still finger for HOLD_MS → menu. Any swipe or scroll cancels it.
+    let held = false;
+    const hold = window.setTimeout(() => {
+      if (mode !== "undecided") return;
+      held = true;
+      swiped.current = true;
+      openMenu();
+    }, HOLD_MS);
     const move = (ev: globalThis.PointerEvent) => {
       const mx = ev.clientX - startX;
       const my = ev.clientY - startY;
+      if (held) return;
+      if (Math.abs(mx) > 8 || Math.abs(my) > 8) window.clearTimeout(hold);
       if (mode === "undecided") {
         if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) mode = "scroll";
         else if (Math.abs(mx) > 12 && Math.abs(mx) > Math.abs(my) * 1.5) {
@@ -124,9 +147,17 @@ export const TaskRow = memo(function TaskRow({
       setDx(last);
     };
     const end = () => {
+      window.clearTimeout(hold);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
+      if (held) {
+        // The click that ends the hold must not open the card.
+        window.setTimeout(() => {
+          swiped.current = false;
+        }, 400);
+        return;
+      }
       if (mode !== "swipe") return;
       swiped.current = true;
       // Only the click that belongs to this very gesture is swallowed.
@@ -147,7 +178,15 @@ export const TaskRow = memo(function TaskRow({
 
   return (
     <div
+      ref={rowRef}
       data-selected={selected ? "true" : undefined}
+      data-lifted={menu ? "true" : undefined}
+      onContextMenu={(event) => {
+        // Right click / Android long-press: same menu instead of the browser one.
+        if ((event.target as HTMLElement).closest("input, textarea")) return;
+        event.preventDefault();
+        if (!menu) openMenu();
+      }}
       className={cn("task-row flex items-start overflow-hidden bg-elevated", checked && "opacity-75")}
       style={dx > 0 ? { background: "var(--accent)", touchAction: "pan-y" } : dx < 0 ? { background: "var(--warn)", touchAction: "pan-y" } : { ...tint, touchAction: "pan-y" }}
       onPointerDown={onSwipeStart}
@@ -345,6 +384,7 @@ export const TaskRow = memo(function TaskRow({
         </button>
       ) : null}
       </div>
+      {menu ? <TaskContextMenu task={task} rect={menu} onClose={() => setMenu(null)} onOpen={onOpen} /> : null}
     </div>
   );
 });

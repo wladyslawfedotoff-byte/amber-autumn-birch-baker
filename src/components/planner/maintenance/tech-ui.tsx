@@ -174,7 +174,7 @@ export function PartSheet({ asset, part, onClose }: { asset: Asset; part: TechPa
   };
   const sep = !part && kind === "item";
   return (
-    <Sheet open title={part ? "Компонент: изменить" : "Новый компонент"} onClose={discard} action={{ label: "Сохранить", onClick: save, disabled: !ok }}>
+    <Sheet open title={part ? "Компонент: изменить" : "Новый компонент"} onClose={discard} action={{ label: "Готово", onClick: save, disabled: !ok }}>
       <div className="space-y-2">
         {!part ? (
           <Seg
@@ -228,7 +228,7 @@ export function PartSheet({ asset, part, onClose }: { asset: Asset; part: TechPa
             {confirm ? (
               <div className="flex gap-2">
                 <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>
-                  Отмена
+                  Отменить
                 </Button>
                 <Button
                   variant="destructive"

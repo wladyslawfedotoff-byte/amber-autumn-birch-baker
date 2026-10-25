@@ -4,7 +4,6 @@ import { APP_DESCRIPTION, APP_NAME, APP_TITLE } from "@/lib/site";
 import { PREFETCH_SCRIPT } from "@/lib/sync/prefetch";
 import appCss from "../styles.css?url";
 // The main text font is requested together with the CSS, not after it (1.17).
-import plexCyrillic400 from "@fontsource/ibm-plex-sans/files/ibm-plex-sans-cyrillic-400-normal.woff2?url";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -28,7 +27,6 @@ export const Route = createRootRoute({
     links: [
       { rel: "icon", type: "image/svg+xml", href: FAVICON_SVG },
       { rel: "icon", sizes: "16x16 32x32 48x48", href: FAVICON_ICO },
-      { rel: "preload", as: "font", type: "font/woff2", href: plexCyrillic400, crossOrigin: "anonymous" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: MANIFEST_URL },
       ...APPLE_TOUCH_ICONS.map(({ size, href }) => ({ rel: "apple-touch-icon", sizes: `${size}x${size}`, href })),

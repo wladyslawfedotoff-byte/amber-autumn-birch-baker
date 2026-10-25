@@ -212,7 +212,7 @@ export function EditAssetSheet({ assetId, onClose, onDeleted }: { assetId: strin
           {confirm ? (
             <div className="flex gap-2">
               <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>
-                Отмена
+                Отменить
               </Button>
               <Button
                 variant="destructive"
@@ -255,7 +255,7 @@ export function MileageSheet({ assetId, onClose }: { assetId: string; onClose: (
     onClose();
   };
   return (
-    <Sheet open title="Пробег" onClose={onClose} action={{ label: "Сохранить", onClick: save, disabled: n === undefined }}>
+    <Sheet open title="Пробег" onClose={onClose} action={{ label: "Готово", onClick: save, disabled: n === undefined }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -346,7 +346,7 @@ export function RuleSheet({
     onClose();
   };
   return (
-    <Sheet open title={rule ? "Правило" : insDefault ? "Новый платёж" : "Новое правило"} onClose={onClose} action={{ label: rule ? "Сохранить" : "Добавить", onClick: save, disabled: !ok }}>
+    <Sheet open title={rule ? "Правило" : insDefault ? "Новый платёж" : "Новое правило"} onClose={onClose} action={{ label: rule ? "Готово" : "Добавить", onClick: save, disabled: !ok }}>
       <div className="space-y-2">
         <input autoFocus={!rule} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={car ? "Что делать — например, замена масла" : "Что делать — например, заменить фильтр"} aria-label="Что делать" maxLength={120} className={field} />
         <FieldLabel hint="Можно один срок или несколько сразу — тогда сработает тот, что наступит раньше. Например: каждые 10 000 км или 12 мес.">Когда</FieldLabel>
@@ -469,7 +469,7 @@ export function ServiceSheet({ assetId, preset, editing, onClose }: { assetId: s
     onClose();
   };
   return (
-    <Sheet open title={editing ? "Изменить запись" : "Запись в историю"} onClose={discard} action={{ label: "Сохранить", onClick: save, disabled: !ok }}>
+    <Sheet open title={editing ? "Изменить запись" : "Запись в историю"} onClose={discard} action={{ label: "Готово", onClick: save, disabled: !ok }}>
       <div className="space-y-2">
         <input autoFocus={!preset && !editing} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={asset.kind === "car" ? "Что сделано — например, замена масла" : "Что сделано — например, заменён фильтр"} aria-label="Что сделано" maxLength={160} className={field} />
         <div className="flex gap-2">
@@ -539,7 +539,7 @@ export function EntrySheet({ assetId, entry, onClose, onEdit }: { assetId: strin
         <Button variant="primary" className="mb-2 w-full" onClick={onEdit}>Изменить запись</Button>
         {confirm ? (
           <div className="flex gap-2">
-            <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>Отмена</Button>
+            <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>Отменить</Button>
             <Button variant="destructive" className="flex-1" onClick={() => void remove()}>Удалить запись</Button>
           </div>
         ) : (

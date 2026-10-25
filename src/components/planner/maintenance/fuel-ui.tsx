@@ -165,7 +165,7 @@ export function FuelSheet({ asset, fill, onClose }: { asset: Asset; fill: FuelFi
     if (fill ? update(asset.id, fill.id, input) : add(asset.id, input)) onClose();
   };
   return (
-    <Sheet open title={fill ? "Заправка: изменить" : "Заправка"} onClose={onClose} action={{ label: "Сохранить", onClick: save, disabled: !ok }}>
+    <Sheet open title={fill ? "Заправка: изменить" : "Заправка"} onClose={onClose} action={{ label: "Готово", onClick: save, disabled: !ok }}>
       <div className="space-y-2">
         <div className="flex gap-2">
           <label className="block min-w-0 flex-1">
@@ -201,7 +201,7 @@ export function FuelSheet({ asset, fill, onClose }: { asset: Asset; fill: FuelFi
             {confirm ? (
               <div className="flex gap-2">
                 <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>
-                  Отмена
+                  Отменить
                 </Button>
                 <Button
                   variant="destructive"

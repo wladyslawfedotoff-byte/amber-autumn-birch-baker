@@ -132,10 +132,10 @@ export function ContactsBlock({ projectId, contacts }: { projectId: string; cont
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка" aria-label="Заметка" className={field} />
           <div className="flex gap-2">
             <Button type="submit" variant="primary" size="sm" disabled={!name.trim()}>
-              Сохранить
+              Готово
             </Button>
             <Button type="button" variant="soft" size="sm" onClick={() => setOpen(false)}>
-              Отмена
+              Отменить
             </Button>
           </div>
         </form>

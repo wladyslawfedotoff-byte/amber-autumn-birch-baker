@@ -231,7 +231,7 @@ function ProfileSection() {
               {busy ? "Сохраняем…" : "Сохранить пароль"}
             </button>
             <button type="button" onClick={() => setOpen(false)} className="h-11 rounded-xl px-4 text-sm text-muted">
-              Отмена
+              Отменить
             </button>
           </div>
         </form>
@@ -326,7 +326,7 @@ function ConnectionSection() {
               {allBusy ? "Завершаем сеансы…" : "Да, выйти везде"}
             </button>
             <button type="button" disabled={allBusy} onClick={() => setConfirmAll(false)} className="h-11 rounded-xl px-4 text-sm text-muted">
-              Отмена
+              Отменить
             </button>
           </div>
         </div>

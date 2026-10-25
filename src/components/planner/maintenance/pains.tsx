@@ -63,7 +63,7 @@ export function PainSheet({ asset, painId, onClose, onOpenTask }: { asset: Asset
     </button>
   );
   return (
-    <Sheet open title="Что болит" onClose={onClose} action={{ label: "Сохранить", onClick: () => { if (save()) onClose(); }, disabled: !okText }}>
+    <Sheet open title="Что болит" onClose={onClose} action={{ label: "Готово", onClick: () => { if (save()) onClose(); }, disabled: !okText }}>
       <div className="space-y-2">
         <label className="block">
           <span className={smallLabel}>Что болит</span>

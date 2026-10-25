@@ -330,7 +330,7 @@ function EditorSheet({ habit, onClose, onSaved, onRemoved }: { habit: Habit | nu
               <div className="flex items-center gap-2 py-1">
                 <span className="text-xs text-muted">Удалить вместе с отметками?</span>
                 <button type="button" onClick={() => setConfirm(false)} className="h-9 px-2 text-sm text-muted">
-                  Отмена
+                  Отменить
                 </button>
                 <button
                   type="button"

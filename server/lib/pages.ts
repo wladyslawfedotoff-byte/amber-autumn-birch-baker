@@ -5,9 +5,9 @@ import { escapeHtml } from "./http.ts";
 
 const STYLE = `
 :root{--bg:#e8e4db;--surface:#f6f4ef;--elevated:#fffcf7;--fg:#1c1d1a;--muted:#5c5f59;--subtle:#8a8d86;--line:#ddd8ce;--accent:#243e4a;--accent-fg:#f4f2eb;--danger:#8d3b3b;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#121310;--surface:#191a17;--elevated:#22231f;--fg:#f3f1ea;--muted:#c2c4bc;--subtle:#9a9d95;--line:#34362f;--accent:#d7e0da;--accent-fg:#141614;--danger:#e7b0b0;color-scheme:dark}}
+@media (prefers-color-scheme:dark){:root{--bg:#000000;--surface:#000000;--elevated:#1c1c1e;--fg:#f3f1ea;--muted:#c2c4bc;--subtle:#9a9d95;--line:#38383a;--accent:#d7e0da;--accent-fg:#141614;--danger:#e7b0b0;color-scheme:dark}}
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:var(--surface);color:var(--fg);font-family:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;line-height:1.4;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
+html,body{margin:0;min-height:100%;background:var(--surface);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",Roboto,sans-serif;line-height:1.4;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
 main{min-height:100vh;min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;padding:max(56px,calc(env(safe-area-inset-top) + 40px)) 20px max(24px,env(safe-area-inset-bottom))}
 .card{width:100%;max-width:340px}
 @media (min-width:640px){html,body{background:var(--bg)}main{align-items:center;padding-top:24px}.card{background:var(--surface);border-radius:20px;padding:28px 24px;box-shadow:0 0 0 1px color-mix(in oklab,var(--fg) 8%,transparent),0 12px 32px -18px color-mix(in oklab,var(--fg) 30%,transparent)}}
@@ -39,7 +39,7 @@ function shell(title: string, body: string): string {
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="${escapeHtml(APP_NAME)}">
 <meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#191a17" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
 <link rel="icon" type="image/svg+xml" href="${FAVICON_SVG}">

@@ -342,7 +342,7 @@ function ProjectBoard({ project, onBack }: { project: Project; onBack: () => voi
           {confirm ? (
             <div className="flex gap-2">
               <Button variant="soft" className="flex-1" onClick={() => setConfirm(false)}>
-                Отмена
+                Отменить
               </Button>
               <Button
                 variant="destructive"
