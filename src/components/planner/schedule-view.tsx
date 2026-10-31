@@ -9,6 +9,7 @@ import {
   freeWindows,
   fromMinutes,
   placeSpans,
+  riders,
   slotAt,
   taskSpan,
   toMinutes,
@@ -19,6 +20,7 @@ import { cn } from "@/lib/cn";
 import { usePlanner } from "@/lib/planner-store";
 import type { Task } from "@/lib/planner-types";
 import { colorStyle } from "@/lib/task-colors";
+import { useDoneToast } from "@/lib/done-toast";
 
 const HOUR = 3;
 
@@ -26,6 +28,17 @@ type CardPreview = { id: string; title: string; start: number; end: number };
 
 function blockStyle(span: Placed, from: number): { top: string; height: string; left: string; width: string } {
   const minutes = Math.max(span.end - span.start, 15);
+  if (span.inside) {
+    // Inside a «Вмещает дела» block: the right ~2/3 of the host's column, own lanes there.
+    const col = `((100% - 3rem) / ${span.inside.lanes})`;
+    const room = `(${col} * 0.64 - 0.5rem)`;
+    return {
+      top: `${((span.start - from) / 60) * HOUR + 0.0625}rem`,
+      height: `${Math.max((minutes / 60) * HOUR - 0.25, 1.625)}rem`,
+      left: `calc(3rem + ${col} * ${span.inside.lane} + ${col} * 0.36 + ${room} * ${span.lane} / ${span.lanes})`,
+      width: `calc(${room} / ${span.lanes} - 0.25rem)`,
+    };
+  }
   return {
     top: `${((span.start - from) / 60) * HOUR}rem`,
     height: `${Math.max((minutes / 60) * HOUR - 0.125, 1.75)}rem`,
@@ -57,7 +70,7 @@ export function ScheduleView({
   const [slot, setSlot] = useState<{ start: number; end: number } | null>(null);
   const [hint, setHint] = useState(false);
   const [trayOpen, setTrayOpen] = useState(true);
-  const [draft, setDraft] = useState<{ id: string; start: number; end: number } | null>(null);
+  const [draft, setDraft] = useState<{ id: string; start: number; end: number; move?: boolean } | null>(null);
   const [preview, setPreview] = useState<CardPreview | null>(null);
   const [ghost, setGhost] = useState<{ title: string; x: number; y: number } | null>(null);
   const [holding, setHolding] = useState<string | null>(null);
@@ -76,8 +89,16 @@ export function ScheduleView({
     [tasks, day],
   );
   const live = useMemo(() => {
+    // Moving a «Вмещает дела» block carries the open tasks inside it along.
+    const origin = draft?.move ? spans.find((span) => span.id === draft.id && span.host) : undefined;
+    const carried = origin ? new Set(riders(spans, origin.id).map((span) => span.id)) : null;
+    const shift = origin && draft ? draft.start - origin.start : 0;
     const mapped = spans.map((span) =>
-      draft && span.id === draft.id ? { ...span, start: draft.start, end: draft.end, assumed: false } : span,
+      draft && span.id === draft.id
+        ? { ...span, start: draft.start, end: draft.end, assumed: false }
+        : carried?.has(span.id)
+          ? { ...span, start: span.start + shift, end: span.end + shift }
+          : span,
     );
     if (!preview) return mapped;
     return [
@@ -146,7 +167,7 @@ export function ScheduleView({
     const boardFrom = bounds.from;
     const boardTo = bounds.to;
     let moved = false;
-    const apply = (next: { id: string; start: number; end: number }) => {
+    const apply = (next: { id: string; start: number; end: number; move?: boolean }) => {
       draftRef.current = next;
       setDraft(next);
     };
@@ -159,7 +180,7 @@ export function ScheduleView({
         const duration = Math.max(origin.end - origin.start, 15);
         let start = Math.round((origin.start + delta) / 15) * 15;
         start = Math.max(boardFrom, Math.min(start, boardTo - duration));
-        apply({ id: span.id, start, end: start + duration });
+        apply({ id: span.id, start, end: start + duration, move: true });
         return;
       }
       let end = Math.round((origin.end + delta) / 15) * 15;
@@ -177,12 +198,32 @@ export function ScheduleView({
         if (!moved && mode === "move") onOpen(span.id);
         return;
       }
+      const shift = current.start - origin.start;
+      const carried = mode === "move" && span.host && shift !== 0 ? riders(spans, span.id) : [];
+      const before = [span, ...carried].map((item) => {
+        const task = tasks.find((t) => t.id === item.id);
+        return { id: item.id, due: task?.due ?? day, startAt: task?.startAt ?? null, endAt: task?.endAt ?? null, remindAt: task?.remindAt ?? null };
+      });
       updateTask(span.id, {
         due: day,
         startAt: clock(current.start),
         endAt: clock(current.end),
         remindAt: clock(current.start),
       });
+      for (const item of carried) {
+        const was = before.find((b) => b.id === item.id);
+        const remind = toMinutes(was?.remindAt);
+        updateTask(item.id, {
+          due: day,
+          startAt: clock(item.start + shift),
+          endAt: clock(item.end + shift),
+          // Only an existing reminder moves along; none is added.
+          ...(remind != null ? { remindAt: clock(remind + shift) } : {}),
+        });
+      }
+      if (carried.length > 0) {
+        useDoneToast.getState().show({ id: span.id, title: span.title, repeat: false, next: null, at: Date.now(), moved: { count: carried.length, before } });
+      }
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", finish);
@@ -382,39 +423,57 @@ export function ScheduleView({
             <span className="absolute -top-[3px] -left-[3px] size-[7px] rounded-full bg-danger" />
           </div>
         ) : null}
-        {placed.map((span) => (
-          <div
-            key={span.id}
-            role="button"
-            tabIndex={0}
-            aria-label={`${span.title}, ${fromMinutes(span.start)}–${fromMinutes(Math.min(span.end, 24 * 60 - 1))}`}
-            onPointerDown={(event) => beginDrag(event, span, "move")}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") onOpen(span.id);
-            }}
-            style={{ ...blockStyle(span, bounds.from), ...colorStyle(span.color, 16) }}
-            className={cn(
-              "drag-handle absolute z-10 overflow-hidden rounded-md border-l-2 bg-elevated px-2 py-1 text-left shadow-sm",
-              span.clash ? "border-danger" : "border-accent",
-              span.done && "opacity-50",
-            )}
-          >
-            <span className={cn("block truncate text-[0.8125rem] leading-tight font-medium", span.done && "line-through")}>{span.title}</span>
-            <span className={cn("block text-[0.6875rem] leading-tight tabular-nums", span.clash ? "text-danger" : "text-muted")}>
-              {fromMinutes(span.start)}–{fromMinutes(Math.min(span.end, 24 * 60 - 1))}
-              {span.clash ? " · накладка" : ""}
-              {span.assumed ? " · час" : ""}
-            </span>
+        {placed.map((span) => {
+          const range = `${fromMinutes(span.start)}–${fromMinutes(Math.min(span.end, 24 * 60 - 1))}`;
+          const inner = span.host ? placed.filter((other) => other.inside?.id === span.id).length : 0;
+          // Short blocks (under 45 min) are one line: title and time side by side (time only if there is room — the grid shows it), grip on the right.
+          const short = span.end - span.start < 45;
+          const label = [
+            span.inside ? `внутри «${span.inside.title}»:` : "",
+            `${span.title}, ${range}`,
+            span.host ? `, вмещает дела${inner ? `: ${inner}` : ""}` : "",
+            span.clash ? ", накладка" : "",
+          ].join(" ").trim();
+          return (
             <div
-              aria-hidden="true"
-              onPointerDown={(event) => beginDrag(event, span, "resize")}
-              className="absolute inset-x-0 bottom-0 flex h-3 cursor-ns-resize items-end justify-center pb-1"
+              key={span.id}
+              role="button"
+              tabIndex={0}
+              aria-label={label}
+              onPointerDown={(event) => beginDrag(event, span, "move")}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") onOpen(span.id);
+              }}
+              style={{ ...blockStyle(span, bounds.from), ...colorStyle(span.color, 16) }}
+              className={cn(
+                "drag-handle absolute overflow-hidden rounded-md border-l-2 text-left",
+                short ? "@container flex items-center gap-1.5 py-0 pr-7 pl-2" : "px-2 py-1",
+                span.host ? "z-[5] bg-accent/10" : span.inside ? "z-10 bg-elevated shadow-md ring-1 ring-line" : "z-10 bg-elevated shadow-sm",
+                span.clash ? "border-danger" : "border-accent",
+                span.done && "opacity-50",
+              )}
             >
-              <span className="h-0.5 w-6 rounded-full bg-subtle/50" />
+              <span className={cn("block min-w-0 truncate text-[0.8125rem] leading-tight font-medium", short && "flex-1", span.done && "line-through")}>{span.title}</span>
+              <span className={cn("block text-[0.6875rem] leading-tight tabular-nums", short && "hidden shrink-0 @[12rem]:block", span.clash ? "text-danger" : "text-muted")}>
+                {range}
+                {span.clash && !short ? " · накладка" : ""}
+                {span.assumed && !short ? " · час" : ""}
+                {span.host && !short ? " · вмещает дела" : ""}
+              </span>
+              <div
+                aria-hidden="true"
+                onPointerDown={(event) => beginDrag(event, span, "resize")}
+                className={cn(
+                  "absolute bottom-0 flex cursor-ns-resize justify-center",
+                  short ? "right-0 h-full w-7 items-center" : "inset-x-0 h-3 items-end pb-1",
+                )}
+              >
+                <span className={cn("h-0.5 rounded-full bg-subtle/50", short ? "w-3" : "w-6")} />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {running.length > 0 ? (

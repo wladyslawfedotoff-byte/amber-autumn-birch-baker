@@ -50,7 +50,7 @@ export function task(id: string, i: number, extra: Record<string, unknown> = {})
     completedAt: i % 5 === 0 ? T0 + 1000 : null,
     ...(i % 6 === 0 ? { repeat: "dates", repeatDates: ["2026-11-01", "2026-12-01"] } : {}),
     ...(i % 7 === 0 ? { attachments: [att(`a${id}`)], links: [{ id: `${id}-k`, url: "https://example.org/x?a=1&b=2", title: "Ссылка" }], contacts: [{ id: `${id}-c`, name: "Мастер", phone: "+7 900 000-00-00" }] } : {}),
-    ...(i % 9 === 0 ? { remindAt: "09:30", remindLead: 15, important: true, color: "red", dependsOn: null } : {}),
+    ...(i % 9 === 0 ? { remindAt: "09:30", remindLead: 15, important: true, color: "red", dependsOn: null, startAt: "09:00", endAt: "18:00", host: true } : {}),
     ...extra,
   };
 }

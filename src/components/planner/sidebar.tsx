@@ -413,12 +413,19 @@ const ROW =
 
 function AddField({ kind, draft, setDraft, onSubmit, onCancel }: { kind: DrawerTab; draft: string; setDraft: (v: string) => void; onSubmit: () => void; onCancel: () => void }) {
   const name = kind === "projects" ? "Название проекта" : "Название списка";
+  // Enter submits and unmounts the field; a blur right after must not add the same name twice.
+  const done = useRef(false);
+  const commit = () => {
+    if (done.current) return;
+    done.current = true;
+    onSubmit();
+  };
   return (
     <li>
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit();
+          commit();
         }}
       >
         <input
@@ -426,8 +433,12 @@ function AddField({ kind, draft, setDraft, onSubmit, onCancel }: { kind: DrawerT
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={() => {
-            if (!draft.trim()) onCancel();
+            // iPhone: «Готово» on the keyboard or a tap elsewhere only blurs, it never submits — save instead of losing the name.
+            if (draft.trim()) commit();
+            else onCancel();
           }}
+          enterKeyHint="done"
+          autoComplete="off"
           placeholder={name}
           aria-label={name}
           className="h-11 w-full bg-transparent pr-3 pl-[3.25rem] text-body text-fg outline-none placeholder:text-subtle"

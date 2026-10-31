@@ -5,7 +5,10 @@ import type { DeletedTask } from "@/lib/task-undo";
  * «Готово ✓ · Отменить» after ticking a task, «Задача удалена · Вернуть»
  * after deleting one (1.22). Not persisted, not synced.
  */
-export type DoneToast = { id: string; title: string; repeat: boolean; next: string | null; at: number; deleted?: DeletedTask };
+/** «Смена сдвинута вместе с делами · Вернуть» (1.23): times before the move. */
+export type MovedTimes = { count: number; before: { id: string; due: string | null; startAt: string | null; endAt: string | null; remindAt: string | null }[] };
+
+export type DoneToast = { id: string; title: string; repeat: boolean; next: string | null; at: number; deleted?: DeletedTask; moved?: MovedTimes };
 
 export const useDoneToast = create<{ toast: DoneToast | null; show: (toast: DoneToast) => void; clear: () => void }>()((set) => ({
   toast: null,

@@ -567,3 +567,29 @@ test("schema: every collection and list field has its table; all SQL in server/l
     }
   }
 });
+
+test("1.23 «Вмещает дела»: the host flag is stored in the task document, survives a restart and export; old tasks without it read as before", async () => {
+  const dir = tmp();
+  try {
+    const store = new SyncStore(dir);
+    const view = await store.getFor("user1", ACL);
+    const now = T0 + 200_000;
+    const next = edit(view.data, { tasks: (items) => [task("shift", 1, { startAt: "09:00", endAt: "18:00", host: true }), task("plain", 2), ...items] }, now);
+    const res = await store.putFor("user1", ACL, view.revision, next);
+    assert.equal(res.status, "ok");
+    closeStorage(dir);
+    const after = await new SyncStore(dir).getFor("user1", ACL);
+    const tasks = after.data.tasks as Record<string, unknown>[];
+    assert.equal(tasks.find((t) => t.id === "shift")?.host, true);
+    assert.equal("host" in (tasks.find((t) => t.id === "plain") ?? {}), false);
+    const out = tmp("pora-export-");
+    try {
+      exportJson(dbOf(dir), out);
+      assert.match(readFileSync(join(out, "pora.json"), "utf8"), /"host":\s*true/);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  } finally {
+    cleanup(dir);
+  }
+});

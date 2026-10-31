@@ -178,6 +178,8 @@ export type Asset = {
 
 export type Task = {
   id: string;
+  /** «Вмещает дела» (1.23): tasks fully inside this one's time are drawn on top of it and are not a conflict. */
+  host?: boolean;
   /** Added from outside the app («В Пору» on the phone). */
   via?: "phone";
   title: string;
