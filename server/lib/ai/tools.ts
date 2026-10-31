@@ -47,7 +47,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_LIST = 40;
 
-export type TaskLike = { id: string; title: string; done: boolean; due: string | null; startAt: string | null; endAt: string | null; listId: string | null; priority: number; notes: string; subtasks: { title: string; done: boolean }[] };
+export type TaskLike = { id: string; title: string; done: boolean; due: string | null; startAt: string | null; endAt: string | null; listId: string | null; priority: number; notes: string; subtasks: { title: string; done: boolean }[]; host?: boolean };
 
 function asTask(entity: SyncEntity): TaskLike | null {
   if (typeof entity.title !== "string" || entity.deleted) return null;
@@ -58,6 +58,7 @@ function asTask(entity: SyncEntity): TaskLike | null {
     due: typeof entity.due === "string" ? entity.due : null,
     startAt: typeof entity.startAt === "string" ? entity.startAt : null,
     endAt: typeof entity.endAt === "string" ? entity.endAt : null,
+    ...(entity.host === true ? { host: true } : {}),
     listId: typeof entity.listId === "string" ? entity.listId : null,
     priority: typeof entity.priority === "number" ? entity.priority : 0,
     notes: typeof entity.notes === "string" ? entity.notes : "",
@@ -114,7 +115,8 @@ export function freeSlots(data: SyncData, date: string, today: string, now: stri
   let from = startDay;
   if (date === today && TIME.test(now)) from = Math.max(from, Math.ceil(toMin(now) / 15) * 15);
   const busy = tasksOf(data)
-    .filter((t) => !t.done && t.due === date && t.startAt && TIME.test(t.startAt))
+    // «Вмещает дела» (1.23): a shift is room for work tasks, not busy time — only the tasks inside it are.
+    .filter((t) => !t.done && t.due === date && t.startAt && TIME.test(t.startAt) && !t.host)
     .map((t) => {
       const s = toMin(t.startAt!);
       const e = t.endAt && TIME.test(t.endAt) && toMin(t.endAt) > s ? toMin(t.endAt) : s + 60;

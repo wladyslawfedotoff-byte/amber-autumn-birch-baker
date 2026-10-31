@@ -47,6 +47,7 @@ export function duplicateTask(
     startAt: task.startAt ?? null,
     endAt: task.endAt ?? null,
     ...(task.color ? { color: task.color } : {}),
+    ...(task.host ? { host: true } : {}),
   };
 }
 

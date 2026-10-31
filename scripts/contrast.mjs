@@ -34,6 +34,7 @@ for (const [name, t] of Object.entries(themes)) {
 }
 // Пары «текст на заливке» и элементы интерфейса (1.20).
 // pressed = brightness(0.9) у кнопки; disabled = muted на line.
+const mix = (top, under, k) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(top.slice(i, i + 2), 16) * k + parseInt(under.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, "0")).join("");
 const dim = (hex, k) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0")).join("");
 for (const [name, t] of Object.entries(themes)) {
   const pairs = [
@@ -43,6 +44,12 @@ for (const [name, t] of Object.entries(themes)) {
     ["muted on line (disabled)", t.muted, t.line, 3],
     ["accent fill vs bg (UI)", t.accent, t.bg, 3],
     ["accent fill vs elevated (UI)", t.accent, t.elevated, 3],
+    // «Вмещает дела» (1.23): block tinted bg-accent/10 over the board.
+    ["fg on host tint", t.fg, mix(t.accent, t.bg, 0.1), 4.5],
+    ["muted on host tint", t.muted, mix(t.accent, t.bg, 0.1), 4.5],
+    ["danger on host tint", t.danger, mix(t.accent, t.bg, 0.1), 4.5],
+    ["fg on host tint (surface)", t.fg, mix(t.accent, t.surface, 0.1), 4.5],
+    ["muted on host tint (surface)", t.muted, mix(t.accent, t.surface, 0.1), 4.5],
   ];
   for (const [label, a, b, min] of pairs) {
     const r = ratio(a, b);

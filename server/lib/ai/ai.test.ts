@@ -240,6 +240,15 @@ test("tools: reads see the given view only, writes become proposals", () => {
     { start: "10:15", end: "11:00", minutes: 45 },
     { start: "12:00", end: "18:00", minutes: 360 },
   ]);
+  // 1.23: a «Вмещает дела» shift does not eat the day — only the tasks inside it do.
+  const base = ctx.data.tasks[0]!;
+  const shift = { ...base, id: "shift", startAt: "09:00", endAt: "18:00", host: true };
+  const work = { ...base, id: "work", startAt: "11:00", endAt: "12:00" };
+  assert.deepEqual(freeSlots({ ...ctx.data, tasks: [shift, work] }, TODAY, TODAY, "10:05"), [
+    { start: "10:15", end: "11:00", minutes: 45 },
+    { start: "12:00", end: "18:00", minutes: 360 },
+  ]);
+  assert.deepEqual(freeSlots({ ...ctx.data, tasks: [{ ...shift, host: false }, work] }, TODAY, TODAY, "10:05"), []);
 });
 
 test("executive style: terse rules in the prompt, clean titles, «было» on changes, plan as a timeline", async () => {

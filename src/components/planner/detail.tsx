@@ -240,6 +240,13 @@ export function TaskDetail({
               Без времени (весь день)
             </Button>
           </Disclose>
+          {task.startAt && task.endAt ? (
+            <ListRow
+              title="Вмещает дела"
+              subtitle="Задачи внутри — поверх, не накладка"
+              toggle={{ checked: task.host === true, onChange: (host) => updateTask(task.id, { host }) }}
+            />
+          ) : null}
           <Disclose
             label="Напомнить"
             value={

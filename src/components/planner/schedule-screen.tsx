@@ -3,6 +3,7 @@ import { Check, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { TaskRow } from "@/components/planner/task-row";
 import { ScheduleView } from "@/components/planner/schedule-view";
 import { cn } from "@/lib/cn";
+import { hostOf, taskSpan } from "@/lib/day-board";
 import { formatLong, formatRange, formatShortDay, isoFromTs, occursOn, shiftIso, todayIso } from "@/lib/dates";
 import { usePlanner } from "@/lib/planner-store";
 import { habitChip, habitsForDay } from "@/lib/habit-plan";
@@ -34,6 +35,18 @@ export function RangeControl({ value, onChange }: { value: number; onChange: (da
       ))}
     </div>
   );
+}
+
+/** «Вмещает дела» (1.23): tasks fully inside a host's time are listed under it, indented. */
+function nestOpen(open: Task[]): { task: Task; inner: Task[] }[] {
+  const spans = open.map(taskSpan).filter((span): span is NonNullable<typeof span> => span != null);
+  const parent = hostOf(spans);
+  const inner = new Map<string, Task[]>();
+  for (const task of open) {
+    const host = parent.get(task.id);
+    if (host) inner.set(host.id, [...(inner.get(host.id) ?? []), task]);
+  }
+  return open.filter((task) => !parent.has(task.id)).map((task) => ({ task, inner: inner.get(task.id) ?? [] }));
 }
 
 function timeKey(task: Task): string {
@@ -153,9 +166,20 @@ function AgendaDays({
                 );
               })}
               {open.length === 0 ? <p className="px-1 py-1 text-sm text-subtle">Свободно</p> : null}
-              {open.map((task) => (
-                <TaskRow key={task.id} task={task} today={today} selected={false} showDue={false} showList onOpen={onOpen} />
-              ))}
+              {nestOpen(open).map(({ task, inner }) =>
+                inner.length > 0 ? (
+                  <div key={task.id}>
+                    <TaskRow task={task} today={today} selected={false} showDue={false} showList onOpen={onOpen} />
+                    <div role="group" aria-label={`Внутри «${task.title}»`} className="ml-5 border-l-2 border-accent/40 pl-2">
+                      {inner.map((child) => (
+                        <TaskRow key={child.id} task={child} today={today} selected={false} showDue={false} showList onOpen={onOpen} />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <TaskRow key={task.id} task={task} today={today} selected={false} showDue={false} showList onOpen={onOpen} />
+                ),
+              )}
               {dayHabits.length > 0 ? (
                 <div className="no-scrollbar mt-2 flex gap-1 overflow-x-auto">
                   {dayHabits.map((habit) => {
