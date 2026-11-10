@@ -29,22 +29,23 @@ export function DoneToastBar() {
   return (
     <div role="status" className="pointer-events-none absolute inset-x-0 bottom-[5.5rem] z-30 flex justify-center px-4 md:bottom-6">
       <div className="card-lift pointer-events-auto flex w-full max-w-md min-w-0 items-center gap-3 rounded-xl bg-fg px-4 py-2 text-sm text-surface">
-        {toast.moved ? <MoveVertical className="size-4 shrink-0" aria-hidden="true" /> : toast.deleted ? <Trash2 className="size-4 shrink-0" aria-hidden="true" /> : <Check className="size-4 shrink-0" aria-hidden="true" />}
+        {toast.undo ? <Trash2 className="size-4 shrink-0" aria-hidden="true" /> : toast.moved ? <MoveVertical className="size-4 shrink-0" aria-hidden="true" /> : toast.deleted ? <Trash2 className="size-4 shrink-0" aria-hidden="true" /> : <Check className="size-4 shrink-0" aria-hidden="true" />}
         <span className="min-w-0 flex-1 truncate">
-          {toast.moved ? `«${toast.title}» ${text}` : toast.deleted ? `Задача «${toast.title}» ${text}` : `«${toast.title}» ${text}`}
+          {toast.undo ? toast.undo.text : toast.moved ? `«${toast.title}» ${text}` : toast.deleted ? `Задача «${toast.title}» ${text}` : `«${toast.title}» ${text}`}
         </span>
         <button
           type="button"
           className="h-9 shrink-0 rounded-md px-2 font-medium underline-offset-2 hover:underline"
           onClick={() => {
-            if (toast.moved) for (const item of toast.moved.before) updateTask(item.id, { due: item.due, startAt: item.startAt, endAt: item.endAt, remindAt: item.remindAt });
+            if (toast.undo) toast.undo.run();
+            else if (toast.moved) for (const item of toast.moved.before) updateTask(item.id, { due: item.due, startAt: item.startAt, endAt: item.endAt, remindAt: item.remindAt });
             else if (toast.deleted) undoDelete(toast.deleted);
             else if (toast.repeat) undoRepeat(toast.id);
             else toggleTask(toast.id);
             clear();
           }}
         >
-          {toast.deleted || toast.moved ? "Вернуть" : "Отменить"}
+          {toast.deleted || toast.moved || toast.undo ? "Вернуть" : "Отменить"}
         </button>
       </div>
     </div>

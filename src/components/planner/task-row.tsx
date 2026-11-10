@@ -1,6 +1,6 @@
 import { kmAssetOf, openMileage } from "@/lib/mileage-prompt";
 import { maintAsset, shortMaintTitle } from "@/lib/maintenance/short-title";
-import type { Asset } from "@/lib/planner-types";
+import type { Asset, Project } from "@/lib/planner-types";
 import { objectCount } from "@/lib/objects/count";
 import { ChevronDown, ChevronRight, GripVertical, ListChecks, NotebookText, Lock, Paperclip, Plus } from "lucide-react";
 import { memo, useRef, useState, type PointerEvent, type Ref } from "react";
@@ -11,7 +11,7 @@ import { parseQuick } from "@/lib/quick-add";
 import { pastedLines } from "@/lib/paste-lines";
 import { usePlanner } from "@/lib/planner-store";
 import type { Priority, Task } from "@/lib/planner-types";
-import { listName } from "@/lib/queries";
+import { placeName } from "@/lib/queries";
 import { ShareBadges } from "@/components/planner/sharing";
 import { notesPreview, progressLabel, subtaskProgress } from "@/lib/task-tools";
 import { useSubtasksOpen } from "@/lib/use-subtasks-open";
@@ -30,6 +30,7 @@ function ring(priority: Priority): string {
 }
 
 const NO_ASSETS: Asset[] = [];
+const NO_PROJECTS: Project[] = [];
 /** Swipe distance (px) that triggers the action, and the furthest the row moves. */
 const SWIPE_AT = 72;
 const SWIPE_MAX = 120;
@@ -62,6 +63,7 @@ export const TaskRow = memo(function TaskRow({
 }) {
   const assets = usePlanner((s) => s.assets) ?? NO_ASSETS;
   const lists = usePlanner((s) => s.lists);
+  const projects = usePlanner((s) => s.projects) ?? NO_PROJECTS;
   const toggleTask = usePlanner((s) => s.toggleTask);
   const undoRepeat = usePlanner((s) => s.undoRepeat);
   const showToast = useDoneToast((s) => s.show);
@@ -263,7 +265,7 @@ export const TaskRow = memo(function TaskRow({
               ) : null}
               {task.via === "phone" ? <span>📱 с iPhone</span> : null}
               {task.repeat ? <span>{repeatLabel(task.repeat, task.repeatDates)}</span> : null}
-              {showList ? <span>{task.maint && !task.listId ? `🔧 ${maintAsset(task, assets)?.name ?? "Обслуживание"}` : listName(lists, task.listId)}</span> : null}
+              {showList ? <span>{task.maint && !task.listId ? `🔧 ${maintAsset(task, assets)?.name ?? "Обслуживание"}` : placeName(task, lists, projects)}</span> : null}
               {(task.tags ?? []).slice(0, 2).map((tag) => (
                 <span key={tag}>#{tag}</span>
               ))}

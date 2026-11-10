@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { AlertCircle, CalendarCheck, Folder, Sunrise, ChevronRight, Hash, Inbox, List, ListChecks, Pin, PinOff, Plus, Search, Settings, Users } from "lucide-react";
+import { AlertCircle, CalendarCheck, Folder, Sunrise, ChevronRight, Hash, Inbox, List, ListChecks, Pencil, Pin, PinOff, Plus, Search, Settings, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NAV_ICONS } from "@/components/planner/tab-icons";
 import { cn } from "@/lib/cn";
@@ -22,11 +22,12 @@ import {
   type NavPrefs,
   type PinKey,
 } from "@/lib/ui-prefs";
-import { projectProgress } from "@/lib/projects";
+import { projectColorAt, projectProgress } from "@/lib/projects";
 import { summarize } from "@/lib/maintenance/ops";
 import { useShareScope } from "@/lib/use-share-scope";
 import { GroupedCard, IconBadge, Tile } from "@/components/ui/kit";
-import { cycleColor, type IconColor } from "@/lib/design/tokens";
+import { cycleColor, icon, type IconColor } from "@/lib/design/tokens";
+import { showUndo } from "@/lib/done-toast";
 import { isTaskOverdue } from "@/lib/maintenance/honest-due";
 import { activeScope } from "@/lib/offline/device-store";
 
@@ -84,7 +85,18 @@ const GLYPH: Record<DrawerTab, typeof Inbox> = { lists: List, projects: Folder, 
 const label = (id: NavId) => NAV_ITEMS.find((item) => item.id === id)?.label ?? id;
 
 /** One row of a drawer group (a list, a project or a tag). */
-type GroupItem = { key: string; name: string; count: string | null; pin: PinKey | null; color?: string; shared?: boolean; open: () => void };
+type GroupItem = {
+  key: string;
+  name: string;
+  count: string | null;
+  pin: PinKey | null;
+  color?: string;
+  shared?: boolean;
+  open: () => void;
+  /** Projects (1.24): «Переименовать» / «Удалить» in the long-press menu. */
+  rename?: (name: string) => void;
+  remove?: () => void;
+};
 
 /** Long press (or right click) → the item menu; a short tap → open. */
 function usePress(onLong: () => void) {
@@ -150,6 +162,9 @@ export function Sidebar({
   const habits = usePlanner((s) => s.habits);
   const addList = usePlanner((s) => s.addList);
   const addProject = usePlanner((s) => s.addProject);
+  const updateProject = usePlanner((s) => s.updateProject);
+  const deleteProject = usePlanner((s) => s.deleteProject);
+  const undoDeleteProject = usePlanner((s) => s.undoDeleteProject);
   const today = todayIso();
   const profile = useCapabilities();
   const share = useShareScope();
@@ -214,15 +229,21 @@ export function Sidebar({
     };
   });
   const projectItems: GroupItem[] = projects.map((project, index) => {
-    const { done, total } = projectProgress(project);
+    const { done, total } = projectProgress(project, tasks);
     return {
       key: `project:${project.id}`,
       name: project.title || "Без названия",
       // «0/2» says something (nothing done yet); an empty project shows nothing.
       count: total > 0 ? `${done}/${total}` : null,
       pin: `project:${project.id}`,
-      color: cycleColor(index + 3),
+      // 1.24: stored once per project (old ones keep their colour by position).
+      color: icon(project.color ?? projectColorAt(index)),
       open: () => openProject(project.id),
+      rename: (name: string) => updateProject(project.id, { title: name }),
+      remove: () => {
+        const deleted = deleteProject(project.id);
+        if (deleted) showUndo(project.id, `Проект «${project.title || "Без названия"}» удалён`, () => undoDeleteProject(deleted));
+      },
     };
   });
   const tagItems: GroupItem[] = [...new Set(tasks.flatMap((task) => task.tags ?? []))]
@@ -471,6 +492,46 @@ function GroupRow({
 }) {
   const press = usePress(() => onMenu(true));
   const { consumeLong, ...handlers } = press;
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(item.name);
+  const committed = useRef(false);
+  const commit = () => {
+    if (committed.current) return;
+    committed.current = true;
+    setRenaming(false);
+    const clean = name.trim();
+    if (clean && clean !== item.name) item.rename?.(clean);
+  };
+  const menuButton = "flex h-11 items-center justify-center gap-2 rounded-md bg-surface px-2";
+  if (renaming) {
+    return (
+      <li>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            commit();
+          }}
+        >
+          <input
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                committed.current = true;
+                setRenaming(false);
+              }
+            }}
+            enterKeyHint="done"
+            autoComplete="off"
+            aria-label="Новое название"
+            className="h-11 w-full bg-transparent pr-3 pl-[3.25rem] text-body text-fg outline-none"
+          />
+        </form>
+      </li>
+    );
+  }
   return (
     <li>
       <button
@@ -492,16 +553,45 @@ function GroupRow({
         {item.count ? <span className="shrink-0 text-body text-subtle tabular-nums">{item.count}</span> : null}
       </button>
       {menuOpen ? (
-        <div role="menu" className="mx-2 mb-2 flex items-center gap-1 rounded-lg bg-elevated p-1 text-sm">
-          <button type="button" role="menuitem" autoFocus onClick={onTogglePin} className="flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-surface">
+        <div role="menu" className={cn("mx-2 mb-2 grid gap-1 rounded-lg bg-elevated p-1 text-sm", item.rename || item.remove ? "grid-cols-2" : "grid-cols-[1fr_auto]")}>
+          <button type="button" role="menuitem" autoFocus onClick={onTogglePin} className={menuButton}>
             {pinned ? <PinOff className="size-4" aria-hidden="true" /> : <Pin className="size-4" aria-hidden="true" />}
             {pinned ? "Открепить" : "Закрепить"}
           </button>
-          <button type="button" role="menuitem" onClick={() => onMenu(false)} className="h-9 rounded-md px-3 text-muted">
+          {item.rename ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onMenu(false);
+                setName(item.name);
+                committed.current = false;
+                setRenaming(true);
+              }}
+              className={menuButton}
+            >
+              <Pencil className="size-4" aria-hidden="true" />
+              Переименовать
+            </button>
+          ) : null}
+          {item.remove ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onMenu(false);
+                item.remove?.();
+              }}
+              className={cn(menuButton, "text-danger")}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              Удалить
+            </button>
+          ) : null}
+          <button type="button" role="menuitem" onClick={() => onMenu(false)} className={cn(menuButton, "text-muted")}>
             Отменить
           </button>
-        </div>
-      ) : null}
+        </div>      ) : null}
     </li>
   );
 }

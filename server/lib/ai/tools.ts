@@ -47,7 +47,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_LIST = 40;
 
-export type TaskLike = { id: string; title: string; done: boolean; due: string | null; startAt: string | null; endAt: string | null; listId: string | null; priority: number; notes: string; subtasks: { title: string; done: boolean }[]; host?: boolean };
+export type TaskLike = { id: string; title: string; done: boolean; due: string | null; startAt: string | null; endAt: string | null; listId: string | null; projectId?: string; priority: number; notes: string; subtasks: { title: string; done: boolean }[]; host?: boolean };
 
 function asTask(entity: SyncEntity): TaskLike | null {
   if (typeof entity.title !== "string" || entity.deleted) return null;
@@ -60,6 +60,7 @@ function asTask(entity: SyncEntity): TaskLike | null {
     endAt: typeof entity.endAt === "string" ? entity.endAt : null,
     ...(entity.host === true ? { host: true } : {}),
     listId: typeof entity.listId === "string" ? entity.listId : null,
+    ...(typeof entity.projectId === "string" && entity.projectId ? { projectId: entity.projectId } : {}),
     priority: typeof entity.priority === "number" ? entity.priority : 0,
     notes: typeof entity.notes === "string" ? entity.notes : "",
     subtasks: Array.isArray(entity.subtasks) ? (entity.subtasks as { title?: unknown; done?: unknown }[]).map((s) => ({ title: String(s?.title ?? ""), done: s?.done === true })) : [],
@@ -79,6 +80,17 @@ export function listName(data: SyncData, id: string | null): string | null {
   return typeof list?.name === "string" ? list.name : null;
 }
 
+/** Where the task lives: its list, else «Проект: …» (1.24, project cards are not in «Входящие»), else «Входящие». */
+export function placeOf(data: SyncData, task: Pick<TaskLike, "listId" | "projectId">): string {
+  const list = listName(data, task.listId);
+  if (list) return list;
+  if (task.projectId) {
+    const project = data.projects.find((p) => p.id === task.projectId);
+    if (project) return `Проект: ${typeof project.title === "string" && project.title ? project.title : "Без названия"}`;
+  }
+  return "Входящие";
+}
+
 /** Compact view of a task for the model (no owners, members, stamps). */
 /** brief() without empty and default fields: what tool results send to the model. */
 function compact(ctx: ToolContext, task: TaskLike) {
@@ -93,7 +105,7 @@ export function brief(ctx: ToolContext, task: TaskLike) {
     title: task.title,
     due: task.due,
     time: task.startAt ? `${task.startAt}${task.endAt ? `–${task.endAt}` : ""}` : null,
-    list: listName(data, task.listId) ?? "Входящие",
+    list: placeOf(data, task),
     priority: task.priority,
     ...(task.subtasks.length ? { steps: `${task.subtasks.filter((s) => s.done).length}/${task.subtasks.length}` } : {}),
   };
@@ -265,7 +277,7 @@ export function runTool(name: string, rawArgs: string | Args, ctx: ToolContext):
       const scope = text(args.scope) || "today";
       const list = text(args.list).toLowerCase();
       let rows = open;
-      if (list) rows = rows.filter((t) => (listName(data, t.listId) ?? "Входящие").toLowerCase().includes(list));
+      if (list) rows = rows.filter((t) => placeOf(data, t).toLowerCase().includes(list));
       if (scope === "today") rows = rows.filter((t) => t.due === today);
       else if (scope === "overdue") rows = rows.filter((t) => t.due !== null && t.due < today);
       else if (scope === "upcoming") rows = rows.filter((t) => t.due !== null && t.due > today).sort((a, b) => (a.due! < b.due! ? -1 : 1));

@@ -1,4 +1,5 @@
 import type { DeletedTask } from "@/lib/task-undo";
+import type { DeletedProject, DeletedStage } from "@/lib/projects";
 /** The planner state and its actions (types only) — split out of planner-store.ts in 1.15. */
 import { patchAsset, type FuelInput, type PartInput, type PainPlanInput, type AssetInput, type RuleInput, type ServiceInput } from "@/lib/maintenance/ops";
 import { type Tombstones } from "@/lib/sync/merge";
@@ -220,16 +221,26 @@ export type PlannerState = {
   ) => void;
   deleteMilestone: (id: string) => void;
   addProject: (title: string) => string;
-  updateProject: (id: string, patch: { title?: string; start?: string | null; end?: string | null }) => void;
-  deleteProject: (id: string) => void;
+  updateProject: (id: string, patch: { title?: string; start?: string | null; end?: string | null; color?: Project["color"] }) => void;
+  /** Removes the project and its tasks; the result brings them back («Вернуть»). */
+  deleteProject: (id: string) => DeletedProject | null;
+  undoDeleteProject: (deleted: DeletedProject) => void;
   addStage: (projectId: string, title: string) => void;
   renameStage: (projectId: string, stageId: string, title: string) => void;
+  moveStage: (projectId: string, stageId: string, delta: -1 | 1) => void;
   placeStage: (projectId: string, stageId: string, start: string, end: string) => void;
-  deleteStage: (projectId: string, stageId: string) => void;
-  addCard: (projectId: string, stageId: string, title: string) => void;
-  moveCard: (projectId: string, cardId: string, toStageId: string) => void;
-  deleteCard: (projectId: string, cardId: string) => void;
-  sendTaskToProject: (taskId: string, projectId: string) => void;
+  deleteStage: (projectId: string, stageId: string) => DeletedStage | null;
+  restoreStage: (deleted: DeletedStage) => void;
+  /** A card is a task (1.24): returns the new task id. */
+  addCard: (projectId: string, stageId: string, title: string) => string;
+  /** The task behind a board card (an old plain card becomes one first). */
+  cardTask: (projectId: string, cardId: string) => string | null;
+  /** Move a task to a stage, before `beforeId` (end when null). The last stage ticks it. */
+  moveCard: (projectId: string, taskId: string, toStageId: string, beforeId?: string | null) => void;
+  /** null = «Не в проекте». */
+  sendTaskToProject: (taskId: string, projectId: string | null, stageId?: string) => void;
+  /** ≤1.23 cards → task fields, colours stored (idempotent; run after sync). */
+  adoptProjectCards: () => void;
   setWorkHours: (start: string, end: string) => void;
   ackReminder: (key: string, stamp: string) => void;
   setTheme: (theme: ThemeMode) => void;

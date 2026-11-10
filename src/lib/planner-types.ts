@@ -1,5 +1,6 @@
 import type { TaskColor } from "./task-colors";
 import type { MaintRule } from "./maintenance/rules";
+import type { IconColor } from "./design/tokens";
 
 export type Priority = 0 | 1 | 2 | 3;
 
@@ -230,6 +231,16 @@ export type Task = {
   dependsOn?: string | null;
   /** Contact from the project card linked to this task. */
   contactId?: string | null;
+  /**
+   * Проект (1.24): the task is a card on this project's board. Membership lives
+   * on the task (not in the project), so edits from two devices merge per task.
+   * Missing = never placed by 1.24+ (an old card may still point at it); null = not in a project.
+   */
+  projectId?: string | null;
+  /** Stage (column) of the board; unknown / missing = first stage (done → last). */
+  stageId?: string | null;
+  /** Order inside the stage (smaller first). */
+  projectOrder?: number;
   /** Sync stamp (ms, server-corrected clock). Missing on old data = 0. */
   updatedAt?: number;
 } & Shared;
@@ -348,6 +359,10 @@ export type Milestone = {
   updatedAt?: number;
 } & Shared;
 
+/**
+ * Legacy (≤1.23) card inside a stage. 1.24 turns every card into a task
+ * (see src/lib/projects.ts → adoptLegacy); the array stays empty for older app versions.
+ */
 export type ProjectCard = {
   id: string;
   title: string;
@@ -366,6 +381,8 @@ export type ProjectStage = {
 export type Project = {
   id: string;
   title: string;
+  /** Icon colour in the side menu (1.24), assigned once. Missing = by position (as before). */
+  color?: IconColor;
   start: string | null;
   end: string | null;
   stages: ProjectStage[];

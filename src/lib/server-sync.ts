@@ -389,6 +389,10 @@ function integrate(remote: RemoteDoc, timing?: { t0: number; t1: number }): bool
     login: remoteUser,
     ...synced,
   });
+  // 1.24: ≤1.23 project cards become task fields — only on merged data, so a
+  // card whose task has not arrived yet is not mistaken for an orphan. A local
+  // edit like any other (stamped, journalled, pushed); a no-op once done.
+  usePlanner.getState().adoptProjectCards();
   return needsPush;
 }
 

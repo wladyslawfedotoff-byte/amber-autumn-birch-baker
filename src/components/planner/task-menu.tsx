@@ -3,12 +3,15 @@ import { useProfile } from "@/lib/use-capabilities";
 import { deleteWithUndo } from "@/lib/done-toast";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, FolderKanban, Flag, Sunrise, Trash2, PanelBottomOpen } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Columns3, FolderKanban, Flag, Sunrise, Trash2, PanelBottomOpen } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { dueLabel, shiftIso, todayIso } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 import { usePlanner } from "@/lib/planner-store";
-import type { Priority, Task } from "@/lib/planner-types";
+import type { Priority, Project, Task } from "@/lib/planner-types";
+import { projectOfTask, stageIdOf } from "@/lib/projects";
+
+const NO_PROJECTS: Project[] = [];
 
 const PRIORITIES: { value: Priority; label: string; ring: string }[] = [
   { value: 0, label: "Нет", ring: "border-subtle" },
@@ -26,8 +29,12 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
   const updateTask = usePlanner((s) => s.updateTask);
   const deleteTask = usePlanner((s) => s.deleteTask);
   const sendTaskToProject = usePlanner((s) => s.sendTaskToProject);
-  const projects = usePlanner((s) => s.projects) ?? [];
-  const [page, setPage] = useState<"main" | "projects">("main");
+  const projects = usePlanner((s) => s.projects) ?? NO_PROJECTS;
+  const moveCard = usePlanner((s) => s.moveCard);
+  const [page, setPage] = useState<"main" | "projects" | "stages">("main");
+  // 1.24: a card of a project moves between its stages right here.
+  const project = projectOfTask(task, projects);
+  const stage = project ? stageIdOf(project, task) : null;
   const [confirm, setConfirm] = useState(false);
   const profile = useProfile();
   // Чужую задачу «Удалить» лишь убирает у себя — вернуть её нельзя, поэтому там остаётся подтверждение.
@@ -49,7 +56,7 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
   };
   // Preview where the row was (clamped to the screen); menu below it, or above when there is no room.
   const vh = typeof window === "undefined" ? 800 : window.innerHeight;
-  const menuH = page === "projects" ? Math.min(320, 52 + projects.length * 44) : 290;
+  const menuH = page === "projects" ? Math.min(320, 52 + projects.length * 44) : page === "stages" && project ? Math.min(320, 52 + project.stages.length * 44) : project ? 334 : 290;
   const previewTop = Math.max(12, Math.min(rect.top, vh - menuH - rect.height - 24));
   const below = previewTop + rect.height + 8 + menuH < vh;
   const item = "flex h-11 w-full items-center gap-3 px-4 text-left text-body text-fg active:bg-fg/10";
@@ -116,9 +123,16 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
                 ))}
               </div>
             </div>
-            {projects.length > 0 ? (
+            {project ? (
+              <button type="button" role="menuitem" className={cn(item, "border-t border-line/70")} onClick={() => setPage("stages")}>
+                <span className="flex-1">Переместить в этап…</span>
+                <Columns3 className="size-5 text-muted" />
+                <ChevronRight className="-mr-1 size-4 text-subtle" />
+              </button>
+            ) : null}
+            {projects.length > (project ? 1 : 0) ? (
               <button type="button" role="menuitem" className={cn(item, "border-t border-line/70")} onClick={() => setPage("projects")}>
-                <span className="flex-1">В проект</span>
+                <span className="flex-1">{project ? "В другой проект" : "В проект"}</span>
                 <FolderKanban className="size-5 text-muted" />
                 <ChevronRight className="-mr-1 size-4 text-subtle" />
               </button>
@@ -144,18 +158,42 @@ export function TaskContextMenu({ task, rect, onClose, onOpen }: { task: Task; r
               <Trash2 className="size-5" />
             </button>
           </>
+        ) : page === "stages" && project ? (
+          <>
+            <button type="button" className={cn(item, "text-accent-ink")} onClick={() => setPage("main")}>
+              <ChevronLeft className="-ml-1 size-5" />
+              <span className="flex-1">Переместить в этап</span>
+            </button>
+            <div className="max-h-64 overflow-y-auto">
+              {project.stages.map((item2) => (
+                <button
+                  key={item2.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={item2.id === stage}
+                  className={cn(item, "border-t border-line/70")}
+                  onClick={run(() => moveCard(project.id, task.id, item2.id))}
+                >
+                  <span className="min-w-0 flex-1 truncate">{item2.title}</span>
+                  {item2.id === stage ? <Check className="size-5 text-accent-ink" aria-hidden="true" /> : null}
+                </button>
+              ))}
+            </div>
+          </>
         ) : (
           <>
             <button type="button" className={cn(item, "text-accent-ink")} onClick={() => setPage("main")}>
               <ChevronLeft className="-ml-1 size-5" />
-              <span className="flex-1">В проект</span>
+              <span className="flex-1">{project ? "В другой проект" : "В проект"}</span>
             </button>
             <div className="max-h-64 overflow-y-auto">
-              {projects.map((project) => (
-                <button key={project.id} type="button" role="menuitem" className={cn(item, "border-t border-line/70")} onClick={run(() => sendTaskToProject(task.id, project.id))}>
-                  <span className="min-w-0 flex-1 truncate">{project.title}</span>
-                </button>
-              ))}
+              {projects
+                .filter((other) => other.id !== project?.id)
+                .map((other) => (
+                  <button key={other.id} type="button" role="menuitem" className={cn(item, "border-t border-line/70")} onClick={run(() => sendTaskToProject(task.id, other.id))}>
+                    <span className="min-w-0 flex-1 truncate">{other.title}</span>
+                  </button>
+                ))}
             </div>
           </>
         )}
