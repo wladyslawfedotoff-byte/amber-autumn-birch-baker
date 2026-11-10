@@ -120,8 +120,11 @@ export function PlannerApp() {
   const [assistSlot, setAssistSlot] = useState<HTMLDivElement | null>(null);
   /** Project open on the «Проекты» screen right now. */
   const shownProject = useRef<string | null>(null);
+  /** 1.24: the open project's name is the screen's title (no second header on the board). */
+  const [boardProject, setBoardProject] = useState<string | null>(null);
   const onProjectShown = useCallback((id: string | null) => {
     shownProject.current = id;
+    setBoardProject(id);
   }, []);
   const [view, setView] = useState<View>("today");
   const ready = useBoot((s) => s.ready);
@@ -333,6 +336,8 @@ export function PlannerApp() {
     openView(hit.kind === "habit" ? "habits" : "dates");
   }
 
+  const openProjectTitle = usePlanner((s) => (boardProject ? s.projects?.find((p) => p.id === boardProject)?.title : undefined));
+  const screenTitle = view === "projects" && openProjectTitle !== undefined ? openProjectTitle || "Без названия" : viewTitle(view, lists);
   const subtitle = (() => {
     if (query.trim()) return "Поиск по названию, заметке и тегам";
     if (view === "today") return "";
@@ -473,7 +478,7 @@ export function PlannerApp() {
                     !collapsed && !bigTitleOff && "max-md:opacity-0",
                   )}
                 >
-                  {query.trim() ? "Поиск" : viewTitle(view, lists)}
+                  {query.trim() ? "Поиск" : screenTitle}
                 </h1>
               )}
               {subtitle ? <p className="hidden truncate text-xs text-muted md:block">{subtitle}</p> : null}
@@ -599,7 +604,7 @@ export function PlannerApp() {
                 />
               ) : (
                 <p className="large-title truncate" aria-hidden="true">
-                  {query.trim() ? "Поиск" : viewTitle(view, lists)}
+                  {query.trim() ? "Поиск" : screenTitle}
                 </p>
               )}
               {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
@@ -662,7 +667,7 @@ export function PlannerApp() {
               }}
             />
           ) : null}
-          {ready && !query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} onOpenChange={onProjectShown} /> : null}
+          {ready && !query.trim() && view === "projects" ? <ProjectsView key={projectId ?? "all"} initialId={projectId} onOpenChange={onProjectShown} onOpenTask={setSelectedId} /> : null}
           {ready && !query.trim() && view === "maintenance" ? <MaintenanceView onOpenTask={setSelectedId} /> : null}
           {ready && !query.trim() && view === "settings" ? <SettingsView onView={openView} /> : null}
           </Suspense>

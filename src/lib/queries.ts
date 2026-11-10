@@ -1,7 +1,8 @@
 import { isoFromTs, occursOn, shiftIso, taskDates } from "@/lib/dates";
 import { DEFAULT_ARCHIVE_DAYS, byCompleted, isArchived, repeatTickedOn } from "@/lib/task-done";
-import type { Task, TaskList, View } from "@/lib/planner-types";
+import type { Project, Task, TaskList, View } from "@/lib/planner-types";
 import { hideBlockedIn, isBlocked } from "@/lib/task-deps";
+import { inInbox } from "@/lib/projects";
 
 /** Who owns it: items from before profiles belong to the server's APP_OWNER. */
 export function ownerOf(item: { owner?: string }, dataOwner: string): string {
@@ -40,7 +41,7 @@ export function countOpen(tasks: Task[]): number {
 }
 
 export function countInbox(tasks: Task[], showBlocked = false): number {
-  return tasks.filter((t) => !t.done && t.listId == null && !t.maint && (showBlocked || !isBlocked(t, tasks))).length;
+  return tasks.filter((t) => !t.done && inInbox(t) && (showBlocked || !isBlocked(t, tasks))).length;
 }
 
 export function countList(tasks: Task[], id: string): number {
@@ -68,7 +69,7 @@ export function scopeTasks(tasks: Task[], view: View, today: string, share?: Sha
     }
     if (view === "shared") return !t.done && Boolean(share && isSharedTask(t, share.lists, share.me, share.dataOwner));
     // Auto tasks of «Обслуживание» live in «Сегодня» / «Календарь» on their day, not here.
-    if (view === "inbox") return !t.done && t.listId == null && !t.maint;
+    if (view === "inbox") return !t.done && inInbox(t);
     if (view === "done") return t.done;
     if (view === "archive") return t.done;
     if (view.startsWith("list:")) return !t.done && t.listId === view.slice(5);
@@ -102,7 +103,7 @@ export function doneInScope(tasks: Task[], view: View, today: string, share?: Sh
       if (view === "week") return ticked || doneToday || inRange(t, today, end);
       if (view === "tomorrow") return !ticked && t.due === shiftIso(today, 1);
       if (view.startsWith("day:")) return !ticked && t.due === view.slice(4);
-      if (view === "inbox") return t.listId == null && !t.maint;
+      if (view === "inbox") return inInbox(t);
       if (view === "shared") return Boolean(share && isSharedTask(t, share.lists, share.me, share.dataOwner));
       if (view.startsWith("list:")) return t.listId === view.slice(5);
       if (view.startsWith("tag:")) return t.tags.includes(view.slice(4));
@@ -111,10 +112,11 @@ export function doneInScope(tasks: Task[], view: View, today: string, share?: Sh
     .sort(byCompleted);
 }
 
-export function matchesQuery(task: Task, query: string, lists: TaskList[]): boolean {
+export function matchesQuery(task: Task, query: string, lists: TaskList[], projects: readonly Pick<Project, "id" | "title">[] = []): boolean {
   const n = query.trim().toLowerCase();
   if (!n) return true;
-  const listName = lists.find((l) => l.id === task.listId)?.name ?? "входящие";
+  const project = task.projectId ? projects.find((p) => p.id === task.projectId)?.title : undefined;
+  const listName = lists.find((l) => l.id === task.listId)?.name ?? project ?? "входящие";
   return (
     task.title.toLowerCase().includes(n) ||
     task.notes.toLowerCase().includes(n) ||
@@ -126,6 +128,15 @@ export function matchesQuery(task: Task, query: string, lists: TaskList[]): bool
 
 export function byNewest(a: Task, b: Task): number {
   return b.createdAt - a.createdAt;
+}
+
+/** Where a task lives, for its row: its list, else its project, else «Входящие». */
+export function placeName(task: Pick<Task, "listId" | "projectId">, lists: TaskList[], projects: readonly Pick<Project, "id" | "title">[]): string {
+  if (!task.listId && task.projectId) {
+    const project = projects.find((p) => p.id === task.projectId);
+    if (project) return project.title || "Без названия";
+  }
+  return listName(lists, task.listId);
 }
 
 export function listName(lists: TaskList[], id: string | null): string {

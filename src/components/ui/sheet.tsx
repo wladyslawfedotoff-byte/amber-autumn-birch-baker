@@ -19,7 +19,10 @@ export function Sheet({
   action,
   children,
   className,
+  closeLabel = "Готово",
 }: {
+  /** Right-hand button of a sheet without an action (1.24: «Закрыть» where «Готово» means a stage). */
+  closeLabel?: string;
   open: boolean;
   title: string;
   onClose: () => void;
@@ -85,7 +88,7 @@ export function Sheet({
             </button>
           ) : (
             <button type="button" onClick={onClose} className="h-11 min-w-11 shrink-0 rounded-full px-2 text-body font-semibold text-accent-ink">
-              Готово
+              {closeLabel}
             </button>
           )}
         </div>

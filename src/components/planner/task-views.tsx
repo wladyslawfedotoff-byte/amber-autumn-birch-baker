@@ -14,7 +14,7 @@ import { dueLabel, formatShortDay, shiftIso, todayIso, occursOn } from "@/lib/da
 import { hideBlockedIn, isBlocked } from "@/lib/task-deps";
 import { setShowBlocked, useShowBlocked } from "@/lib/use-show-blocked";
 import { usePlanner } from "@/lib/planner-store";
-import type { Priority, Task, View } from "@/lib/planner-types";
+import type { Priority, Project, Task, View } from "@/lib/planner-types";
 import { byNewest, doneInScope, matchesQuery, scopeTasks } from "@/lib/queries";
 import { archiveOptionLabel, archivedTasks, recentDone, repeatTickedOn } from "@/lib/task-done";
 import { syncNow } from "@/lib/sync/clock";
@@ -30,6 +30,8 @@ function defaultsFor(view: View, today: string): { listId: string | null; due: s
   return { listId: null, due: null };
 }
 
+
+const NO_PROJECTS: Project[] = [];
 
 export function TaskViews({
   view,
@@ -49,6 +51,7 @@ export function TaskViews({
 }) {
   const tasks = usePlanner((s) => s.tasks);
   const lists = usePlanner((s) => s.lists);
+  const projects = usePlanner((s) => s.projects) ?? NO_PROJECTS;
   const addTask = usePlanner((s) => s.addTask);
   const updateTask = usePlanner((s) => s.updateTask);
   const today = todayIso();
@@ -60,7 +63,7 @@ export function TaskViews({
   const board = canBoard(view) && boardMode && !searching;
 
   const found = searching
-    ? tasks.filter((task) => matchesQuery(task, query, lists)).sort(byNewest)
+    ? tasks.filter((task) => matchesQuery(task, query, lists, projects)).sort(byNewest)
     : [];
   const share = useShareScope();
   const showBlocked = useShowBlocked();

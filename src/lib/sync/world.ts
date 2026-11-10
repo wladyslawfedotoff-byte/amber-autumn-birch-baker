@@ -96,6 +96,11 @@ export function canSee(collection: Collection, entity: SyncEntity, login: string
     const list = lists.get(entity.listId);
     if (list && seesDirectly(list, login, cfg) && seesDirectly(list, ownerOf(entity, cfg), cfg)) return true;
   }
+  // 1.24: a card of a shared project (a task with projectId) is seen like a task of a shared list.
+  if (collection === "tasks" && typeof entity.projectId === "string" && entity.projectId) {
+    const project = lists.get(PROJECT_KEY + entity.projectId);
+    if (project && seesDirectly(project, login, cfg) && seesDirectly(project, ownerOf(entity, cfg), cfg)) return true;
+  }
   return false;
 }
 
@@ -105,8 +110,14 @@ export function isShared(collection: Collection, entity: SyncEntity, cfg: AclCon
   return cfg.users.some((login) => login !== owner && canSee(collection, entity, login, cfg, lists));
 }
 
-function listIndex(data: SyncData): ListIndex {
-  return new Map(data.lists.map((list) => [list.id, list]));
+/** Projects share the index with lists under this prefix (ids never collide). */
+const PROJECT_KEY = "project:";
+
+/** Lists by id and projects by «project:id» — what a task's visibility can depend on. */
+export function listIndex(data: Pick<SyncData, "lists" | "projects">): ListIndex {
+  const index: ListIndex = new Map(data.lists.map((list) => [list.id, list]));
+  for (const project of data.projects ?? []) index.set(PROJECT_KEY + project.id, project);
+  return index;
 }
 
 type Visible = Record<Collection, Set<string>>;

@@ -3,7 +3,7 @@
  * parent task, project or «Обслуживание» card (same ACL as /api/sync).
  */
 import type { SyncData, SyncEntity } from "../../../src/lib/sync/merge.ts";
-import { canSee, type AclConfig } from "../../../src/lib/sync/world.ts";
+import { canSee, listIndex, type AclConfig } from "../../../src/lib/sync/world.ts";
 import { aclFor } from "../sync-access.ts";
 import { getStore } from "../sync-store.ts";
 import type { Principal } from "../principal.ts";
@@ -31,7 +31,7 @@ function findParent(data: SyncData, parent: AttachParent): SyncEntity | null {
 function allowed(user: Principal, data: SyncData, acl: AclConfig | null, parent: AttachParent, entity: SyncEntity): boolean {
   if (!acl) return true;
   const collection = parent.kind === "task" ? "tasks" : parent.kind === "asset" ? "assets" : "projects";
-  return canSee(collection, entity, user.login, acl, new Map(data.lists.map((list) => [list.id, list])));
+  return canSee(collection, entity, user.login, acl, listIndex(data));
 }
 
 /** May `user` touch files of this parent (upload / list)? */

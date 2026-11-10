@@ -26,6 +26,7 @@ import { deleteWithUndo } from "@/lib/done-toast";
 import { ownerOf } from "@/lib/queries";
 import { displayName, useProfile } from "@/lib/use-capabilities";
 import { isImportant, isUrgent } from "@/lib/planner-types";
+import { projectOfTask, stageIdOf } from "@/lib/projects";
 import type { Priority, Repeat } from "@/lib/planner-types";
 
 /** Раскрывающаяся строка карточки: ListRow, под ним редактор (аккордеон). */
@@ -76,6 +77,7 @@ export function TaskDetail({
   const clearTaskDate = usePlanner((s) => s.clearTaskDate);
   const addProject = usePlanner((s) => s.addProject);
   const sendTaskToProject = usePlanner((s) => s.sendTaskToProject);
+  const moveCard = usePlanner((s) => s.moveCard);
   const deleteTask = usePlanner((s) => s.deleteTask);
   const setRepeatDates = usePlanner((s) => s.setRepeatDates);
   const profile = useProfile();
@@ -94,9 +96,9 @@ export function TaskDetail({
   const foreign = Boolean(profile.multiUser && me && owner !== me);
 
   const today = todayIso();
-  const project = projects.find((p) =>
-    p.stages.some((stage) => stage.cards.some((card) => card.taskId === task.id)),
-  );
+  const project = projectOfTask(task, projects);
+  const stageId = project ? stageIdOf(project, task) : null;
+  const stageTitle = project?.stages.find((stage) => stage.id === stageId)?.title ?? "—";
   const timeValue = task.startAt
     ? `${task.startAt}${task.endAt ? `–${task.endAt}` : ""}`
     : task.due
@@ -107,7 +109,7 @@ export function TaskDetail({
     [isImportant(task) ? "важно" : "", isUrgent(task) ? "срочно" : ""]
       .filter(Boolean)
       .join(" · ") || "—";
-  const listName = lists.find((l) => l.id === task.listId)?.name ?? "Входящие";
+  const listName = lists.find((l) => l.id === task.listId)?.name ?? (task.projectId ? "Без списка" : "Входящие");
   const field = cn(FIELD, "border-separator");
   const quick = (label: string, due: string | null) => (
     <Chip
@@ -244,7 +246,10 @@ export function TaskDetail({
             <ListRow
               title="Вмещает дела"
               subtitle="Задачи внутри — поверх, не накладка"
-              toggle={{ checked: task.host === true, onChange: (host) => updateTask(task.id, { host }) }}
+              toggle={{
+                checked: task.host === true,
+                onChange: (host) => updateTask(task.id, { host }),
+              }}
             />
           ) : null}
           <Disclose
@@ -343,7 +348,11 @@ export function TaskDetail({
           >
             <SegmentedControl
               label="Приоритет"
-              options={LEVELS.map((item) => ({ id: String(item.value), label: item.label, tone: item.value === 3 ? ("danger" as const) : undefined }))}
+              options={LEVELS.map((item) => ({
+                id: String(item.value),
+                label: item.label,
+                tone: item.value === 3 ? ("danger" as const) : undefined,
+              }))}
               value={String(task.priority)}
               onChange={(id) => updateTask(task.id, { priority: Number(id) as Priority })}
             />
@@ -360,7 +369,7 @@ export function TaskDetail({
               onChange={(event) => updateTask(task.id, { listId: event.target.value || null })}
               className={field}
             >
-              <option value="">Входящие</option>
+              <option value="">{task.projectId ? "Без списка" : "Входящие"}</option>
               {lists.map((list) => (
                 <option key={list.id} value={list.id}>
                   {list.name}
@@ -368,6 +377,107 @@ export function TaskDetail({
               ))}
             </select>
           </Disclose>
+          <Disclose
+            label="Проект"
+            value={project ? project.title || "Без названия" : "—"}
+            open={open === "project"}
+            onClick={() => toggle("project")}
+          >
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Проект">
+              <Chip
+                tone={!project && !makingProject ? "on" : "outline"}
+                role="radio"
+                aria-checked={!project}
+                onClick={() => {
+                  setMakingProject(false);
+                  sendTaskToProject(task.id, null);
+                }}
+                className="h-8 px-3 text-[0.8125rem]"
+              >
+                Не в проекте
+              </Chip>
+              {projects.map((item) => (
+                <Chip
+                  key={item.id}
+                  tone={project?.id === item.id ? "on" : "outline"}
+                  role="radio"
+                  aria-checked={project?.id === item.id}
+                  onClick={() => {
+                    setMakingProject(false);
+                    sendTaskToProject(task.id, item.id);
+                  }}
+                  className="h-8 px-3 text-[0.8125rem]"
+                >
+                  {item.title || "Без названия"}
+                </Chip>
+              ))}
+              <Chip
+                tone={makingProject ? "on" : "outline"}
+                aria-pressed={makingProject}
+                onClick={() => setMakingProject(true)}
+                className="h-8 px-3 text-[0.8125rem]"
+              >
+                + Новый проект
+              </Chip>
+            </div>
+            {makingProject ? (
+              <form
+                className="mt-2 flex gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const title = projectDraft.trim();
+                  if (!title) return;
+                  const existing = projects.find(
+                    (item) => item.title.trim().toLowerCase() === title.toLowerCase(),
+                  );
+                  const id = existing?.id ?? addProject(title);
+                  sendTaskToProject(task.id, id);
+                  setProjectDraft("");
+                  setMakingProject(false);
+                }}
+              >
+                <input
+                  value={projectDraft}
+                  onChange={(event) => setProjectDraft(event.target.value)}
+                  placeholder="Новый проект"
+                  aria-label="Название проекта"
+                  className={cn(field, "flex-1")}
+                />
+                <Button type="submit" variant="primary" className="shrink-0">
+                  Передать
+                </Button>
+              </form>
+            ) : null}
+          </Disclose>
+          {project ? (
+            <Disclose
+              label="Этап"
+              value={stageTitle}
+              open={open === "stage"}
+              onClick={() => toggle("stage")}
+            >
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Этап">
+                {project.stages.map((item) => (
+                  <Chip
+                    key={item.id}
+                    tone={stageId === item.id ? "on" : "outline"}
+                    role="radio"
+                    aria-checked={stageId === item.id}
+                    onClick={() => moveCard(project.id, task.id, item.id)}
+                    className="h-8 px-3 text-[0.8125rem]"
+                  >
+                    {item.title}
+                  </Chip>
+                ))}
+              </div>
+              {project.stages.length > 1 ? (
+                <p className="mt-2 text-caption text-secondary-label">
+                «{project.stages[project.stages.length - 1]?.title}» — последний этап: дело там
+                считается выполненным.
+              </p>
+              ) : null}
+            </Disclose>
+          ) : null}
         </GroupedCard>
 
         <GroupedCard className="mt-3">
@@ -376,7 +486,6 @@ export function TaskDetail({
             value={
               [
                 task.color && colorLabel(task.color) !== "Нет" ? "цвет" : null,
-                project ? "проект" : null,
                 task.tags.length ? "теги" : null,
                 isImportant(task) || isUrgent(task) ? "матрица" : null,
                 (task.members ?? []).length || task.assignee ? "совместная" : null,
@@ -437,63 +546,6 @@ export function TaskDetail({
                   value={task.color}
                   onChange={(color) => updateTask(task.id, { color })}
                 />
-              </Disclose>
-              <Disclose
-                label="Проект"
-                value={project?.title ?? "—"}
-                open={open === "project"}
-                onClick={() => toggle("project")}
-              >
-                <select
-                  aria-label="Проект"
-                  value={makingProject ? "new" : (project?.id ?? "")}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (value === "new") {
-                      setMakingProject(true);
-                      return;
-                    }
-                    setMakingProject(false);
-                    if (value) sendTaskToProject(task.id, value);
-                  }}
-                  className={field}
-                >
-                  <option value="">Не в проекте</option>
-                  {projects.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.title}
-                    </option>
-                  ))}
-                  <option value="new">Новый проект…</option>
-                </select>
-                {makingProject ? (
-                  <form
-                    className="mt-2 flex gap-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const title = projectDraft.trim();
-                      if (!title) return;
-                      const existing = projects.find(
-                        (item) => item.title.trim().toLowerCase() === title.toLowerCase(),
-                      );
-                      const id = existing?.id ?? addProject(title);
-                      sendTaskToProject(task.id, id);
-                      setProjectDraft("");
-                      setMakingProject(false);
-                    }}
-                  >
-                    <input
-                      value={projectDraft}
-                      onChange={(event) => setProjectDraft(event.target.value)}
-                      placeholder="Новый проект"
-                      aria-label="Название проекта"
-                      className={cn(field, "flex-1")}
-                    />
-                    <Button type="submit" variant="primary" className="shrink-0">
-                      Передать
-                    </Button>
-                  </form>
-                ) : null}
               </Disclose>
               <Disclose
                 label="Теги"

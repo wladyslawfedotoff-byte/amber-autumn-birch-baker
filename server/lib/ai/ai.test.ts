@@ -1335,3 +1335,19 @@ test("1.8.1: leaksTools catches «доступ к команде … не под
   assert.ok(leaksTools(text));
   assert.ok(looksToolless(text));
 });
+
+test("tools: a project card says which project it is on, never «Входящие» (1.24)", () => {
+  const data = emptyData();
+  data.projects = [{ id: "p1", title: "Ремонт", start: null, end: null, stages: [], updatedAt: 1 }];
+  data.tasks = [
+    { id: "a", title: "Замерить", notes: "", listId: null, projectId: "p1", done: false, priority: 0, due: TODAY, tags: [], subtasks: [], createdAt: 1, completedAt: null, updatedAt: 1 },
+    { id: "b", title: "Купить хлеб", notes: "", listId: null, done: false, priority: 0, due: TODAY, tags: [], subtasks: [], createdAt: 1, completedAt: null, updatedAt: 1 },
+  ];
+  const ctx = { data, today: TODAY, now: "10:00", newId: () => "x" };
+  const all = JSON.parse(runTool("list_tasks", { scope: "today" }, ctx).content);
+  const byTitle = Object.fromEntries(all.tasks.map((t: { title: string; list?: string }) => [t.title, t.list ?? "Входящие"]));
+  assert.equal(byTitle["Замерить"], "Проект: Ремонт");
+  assert.equal(byTitle["Купить хлеб"], "Входящие");
+  const filtered = JSON.parse(runTool("list_tasks", { scope: "today", list: "ремонт" }, ctx).content);
+  assert.deepEqual(filtered.tasks.map((t: { title: string }) => t.title), ["Замерить"]);
+});

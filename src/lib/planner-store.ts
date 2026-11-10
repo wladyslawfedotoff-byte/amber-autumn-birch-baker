@@ -19,8 +19,9 @@ import { clearDate, clearTime, duplicateTask as duplicateTaskData, listInNotes, 
 import { isAccent } from "@/lib/accents";
 import { normalizeCalendarMode, normalizeDrawerTab, normalizeHidden, migrateNav, normalizeTabs, togglePin } from "@/lib/ui-prefs";
 import { sectionOf, sortHabits, tapDay, withEntry } from "@/lib/habit-plan";
-import { normalizeArchiveDays, restoreFromArchive, toggleTaskDone, undoRepeatTick } from "@/lib/task-done";
+import { normalizeArchiveDays, restoreFromArchive, undoRepeatTick } from "@/lib/task-done";
 import type { Habit, AttachmentMeta, Asset, Project, ProjectContact, ProjectStage, Task } from "@/lib/planner-types";
+import { DEFAULT_STAGES, adoptLegacy, dropProject, dropStage, restoreProject, moveToStage, newCardTask, projectColorAt, projectOfTask, restoreStage as restoreStageIn, sendToProject, stageAfterToggle, toggleProjectTask } from "@/lib/projects";
 import { breakFor, freshFocus, type PlannerState } from "@/lib/planner/state";
 import { fillRemindAt, fillTasks, memoryStorage, seed, uid } from "@/lib/planner/defaults";
 import { stamped, stampPatch } from "@/lib/planner/stamp";
@@ -92,7 +93,8 @@ export const usePlanner = create<PlannerState>()(
         const before = get().tasks.find((t) => t.id === id);
         set((s) => ({
           tasks: s.tasks.map((t) =>
-            t.id === id ? toggleTaskDone(t, { me: currentLogin() || null, today: todayIso(), now: syncNow() }) : t,
+            // A project card follows to / from the last stage (1.24).
+            t.id === id ? toggleProjectTask(t, s.projects ?? [], { me: currentLogin() || null, today: todayIso(), now: syncNow() }) : t,
           ),
         }));
         // The task of a planned «что болит» note: ticking it solves the note (and offers a history entry).
@@ -110,7 +112,16 @@ export const usePlanner = create<PlannerState>()(
       clearTaskTime: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? clearTime(t) : t)) })),
       clearTaskDate: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? clearDate(t) : t)) })),
       undoRepeat: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? undoRepeatTick(t) : t)) })),
-      restoreTask: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? restoreFromArchive(t) : t)) })),
+      restoreTask: (id) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== id) return t;
+            const back = restoreFromArchive(t);
+            const project = projectOfTask(t, s.projects ?? []);
+            const patch = project ? stageAfterToggle(project, t, back) : null;
+            return patch ? { ...back, ...patch } : back;
+          }),
+        })),
       deleteTasks: (ids) => {
         const gone = new Set(ids);
         set((s) => ({ tasks: s.tasks.filter((t) => !gone.has(t.id)) }));
@@ -737,21 +748,25 @@ renameList: (id, name) =>
         const id = uid();
         const clean = title.trim();
         if (!clean) return id;
-        const stages: ProjectStage[] = [
-          { id: uid(), title: "План", cards: [] },
-          { id: uid(), title: "В работе", cards: [] },
-          { id: uid(), title: "Готово", cards: [] },
-        ];
-        const project: Project = { id, title: clean, start: null, end: null, stages };
-        set((s) => ({ projects: [...(s.projects ?? []), project] }));
+        const stages: ProjectStage[] = DEFAULT_STAGES.map((name) => ({ id: uid(), title: name, cards: [] }));
+        set((s) => {
+          const projects = s.projects ?? [];
+          const project: Project = { id, title: clean, color: projectColorAt(projects.length), start: null, end: null, stages };
+          return { projects: [...projects, project] };
+        });
         return id;
       },
       updateProject: (id, patch) =>
         set((s) => ({
           projects: (s.projects ?? []).map((project) => (project.id === id ? { ...project, ...patch } : project)),
         })),
-      deleteProject: (id) =>
-        set((s) => ({ projects: (s.projects ?? []).filter((project) => project.id !== id) })),
+      deleteProject: (id) => {
+        const result = dropProject(get().projects ?? [], get().tasks, id);
+        if (!result) return null;
+        set({ projects: result.projects, tasks: result.tasks });
+        return result.deleted;
+      },
+      undoDeleteProject: (deleted) => set((s) => restoreProject(s.projects ?? [], s.tasks, deleted)),
       addStage: (projectId, title) => {
         const clean = title.trim();
         if (!clean) return;
@@ -776,6 +791,19 @@ renameList: (id, name) =>
               : project,
           ),
         })),
+      moveStage: (projectId, stageId, delta) =>
+        set((s) => ({
+          projects: (s.projects ?? []).map((project) => {
+            if (project.id !== projectId) return project;
+            const index = project.stages.findIndex((stage) => stage.id === stageId);
+            const to = index + delta;
+            if (index < 0 || to < 0 || to >= project.stages.length) return project;
+            const stages = [...project.stages];
+            const [moved] = stages.splice(index, 1);
+            stages.splice(to, 0, moved!);
+            return { ...project, stages };
+          }),
+        })),
       placeStage: (projectId, stageId, start, end) =>
         set((s) => ({
           projects: (s.projects ?? []).map((project) => {
@@ -791,91 +819,48 @@ renameList: (id, name) =>
             };
           }),
         })),
-      deleteStage: (projectId, stageId) =>
-        set((s) => ({
-          projects: (s.projects ?? []).map((project) => {
-            if (project.id !== projectId || project.stages.length < 2) return project;
-            const index = project.stages.findIndex((stage) => stage.id === stageId);
-            if (index < 0) return project;
-            const removed = project.stages[index];
-            const rest = project.stages.filter((stage) => stage.id !== stageId);
-            const host = rest[Math.max(0, index - 1)];
-            if (!host || !removed) return project;
-            rest[Math.max(0, index - 1)] = { ...host, cards: [...host.cards, ...removed.cards] };
-            return { ...project, stages: rest };
-          }),
-        })),
-      addCard: (projectId, stageId, title) => {
-        const clean = title.trim();
-        if (!clean) return;
-        set((s) => ({
-          projects: (s.projects ?? []).map((project) =>
-            project.id === projectId
-              ? {
-                  ...project,
-                  stages: project.stages.map((stage) =>
-                    stage.id === stageId
-                      ? { ...stage, cards: [...stage.cards, { id: uid(), title: clean }] }
-                      : stage,
-                  ),
-                }
-              : project,
-          ),
-        }));
+      deleteStage: (projectId, stageId) => {
+        const project = (get().projects ?? []).find((item) => item.id === projectId);
+        const result = project ? dropStage(project, stageId, get().tasks) : null;
+        if (!result) return null;
+        set((s) => ({ projects: (s.projects ?? []).map((item) => (item.id === projectId ? result.project : item)) }));
+        return result.deleted;
       },
-      moveCard: (projectId, cardId, toStageId) =>
-        set((s) => ({
-          projects: (s.projects ?? []).map((project) => {
-            if (project.id !== projectId) return project;
-            let moving: Project["stages"][number]["cards"][number] | null = null;
-            const stripped = project.stages.map((stage) => {
-              const card = stage.cards.find((item) => item.id === cardId);
-              if (!card) return stage;
-              moving = card;
-              return { ...stage, cards: stage.cards.filter((item) => item.id !== cardId) };
-            });
-            if (!moving) return project;
-            return {
-              ...project,
-              stages: stripped.map((stage) =>
-                stage.id === toStageId ? { ...stage, cards: [...stage.cards, moving!] } : stage,
-              ),
-            };
-          }),
-        })),
-      deleteCard: (projectId, cardId) =>
-        set((s) => ({
-          projects: (s.projects ?? []).map((project) =>
-            project.id === projectId
-              ? {
-                  ...project,
-                  stages: project.stages.map((stage) => ({
-                    ...stage,
-                    cards: stage.cards.filter((card) => card.id !== cardId),
-                  })),
-                }
-              : project,
-          ),
-        })),
-      sendTaskToProject: (taskId, projectId) =>
-        set((s) => {
-          const task = s.tasks.find((item) => item.id === taskId);
-          const projects = s.projects ?? [];
-          if (!task || !projects.some((project) => project.id === projectId)) return {};
-          const card = { id: uid(), title: task.title, taskId };
-          return {
-            projects: projects.map((project) => {
-              const stages = project.stages.map((stage) => ({
-                ...stage,
-                cards: stage.cards.filter((item) => item.taskId !== taskId),
-              }));
-              if (project.id !== projectId) return { ...project, stages };
-              const [first, ...rest] = stages;
-              if (!first) return { ...project, stages };
-              return { ...project, stages: [{ ...first, cards: [...first.cards, card] }, ...rest] };
-            }),
-          };
-        }),
+      restoreStage: (deleted) => set((s) => ({ projects: (s.projects ?? []).map((project) => restoreStageIn(project, deleted)) })),
+      addCard: (projectId, stageId, title) => {
+        const id = uid();
+        const project = (get().projects ?? []).find((item) => item.id === projectId);
+        const task = project ? newCardTask(project, stageId, title, get().tasks, id, syncNow()) : null;
+        if (task) set((s) => ({ tasks: [task, ...s.tasks] }));
+        return id;
+      },
+      cardTask: (projectId, cardId) => {
+        const s = get();
+        if (s.tasks.some((task) => task.id === cardId && task.projectId === projectId)) return cardId;
+        const project = (s.projects ?? []).find((item) => item.id === projectId);
+        const card = project?.stages.flatMap((stage) => stage.cards ?? []).find((item) => item.id === cardId);
+        if (!card) return s.tasks.some((task) => task.id === cardId) ? cardId : null;
+        get().adoptProjectCards();
+        const taskId = card.taskId ?? card.id;
+        return get().tasks.some((task) => task.id === taskId) ? taskId : null;
+      },
+      moveCard: (projectId, taskId, toStageId, beforeId = null) => {
+        const project = (get().projects ?? []).find((item) => item.id === projectId);
+        if (!project) return;
+        const ctx = { me: currentLogin() || null, today: todayIso(), now: syncNow() };
+        set((s) => ({ tasks: moveToStage(s.tasks, project, taskId, toStageId, beforeId, ctx) }));
+      },
+      sendTaskToProject: (taskId, projectId, stageId) => {
+        const s = get();
+        const ctx = { me: currentLogin() || null, today: todayIso(), now: syncNow() };
+        const next = sendToProject({ tasks: s.tasks, projects: s.projects ?? [] }, taskId, projectId, stageId, ctx);
+        if (next) set(next);
+      },
+      adoptProjectCards: () => {
+        const s = get();
+        const next = adoptLegacy({ tasks: s.tasks, projects: s.projects ?? [], deletedTasks: s.tombstones?.tasks }, syncNow());
+        if (next) set(next);
+      },
       setWorkHours: (start, end) => set({ workStart: start, workEnd: end }),
       ackReminder: (key, stamp) =>
         set((s) => ({ remindAck: { ...(s.remindAck ?? {}), [key]: stamp } })),
