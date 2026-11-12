@@ -21,6 +21,7 @@ import { haptic } from "@/lib/haptics";
 import { honestDue } from "@/lib/maintenance/honest-due";
 import { TaskContextMenu } from "@/components/planner/task-menu";
 import { isTaskOverdue } from "@/lib/maintenance/honest-due";
+import { HelperTag } from "@/components/planner/helper-tag";
 
 function ring(priority: Priority): string {
   if (priority === 3) return "border-danger";
@@ -264,6 +265,7 @@ export const TaskRow = memo(function TaskRow({
                 <span className="tabular-nums">{task.remindAt}</span>
               ) : null}
               {task.via === "phone" ? <span>📱 с iPhone</span> : null}
+              {task.helper ? <HelperTag name={task.helper.name} /> : null}
               {task.repeat ? <span>{repeatLabel(task.repeat, task.repeatDates)}</span> : null}
               {showList ? <span>{task.maint && !task.listId ? `🔧 ${maintAsset(task, assets)?.name ?? "Обслуживание"}` : placeName(task, lists, projects)}</span> : null}
               {(task.tags ?? []).slice(0, 2).map((tag) => (

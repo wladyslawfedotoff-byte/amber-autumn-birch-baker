@@ -192,9 +192,26 @@ function v2(): string[] {
   ];
 }
 
+/**
+ * 1.25.0: «Ключи помощника» — keys for bots (only the sha256 of the secret is
+ * stored) and their action log (kept 90 days).
+ */
+function v3(): string[] {
+  return [
+    "CREATE TABLE helper_keys (id TEXT PRIMARY KEY NOT NULL, login TEXT NOT NULL, name TEXT NOT NULL, hash TEXT NOT NULL, stamp TEXT NOT NULL,\n" +
+      "  created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)",
+    "CREATE INDEX helper_keys_login ON helper_keys(login)",
+    "CREATE TABLE helper_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, login TEXT NOT NULL, at INTEGER NOT NULL,\n" +
+      "  action TEXT NOT NULL, task_id TEXT, summary TEXT NOT NULL DEFAULT '')",
+    "CREATE INDEX helper_audit_key ON helper_audit(key_id, at)",
+    "CREATE INDEX helper_audit_at ON helper_audit(at)",
+  ];
+}
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "initial schema (1.12.0)", up: v1() },
   { version: 2, name: "quick add device keys (1.13.0)", up: v2() },
+  { version: 3, name: "helper keys and their log (1.25.0)", up: v3() },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

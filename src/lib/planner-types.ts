@@ -183,6 +183,10 @@ export type Task = {
   host?: boolean;
   /** Added from outside the app («В Пору» on the phone). */
   via?: "phone";
+  /** «Ключ помощника» (1.25): created by a bot with this key; the key sees only such tasks. */
+  helper?: { keyId: string; name: string };
+  /** Bot's comments on its task («получилось / не получилось»), newest last, at most 20. */
+  helperNotes?: { id: string; at: number; text: string; result?: "ok" | "fail" }[];
   title: string;
   notes: string;
   listId: string | null;
