@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ArrowUp,
   Bell,
+  Bot,
   CheckCheck,
   CalendarClock,
   ChevronRight,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { AssistantSection } from "@/components/planner/assist-settings";
 import { QuickAddSection, devicesLabel, useQuickDevices } from "@/components/planner/quick-add-settings";
+import { HelperKeysSection, helperKeysLabel, useHelperKeys } from "@/components/planner/helper-settings";
 import { NAV_ICONS, TAB_ICONS } from "@/components/planner/tab-icons";
 import { Sheet } from "@/components/ui/sheet";
 import { SwitchRow } from "@/components/ui/rows";
@@ -392,7 +394,7 @@ function BackupSection() {
   );
 }
 
-type SheetId = "profile" | "look" | "tabs" | "notify" | "datetime" | "connection" | "archive" | "backup" | "quickadd" | "assistant" | "about";
+type SheetId = "profile" | "look" | "tabs" | "notify" | "datetime" | "connection" | "archive" | "backup" | "quickadd" | "helpers" | "assistant" | "about";
 
 const SHEET_TITLES: Record<SheetId, string> = {
   profile: "Профиль",
@@ -404,6 +406,7 @@ const SHEET_TITLES: Record<SheetId, string> = {
   archive: "Архив",
   backup: "Резервная копия",
   quickadd: "Быстрое добавление",
+  helpers: "Помощники",
   assistant: "Помощник",
   about: "О приложении",
 };
@@ -817,6 +820,7 @@ export function SettingsView({ onView }: { onView?: (view: View) => void }) {
   const status = useServerSyncStatus();
   const [open, setOpen] = useState<SheetId | null>(null);
   const quick = useQuickDevices();
+  const helpers = useHelperKeys();
   const accentName = ACCENTS.find((item) => item.id === accent)?.name ?? "";
   const close = useCallback(() => setOpen(null), []);
 
@@ -857,6 +861,7 @@ export function SettingsView({ onView }: { onView?: (view: View) => void }) {
         />
         <NavRow id="backup" icon={HardDriveDownload} color={icon("teal")} label="Резервная копия" onOpen={setOpen} />
         <NavRow id="quickadd" icon={Smartphone} color={icon("indigo")} label="Быстрое добавление" value={devicesLabel(quick.devices)} onOpen={setOpen} />
+        <NavRow id="helpers" icon={Bot} color={icon("blue")} label="Помощники" value={helperKeysLabel(helpers.keys)} onOpen={setOpen} />
         {profile.assistant ? <NavRow id="assistant" icon={Sparkles} color={icon("mint")} label="Помощник" onOpen={setOpen} /> : null}
       </Group>
 
@@ -875,6 +880,7 @@ export function SettingsView({ onView }: { onView?: (view: View) => void }) {
           {open === "archive" ? <ArchiveSection onView={onView} /> : null}
           {open === "backup" ? <BackupSection /> : null}
           {open === "quickadd" ? <QuickAddSection onChange={quick.reload} /> : null}
+          {open === "helpers" ? <HelperKeysSection onChange={helpers.reload} /> : null}
           {open === "assistant" ? <AssistantSection /> : null}
           {open === "about" ? <AboutSection /> : null}
         </div>

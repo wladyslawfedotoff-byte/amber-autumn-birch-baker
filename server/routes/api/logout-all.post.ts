@@ -3,6 +3,7 @@ import { log } from "../../lib/log.ts";
 import { principalOf } from "../../lib/principal.ts";
 import { bumpUserEpoch } from "../../lib/user-store.ts";
 import { revokeAllTokens } from "../../lib/quick-add/tokens.ts";
+import { revokeAllHelperKeys } from "../../lib/helper/keys.ts";
 import { clearedSessionCookies, withCookies } from "../../lib/session-cookie.ts";
 
 /**
@@ -18,6 +19,7 @@ export default function logoutAll(event: ServerEvent): Response {
   try {
     bumpUserEpoch(user.login);
     revokeAllTokens(user.login);
+    revokeAllHelperKeys(user.login);
   } catch (error) {
     log("error", "auth.revoke_failed", { ip: clientIp(event) }, error);
     return json(

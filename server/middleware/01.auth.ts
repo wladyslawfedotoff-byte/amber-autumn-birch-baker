@@ -3,7 +3,8 @@
  * TanStack server functions (/_serverFn/*, e.g. planTasks).
  *
  * Public: /api/health, /login, POST /api/login, POST /api/logout,
- * POST /api/quick-add with a Bearer device key (checked by the route), the PWA
+ * POST /api/quick-add with a Bearer device key (checked by the route),
+ * /api/helper/* with a Bearer helper key (checked by the route; 1.25), the PWA
  * manifest/icons and built static assets (those are served by Nitro's static
  * handler before this middleware runs and contain no user data).
  *
@@ -65,6 +66,9 @@ export default function auth(event: ServerEvent): Response | undefined {
   // «В Пору» from the phone: a device key instead of a session. Only this path,
   // only POST, only with the header; the route checks the key itself.
   if (path === "/api/quick-add" && method === "POST" && /^bearer\s/i.test(event.req.headers.get("authorization") ?? "")) return undefined;
+  // «Ключ помощника» (1.25): a bot's key instead of a session, only for
+  // /api/helper/*; the route checks the key and never accepts a session.
+  if ((path === "/api/helper" || path.startsWith("/api/helper/")) && /^bearer\s/i.test(event.req.headers.get("authorization") ?? "")) return undefined;
 
   if (!SAFE_METHODS.has(method) && !isSameOrigin(event)) {
     logThrottled("csrf.blocked", "warn", "csrf.blocked", {

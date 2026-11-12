@@ -28,6 +28,7 @@ import { displayName, useProfile } from "@/lib/use-capabilities";
 import { isImportant, isUrgent } from "@/lib/planner-types";
 import { projectOfTask, stageIdOf } from "@/lib/projects";
 import type { Priority, Repeat } from "@/lib/planner-types";
+import { HelperNotes, HelperTag } from "@/components/planner/helper-tag";
 
 /** Раскрывающаяся строка карточки: ListRow, под ним редактор (аккордеон). */
 function Disclose({
@@ -154,7 +155,11 @@ export function TaskDetail({
           className="w-full bg-transparent text-title font-semibold tracking-tight text-label outline-none md:text-2xl"
         />
 
+        {task.helper ? <HelperTag name={task.helper.name} className="mt-1 text-caption" /> : null}
+
         <NotesField task={task} />
+
+        <HelperNotes task={task} />
 
         <SubtasksBlock task={task} />
 
