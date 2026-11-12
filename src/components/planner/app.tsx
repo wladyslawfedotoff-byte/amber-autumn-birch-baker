@@ -371,7 +371,8 @@ export function PlannerApp() {
       const n = scopeTasks(tasks, view, today).length;
       const shared = profile.multiUser && list && ((list.members ?? []).length > 0 || (list.owner && list.owner !== profile.login));
       const base = n === 0 ? "Пока нет открытых задач" : `${n} открытых`;
-      return shared ? `${base} · общий` : base;
+      const marked = list?.helper ? `${base} · от помощника · ${list.helper.name}` : base;
+      return shared ? `${marked} · общий` : marked;
     }
     const n = scopeTasks(tasks, view, today).length;
     return n === 0 ? "Пока нет открытых задач" : `${n} открытых`;

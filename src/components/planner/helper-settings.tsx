@@ -7,7 +7,12 @@ import { cn } from "@/lib/cn";
 
 /** «Помощники» (1.25): keys for bots that add tasks (API /api/helper/*, docs/HELPER-API.md). */
 export type HelperKeyItem = { id: string; name: string; createdAt: number; lastUsedAt: number | null };
-type AuditEntry = { at: number; action: "create" | "update" | "complete" | "reopen" | "comment" | "denied"; taskId: string | null; summary: string };
+type AuditEntry = {
+  at: number;
+  action: "create" | "update" | "complete" | "reopen" | "comment" | "denied" | "list.create" | "list.rename" | "task.move";
+  taskId: string | null;
+  summary: string;
+};
 
 const ACTIONS: Record<AuditEntry["action"], string> = {
   create: "создал",
@@ -16,6 +21,9 @@ const ACTIONS: Record<AuditEntry["action"], string> = {
   reopen: "вернул в работу",
   comment: "оставил отчёт",
   denied: "отказано",
+  "list.create": "создал список",
+  "list.rename": "переименовал список",
+  "task.move": "перенёс задачу",
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -139,8 +147,8 @@ export function HelperKeysSection({ onChange }: { onChange?: () => void }) {
       <div className="text-sm text-secondary-label">
         Ключ для бота: он создаёт вам задачи во «Входящих» и видит только их.{" "}
         <InlineHint label="Как это работает">
-          Бот с ключом может создать задачу, изменить свою задачу, отметить её выполненной и оставить отчёт «получилось / не получилось». Другие
-          задачи, списки и проекты ему не видны, удалять он ничего не может. Каждое действие пишется в журнал (90 дней). Ключ показывается один раз;
+          Бот с ключом может создать задачу или свой список, изменить свою задачу, переложить её в свой список, отметить выполненной и оставить
+          отчёт «получилось / не получилось». Другие задачи, списки и проекты ему не видны, удалять он ничего не может. Каждое действие пишется в журнал (90 дней). Ключ показывается один раз;
           «Отозвать» выключает его сразу. Смена пароля и «Выйти на всех устройствах» отзывают все ключи.
         </InlineHint>
       </div>
@@ -212,6 +220,7 @@ export function HelperKeysSection({ onChange }: { onChange?: () => void }) {
         </li>
         <li>Заголовок Authorization: «Bearer » и ключ.</li>
         <li>Задачи: GET и POST /tasks, PATCH /tasks/id, POST /tasks/id/complete, /reopen, /comments.</li>
+        <li>Списки: GET и POST /lists, PATCH /lists/id; в задаче — listId своего списка.</li>
       </ul>
     </section>
   );

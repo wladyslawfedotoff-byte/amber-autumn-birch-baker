@@ -252,6 +252,8 @@ export type Task = {
 export type TaskList = {
   id: string;
   name: string;
+  /** «Ключ помощника» (1.26): created by a bot with this key; the key sees only such lists. */
+  helper?: { keyId: string; name: string };
   updatedAt?: number;
 } & Shared;
 
