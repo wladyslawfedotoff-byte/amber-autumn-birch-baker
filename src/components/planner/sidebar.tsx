@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { AlertCircle, CalendarCheck, Folder, Sunrise, ChevronRight, Hash, Inbox, List, ListChecks, Pencil, Pin, PinOff, Plus, Search, Settings, Trash2, Users } from "lucide-react";
+import { AlertCircle, Bot, CalendarCheck, Folder, Sunrise, ChevronRight, Hash, Inbox, List, ListChecks, Pencil, Pin, PinOff, Plus, Search, Settings, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NAV_ICONS } from "@/components/planner/tab-icons";
 import { cn } from "@/lib/cn";
@@ -92,6 +92,8 @@ type GroupItem = {
   pin: PinKey | null;
   color?: string;
   shared?: boolean;
+  /** 1.26: list made by a helper key — its name for the small «от помощника» mark. */
+  helper?: string;
   open: () => void;
   /** Projects (1.24): «Переименовать» / «Удалить» in the long-press menu. */
   rename?: (name: string) => void;
@@ -225,6 +227,7 @@ export function Sidebar({
       pin: `list:${list.id}`,
       color: cycleColor(index),
       shared: Boolean(share && ((list.members ?? []).length > 0 || ownerOf(list, share.dataOwner) !== share.me)),
+      helper: list.helper?.name,
       open: () => onView(`list:${list.id}`),
     };
   });
@@ -549,6 +552,7 @@ function GroupRow({
         <IconBadge color={item.color ?? "grey"} icon={icon} />
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
         {pinned && !hidePinMark ? <Pin className="size-3.5 shrink-0 text-subtle" aria-label="закреплён" /> : null}
+        {item.helper ? <Bot className="size-3.5 shrink-0 text-subtle" aria-label={`от помощника · ${item.helper}`} data-testid="helper-list-mark" /> : null}
         {item.shared ? <Users className="size-3.5 shrink-0 text-subtle" aria-label="общий список" /> : null}
         {item.count ? <span className="shrink-0 text-body text-subtle tabular-nums">{item.count}</span> : null}
       </button>

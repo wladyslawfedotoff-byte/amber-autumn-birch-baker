@@ -96,7 +96,7 @@ test("create lands in «Входящие» with the author stamp; list shows onl
   assert.deepEqual(list.body.items.map((t: { title: string }) => t.title), ["Позвонить в сервис"]);
   const text = JSON.stringify(list.body);
   for (const secret of ["Личное дело", "секрет", "Ремонт", "Дом", "От второго", "l1", "p1"]) assert.ok(!text.includes(secret), secret);
-  assert.equal(list.body.items[0].listId, undefined);
+  assert.equal(list.body.items[0].listId, null);
   assert.equal(list.body.items[0].owner, undefined);
 });
 
@@ -185,7 +185,8 @@ test("validation: sizes, dates, times, unknown fields", async () => {
     { title: "ok", due: "2026-02-30" },
     { title: "ok", startAt: "25:00", due: "2026-11-20" },
     { title: "ok", startAt: "10:00" },
-    { title: "ok", listId: "l1" },
+    { title: "ok", listId: 5 },
+    { title: "ok", listId: "bad id/../x" },
     { title: "ok", helper: { keyId: "x" } },
     { title: "ok", done: true },
   ];

@@ -27,7 +27,7 @@ const NAME_MAX = 40;
 const SUMMARY_MAX = 120;
 
 export type HelperKey = { id: string; name: string; createdAt: number; lastUsedAt: number | null };
-export type HelperAction = "create" | "update" | "complete" | "reopen" | "comment" | "denied";
+export type HelperAction = "create" | "update" | "complete" | "reopen" | "comment" | "denied" | "list.create" | "list.rename" | "task.move";
 export type AuditEntry = { at: number; action: HelperAction; taskId: string | null; summary: string };
 
 type Row = { id: string; login: string; name: string; hash: string; stamp: string; created_at: number; last_used_at: number | null; revoked_at: number | null };

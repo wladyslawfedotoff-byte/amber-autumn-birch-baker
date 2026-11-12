@@ -12,6 +12,12 @@
  *   POST  /api/helper/tasks/:id/complete    → { item }
  *   POST  /api/helper/tasks/:id/reopen      → { item }
  *   POST  /api/helper/tasks/:id/comments {text, result?: "ok"|"fail"} → 201 { item }
+ *   GET   /api/helper/lists                 → { items: [list] }   own lists (1.26)
+ *   POST  /api/helper/lists {name}          → 201 { item } (or 200 with the existing own list of that name)
+ *   PATCH /api/helper/lists/:id {name}      → { item }
+ *
+ * `listId` in a task body may only be one of the key's own lists (null =
+ * «Входящие»); any other list id → 404, like an unknown task.
  *
  * Someone else's task, a deleted task or an unknown id → 404 (the same answer,
  * nothing is revealed). There is no DELETE. Limits: helper/limit.ts. Logs and
@@ -23,7 +29,13 @@ import { principalForLogin, type Principal } from "../../../lib/principal.ts";
 import { HelperUnavailable, audit, helperKeyIdOf, verifyHelperKey, type HelperAction } from "../../../lib/helper/keys.ts";
 import { allowHelper, ipMayTryHelperKey, noteBadHelperKey, retryAfter, type HelperOp } from "../../../lib/helper/limit.ts";
 import {
+  ForeignRef,
   InputError,
+  createOwnList,
+  listOwnLists,
+  ownListName,
+  parseListName,
+  renameOwnList,
   commentOwn,
   createOwn,
   getOwn,
@@ -79,7 +91,7 @@ async function body(event: ServerEvent): Promise<unknown> {
 
 const FIELD_NAMES: Record<string, string> = { title: "название", notes: "заметка", due: "дата", startAt: "начало", endAt: "конец" };
 
-const notFound = () => json(404, { error: "not_found", message: "Задачи нет или она не ваша." }, NO_STORE);
+const notFound = () => json(404, { error: "not_found", message: "Не найдено или не ваше." }, NO_STORE);
 
 export default async function helperApi(event: ServerEvent): Promise<Response> {
   const method = event.req.method.toUpperCase();
@@ -115,6 +127,38 @@ export default async function helperApi(event: ServerEvent): Promise<Response> {
   try {
     const [first, id, sub, extra] = parts;
     if (first === "me" && parts.length === 1 && method === "GET") return limited("read") ?? json(200, { name }, NO_STORE);
+    if (first === "lists" && sub === undefined) {
+      if (id !== undefined && !ID_RE.test(id)) return notFound();
+      if (method === "DELETE") {
+        note("denied", id ? id.slice(0, 60) : null, "удаление списка запрещено");
+        return json(405, { error: "method_not_allowed", message: "Ключ помощника ничего не удаляет." }, { allow: id ? "PATCH" : "GET, POST" });
+      }
+      if (id === undefined && method === "GET") return limited("read") ?? json(200, { items: await listOwnLists(user, keyId) }, NO_STORE);
+      if (id === undefined && method === "POST") {
+        const listName = parseListName(await body(event));
+        const stop = limited("list");
+        if (stop) return stop;
+        const result = await createOwnList(user, { keyId, name }, listName);
+        if ("error" in result) return json(409, { error: "too_many_lists", message: "У ключа слишком много списков." });
+        if (result.existed) return json(200, { item: result.item, existed: true }, NO_STORE);
+        note("list.create", result.item.id, result.item.name);
+        return json(201, { item: result.item }, NO_STORE);
+      }
+      if (id !== undefined && method === "PATCH") {
+        const listName = parseListName(await body(event));
+        const stop = limited("change");
+        if (stop) return stop;
+        const result = await renameOwnList(user, keyId, id, listName);
+        if (!result) {
+          note("denied", id.slice(0, 60), "переименование: список не найден или чужой");
+          return notFound();
+        }
+        if ("error" in result) return json(409, { error: "name_taken", message: "У ключа уже есть список с таким названием." });
+        if (result.before !== result.item.name) note("list.rename", result.item.id, `${result.before} → ${result.item.name}`);
+        return json(200, { item: result.item }, NO_STORE);
+      }
+      return json(405, { error: "method_not_allowed" }, { allow: id ? "PATCH" : "GET, POST" });
+    }
     if (first !== "tasks" || extra !== undefined) return json(404, { error: "not_found" });
     if (id !== undefined && !ID_RE.test(id)) return notFound();
     if (method === "DELETE") {
@@ -131,7 +175,7 @@ export default async function helperApi(event: ServerEvent): Promise<Response> {
         if (stop) return stop;
         const result = await createOwn(user, { keyId, name }, fields);
         if ("error" in result) return json(409, { error: "too_many_tasks", message: "У ключа слишком много задач." });
-        note("create", result.item.id, result.item.title);
+        note("create", result.item.id, result.item.listId ? `${result.item.title} → ${(await ownListName(user, keyId, result.item.listId)) ?? "список"}` : result.item.title);
         return json(201, { item: result.item }, NO_STORE);
       }
       return json(405, { error: "method_not_allowed" }, { allow: "GET, POST" });
@@ -149,7 +193,15 @@ export default async function helperApi(event: ServerEvent): Promise<Response> {
         const fields = parseFields(await body(event), false);
         const stop = limited("change");
         if (stop) return stop;
-        return own(await updateOwn(user, keyId, id, fields), "update", id, (item) => `${item.title} · ${Object.keys(fields).map((key) => FIELD_NAMES[key] ?? key).join(", ")}`);
+        const item = await updateOwn(user, keyId, id, fields);
+        if (!item) {
+          note("denied", id.slice(0, 60), "update: задача не найдена или чужая");
+          return notFound();
+        }
+        const changed = Object.keys(fields).filter((key) => key !== "listId");
+        if (changed.length) note("update", item.id, `${item.title} · ${changed.map((key) => FIELD_NAMES[key] ?? key).join(", ")}`);
+        if (fields.listId !== undefined) note("task.move", item.id, `${item.title} → ${(await ownListName(user, keyId, item.listId)) ?? "Входящие"}`);
+        return json(200, { item }, NO_STORE);
       }
       return json(405, { error: "method_not_allowed" }, { allow: "GET, PATCH" });
     }
@@ -170,6 +222,10 @@ export default async function helperApi(event: ServerEvent): Promise<Response> {
     return json(404, { error: "not_found" });
   } catch (error) {
     if (error instanceof InputError) return json(400, { error: "bad_request", message: error.message });
+    if (error instanceof ForeignRef) {
+      note("denied", null, "список не найден или чужой");
+      return notFound();
+    }
     if (error instanceof HelperUnavailable) return json(503, { error: "unavailable", message: "Ключи помощника работают только с базой SQLite." });
     log("error", "helper.write_failed", { key: keyId }, error);
     return json(503, { error: "storage_error", message: "Не удалось сохранить на сервере." });
