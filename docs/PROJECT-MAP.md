@@ -23,7 +23,7 @@
 | Сборка | `npm run build` → `.output/` (сервер: `node .output/server/index.mjs`) |
 | Перед PR (как в CI) | `npm run typecheck && npm test && npm run lint && node scripts/brand-check.mjs` |
 
-Тестового фреймворка вроде vitest нет: тесты — это встроенный `node --test`, TypeScript запускается через `--experimental-strip-types`. **Новый тест-файл нужно дописать в список `scripts.test` в `package.json`**, иначе `npm test` и CI его не запустят. Скрипты `scripts/e2e-*.mjs` — ручные сквозные проверки в браузере (Playwright) против запущенной сборки, в CI не входят.
+Тестового фреймворка вроде vitest нет: тесты — это встроенный `node --test`, TypeScript запускается через `--experimental-strip-types`. С 1.27.0 `npm test` находит тест-файлы сам по маске `{src,server,scripts}/**/*.test.{ts,mjs}`: новый тест достаточно положить рядом с кодом с суффиксом `.test.ts` (или `.test.mjs` в `scripts/`). Тест `scripts/test-glob.test.mjs` падает, если тест-файл лежит вне маски. Скрипты `scripts/e2e-*.mjs` — ручные сквозные проверки в браузере (Playwright) против запущенной сборки, в CI не входят.
 
 ## Точки входа
 
@@ -159,7 +159,7 @@ docker/              entrypoint.sh
 | `push/*` | Web Push без сторонних библиотек, расписание напоминаний, подписки |
 | `attachments/*` | Файлы: хранение, тип по байтам, HEIC → JPEG, доступ по ACL, очистка |
 | `quick-add/*` | Ключи устройств (`tokens.ts`), разбор формы (`parse.ts`), запись во «Входящие» (`add.ts`), лимиты |
-| `helper/*` | Ключи помощника и журнал (`keys.ts`), свои задачи и списки ключа (`tasks.ts`), лимиты (`limit.ts`) |
+| `helper/*` | Контракт API: схемы тел, поля ответов, лимиты, коды ошибок, список адресов (`contract.ts`, 1.27), ключи помощника и журнал (`keys.ts`), свои задачи и списки ключа (`tasks.ts`), лимиты (`limit.ts`) |
 
 ### `server/routes/`
 
@@ -200,7 +200,7 @@ docker/              entrypoint.sh
 | Синхронизация | `src/lib/sync/*`, `src/lib/server-sync.ts`, `src/lib/offline/outbox.ts`, `local-db.ts`, `server/routes/api/sync.*.ts`, `server/lib/sync-store.ts`, `server/lib/db/doc-tables.ts` | `src/lib/sync/*.test.ts`, `src/lib/offline/*.test.ts`, `server/lib/sync-store.test.ts`, `server/lib/sync-patch.route.test.ts`, `server/lib/db/db.test.ts` |
 | Авторизация | `server/middleware/01.auth.ts`, `server/lib/auth.ts`, `session*.ts`, `principal.ts`, `user-store.ts`, `rate-limit.ts`, `server/routes/api/login.post.ts`, `password.post.ts` | `server/lib/auth.test.ts`, `server/lib/http.test.ts`, `server/lib/pages.test.ts`, `scripts/password-hash.test.mjs`, `scripts/reset-password.test.mjs` |
 | Помощник (AI) | `server/lib/ai/*`, `server/routes/api/assistant/[...].ts`, `server/plugins/assistant-queue.ts`, `src/lib/assistant/*`, `src/components/planner/assist-*.tsx` | `server/lib/ai/*.test.ts`, `src/lib/assistant/*.test.ts` |
-| Ключи помощника | `server/lib/helper/*`, `server/routes/api/helper/[...].ts`, `helper-keys/[...].ts`, `01.auth.ts`, `src/components/planner/helper-settings.tsx`, `helper-tag.tsx`, [`HELPER-API.md`](HELPER-API.md) | `server/lib/helper/*.test.ts` |
+| Ключи помощника | `server/lib/helper/contract.ts` (поля и ошибки API — менять вместе с `HELPER-API.md`), `server/lib/helper/*`, `server/routes/api/helper/[...].ts`, `helper-keys/[...].ts`, `01.auth.ts`, `src/components/planner/helper-settings.tsx`, `helper-tag.tsx`, [`HELPER-API.md`](HELPER-API.md) | `server/lib/helper/*.test.ts` |
 | Быстрое добавление | `server/lib/quick-add/*`, `server/routes/api/quick-add.post.ts`, `quick-tokens/[...].ts`, `src/components/planner/quick-add-settings.tsx`; ввод в приложении — `src/lib/quick-add.ts`, `quick-composer.tsx` | `server/lib/quick-add/*.test.ts`, `src/lib/quick-add.test.ts` |
 | Push-напоминания | `server/lib/push/*`, `server/routes/api/push/[...].ts`, `server/plugins/push-scheduler.ts`, `src/lib/offline/push-client.ts`, `scripts/sw-template.js` | `server/lib/push/push.test.ts`, `scripts/sw-plugin.test.mjs` |
 | Дизайн-система | `src/tokens.css`, `src/lib/design/tokens.ts`, `src/components/ui/*`, `src/routes/kit.tsx` | `npm run lint` (`check-raw-colors`, `contrast`) |

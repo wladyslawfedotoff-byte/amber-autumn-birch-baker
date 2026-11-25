@@ -5,7 +5,7 @@
 ## Чек-лист пулл-реквеста
 
 - [ ] Проверки проходят: `npm run typecheck && npm test && npm run lint && node scripts/brand-check.mjs`.
-- [ ] Новый тест-файл добавлен в `scripts.test` в `package.json`.
+- [ ] Новый тест-файл лежит в `src/`, `server/` или `scripts/` с суффиксом `.test.ts` / `.test.mjs` — `npm test` найдёт его сам.
 - [ ] **В этом же PR обновлены** [`docs/PROJECT-MAP.md`](docs/PROJECT-MAP.md) (если появились, переехали или исчезли модули), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) и [`docs/DECISIONS.md`](docs/DECISIONS.md) (если меняется устройство или принято решение), [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (запись о новой версии).
 - [ ] Секретов нет нигде, кроме `.env` на NAS: ни в коде, ни в образе, ни в compose, ни в документах.
 - [ ] Нет личных имён, настоящих адресов (для примеров — `pora.example.synology.me`), IP-адресов и портов домашней сети.
