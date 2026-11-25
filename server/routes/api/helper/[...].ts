@@ -22,35 +22,33 @@
  * Someone else's task, a deleted task or an unknown id → 404 (the same answer,
  * nothing is revealed). There is no DELETE. Limits: helper/limit.ts. Logs and
  * the action log carry the key id, never the key.
+ *
+ * Bodies, answers and limits are described once in lib/helper/contract.ts
+ * (1.27); this route validates only through it.
  */
 import { BodyTooLargeError, clientIp, json, readBodyLimited, type ServerEvent } from "../../../lib/http.ts";
 import { log } from "../../../lib/log.ts";
 import { principalForLogin, type Principal } from "../../../lib/principal.ts";
 import { HelperUnavailable, audit, helperKeyIdOf, verifyHelperKey, type HelperAction } from "../../../lib/helper/keys.ts";
 import { allowHelper, ipMayTryHelperKey, noteBadHelperKey, retryAfter, type HelperOp } from "../../../lib/helper/limit.ts";
+import { ID_RE, InputError, MAX_BODY, parseComment, parseFields, parseListName } from "../../../lib/helper/contract.ts";
 import {
   ForeignRef,
-  InputError,
   createOwnList,
   listOwnLists,
   ownListName,
-  parseListName,
   renameOwnList,
   commentOwn,
   createOwn,
   getOwn,
   listOwn,
-  parseComment,
-  parseFields,
   setDoneOwn,
   updateOwn,
   type HelperTaskView,
 } from "../../../lib/helper/tasks.ts";
 
 const NO_STORE = { "cache-control": "no-store" };
-const MAX_BODY = 16 * 1024;
 const BAD_KEY_DELAY_MS = 300;
-const ID_RE = /^[A-Za-z0-9_-]{1,200}$/;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Who = { user: Principal; keyId: string; name: string };

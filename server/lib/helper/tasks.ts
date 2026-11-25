@@ -10,7 +10,8 @@
  * the profile's ACL, or the whole document with one profile); changed fields
  * are stamped with editEntity, so a device editing the same task at the same
  * time merges per field exactly like a sync PATCH. A concurrent write →
- * re-read and retry. Nothing here deletes anything.
+ * re-read and retry. Nothing here deletes anything. Bodies are checked by
+ * the API contract (contract.ts, 1.27); its parsers are re-exported here.
  */
 import { randomUUID } from "node:crypto";
 import { editEntity, type SyncData, type SyncEntity } from "../../../src/lib/sync/merge.ts";
@@ -19,122 +20,26 @@ import type { Task } from "../../../src/lib/planner-types.ts";
 import type { Principal } from "../principal.ts";
 import { aclFor } from "../sync-access.ts";
 import { getStore } from "../sync-store.ts";
+import { InputError, type CommentInput, type HelperComment, type HelperListView, type HelperTaskView, type TaskFields } from "./contract.ts";
+
+export { COMMENT_MAX, InputError, LIST_NAME_MAX, NOTES_MAX, TITLE_MAX, parseComment, parseFields, parseListName } from "./contract.ts";
+export type { CommentInput, HelperComment, HelperListView, HelperTaskView, TaskFields } from "./contract.ts";
 
 const RETRIES = 4;
-export const TITLE_MAX = 200;
-export const NOTES_MAX = 4000;
-export const COMMENT_MAX = 1000;
 export const COMMENTS_KEPT = 20;
 /** Own tasks a key may have at once (deleted ones do not count). */
 export const MAX_OWN_TASKS = 500;
-export const LIST_NAME_MAX = 60;
 /** Own lists a key may have at once. */
 export const MAX_OWN_LISTS = 30;
 
 export type HelperAuthor = { keyId: string; name: string };
-export type HelperComment = { id: string; at: number; text: string; result?: "ok" | "fail" };
 
-/** What a key sees of its task. No list, project, owner or sharing data. */
-export type HelperTaskView = {
-  id: string;
-  title: string;
-  notes: string;
-  due: string | null;
-  startAt: string | null;
-  endAt: string | null;
-  /** One of the key's own lists; null = «Входящие» or a place the key does not see. */
-  listId: string | null;
-  done: boolean;
-  completedAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-  comments: HelperComment[];
-};
-
-export type HelperListView = { id: string; name: string; updatedAt: number };
-export type TaskFields = { title?: string; notes?: string; due?: string | null; startAt?: string | null; endAt?: string | null; listId?: string | null };
-export type CommentInput = { text: string; result?: "ok" | "fail" };
-
-export class InputError extends Error {}
 /** A list id that is not one of the key's lists: answered like an unknown task (404). */
 export class ForeignRef extends Error {}
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
-/** Text without control characters (newlines and tabs allowed when `multiline`). */
-function cleanText(raw: unknown, field: string, max: number, multiline: boolean): string {
-  if (typeof raw !== "string") throw new InputError(`${field}: нужна строка`);
-  const text = [...raw.replace(/\r\n?/g, "\n")]
-    .filter((ch) => {
-      const code = ch.charCodeAt(0);
-      if (multiline && (ch === "\n" || ch === "\t")) return true;
-      return code >= 0x20 && code !== 0x7f;
-    })
-    .join("")
-    .trim();
-  if ([...text].length > max) throw new InputError(`${field}: не длиннее ${max} символов`);
-  return text;
-}
-
-function validDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
-
-const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-/** Body of create / update → checked fields. Unknown fields are refused. */
-export function parseFields(raw: unknown, creating: boolean): TaskFields {
-  if (!isRecord(raw)) throw new InputError("нужен JSON-объект");
-  const allowed = new Set(["title", "notes", "due", "startAt", "endAt", "listId"]);
-  for (const key of Object.keys(raw)) if (!allowed.has(key)) throw new InputError(`поле «${key}» менять нельзя`);
-  const out: TaskFields = {};
-  if (raw.title !== undefined || creating) {
-    const title = cleanText(raw.title ?? "", "title", TITLE_MAX, false);
-    if (!title) throw new InputError("title: нужно название");
-    out.title = title;
-  }
-  if (raw.notes !== undefined) out.notes = cleanText(raw.notes, "notes", NOTES_MAX, true);
-  if (raw.due !== undefined) {
-    if (raw.due !== null && (typeof raw.due !== "string" || !validDate(raw.due))) throw new InputError("due: дата ГГГГ-ММ-ДД или null");
-    out.due = raw.due;
-  }
-  for (const key of ["startAt", "endAt"] as const) {
-    const value = raw[key];
-    if (value === undefined) continue;
-    if (value !== null && (typeof value !== "string" || !TIME_RE.test(value))) throw new InputError(`${key}: время ЧЧ:ММ или null`);
-    out[key] = value;
-  }
-  if (raw.listId !== undefined) {
-    if (raw.listId !== null && (typeof raw.listId !== "string" || !ID_RE.test(raw.listId))) throw new InputError("listId: id своего списка или null");
-    out.listId = raw.listId;
-  }
-  if (!Object.keys(out).length) throw new InputError("нечего менять");
-  return out;
-}
-
-const ID_RE = /^[A-Za-z0-9_-]{1,200}$/;
-
-/** Body of create / rename list → its name. */
-export function parseListName(raw: unknown): string {
-  if (!isRecord(raw)) throw new InputError("нужен JSON-объект");
-  for (const key of Object.keys(raw)) if (key !== "name") throw new InputError(`поле «${key}» не поддерживается`);
-  const name = cleanText(raw.name ?? "", "name", LIST_NAME_MAX, false);
-  if (!name) throw new InputError("name: нужно название списка");
-  return name;
-}
-
 const sameName = (a: unknown, b: string) => typeof a === "string" && a.trim().toLocaleLowerCase("ru") === b.trim().toLocaleLowerCase("ru");
-
-export function parseComment(raw: unknown): CommentInput {
-  if (!isRecord(raw)) throw new InputError("нужен JSON-объект");
-  for (const key of Object.keys(raw)) if (key !== "text" && key !== "result") throw new InputError(`поле «${key}» не поддерживается`);
-  const text = cleanText(raw.text ?? "", "text", COMMENT_MAX, true);
-  if (raw.result !== undefined && raw.result !== null && raw.result !== "ok" && raw.result !== "fail") throw new InputError("result: ok, fail или нет");
-  if (!text && !raw.result) throw new InputError("text: пустой комментарий");
-  return { text, ...(raw.result === "ok" || raw.result === "fail" ? { result: raw.result } : {}) };
-}
 
 /** Created by this key (task or list). */
 export function isOwn(entity: SyncEntity, keyId: string): boolean {
